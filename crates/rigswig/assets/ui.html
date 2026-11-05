@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>rigswig</title>
+<style nonce="__NONCE__">
+:root {
+  --bg: #f7f7f5; --card: #ffffff; --fg: #1b1b1f; --muted: #5d5d66; --line: #e2e2e6; --soft: #efeff2;
+  --accent: #3b45c4; --warn: #9a5b00; --warn-bg: #fff5e0; --ok: #1e7a4c;
+  --k-instruction: #0072b2; --k-agent: #d55e00; --k-skill: #009e73; --k-command: #cc79a7;
+  --k-hook: #7a7a85; --k-mcp: #e69f00; --k-permission: #56b4e9;
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111114; --card: #1a1a1f; --fg: #ececf1; --muted: #a3a3ae; --line: #2c2c33; --soft: #24242a;
+    --accent: #9aa2ff; --warn: #ffc266; --warn-bg: #2d2412; --ok: #6fd3a0;
+    --k-instruction: #56a8e0; --k-agent: #f08a4b; --k-skill: #3cc49a; --k-command: #e2a0c9;
+    --k-hook: #a3a3ae; --k-mcp: #f2bd4c; --k-permission: #8fd0f5;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111114; --card: #1a1a1f; --fg: #ececf1; --muted: #a3a3ae; --line: #2c2c33; --soft: #24242a;
+  --accent: #9aa2ff; --warn: #ffc266; --warn-bg: #2d2412; --ok: #6fd3a0;
+  --k-instruction: #56a8e0; --k-agent: #f08a4b; --k-skill: #3cc49a; --k-command: #e2a0c9;
+  --k-hook: #a3a3ae; --k-mcp: #f2bd4c; --k-permission: #8fd0f5;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+.wrap { max-width: 1080px; margin: 0 auto; padding: 20px 16px 48px; }
+header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-bottom: 18px; }
+.mark { font-weight: 800; letter-spacing: -0.02em; font-size: 20px; }
+.mark span { color: var(--accent); }
+.where { color: var(--muted); }
+.where b { color: var(--fg); font-weight: 600; }
+nav.tools { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+nav.tools a, nav.tools span {
+  padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); text-decoration: none;
+  color: var(--fg); font-size: 14px; min-height: 36px; display: inline-flex; align-items: center;
+}
+nav.tools span[aria-current] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+nav.tools a:hover { border-color: var(--accent); }
+.badge { font-size: 12px; color: var(--muted); border: 1px dashed var(--line); border-radius: 999px; padding: 2px 10px; }
+section.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; margin-bottom: 16px; }
+h1 { font-size: 30px; line-height: 1.2; margin: 0 0 4px; letter-spacing: -0.02em; }
+h2 { font-size: 16px; margin: 0 0 12px; }
+.sub { color: var(--muted); margin: 0; }
+.row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+select, button {
+  font: inherit; color: var(--fg); background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+  padding: 6px 10px; min-height: 36px; cursor: pointer;
+}
+button[aria-pressed="true"] { border-color: var(--fg); background: var(--soft); font-weight: 600; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.bar { position: relative; display: flex; height: 28px; margin: 16px 0 8px; border-radius: 6px; overflow: hidden; background: var(--soft); border: 1px solid var(--line); }
+.bar > i { display: block; height: 100%; min-width: 2px; }
+.bar > i + i { box-shadow: inset 1px 0 0 var(--card); }
+.bar .unmeasured {
+  background: repeating-linear-gradient(135deg, transparent 0 5px, var(--muted) 5px 6px); opacity: 0.6; min-width: 28px;
+}
+.scale { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 12px; font-size: 14px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; flex: none; }
+.sw.hatch { background: repeating-linear-gradient(135deg, transparent 0 3px, var(--muted) 3px 4px); border: 1px solid var(--muted); }
+.note { margin-top: 10px; padding: 8px 12px; border-radius: 8px; background: var(--warn-bg); color: var(--warn); font-size: 14px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { text-align: left; padding: 7px 8px; border-top: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; border-top: 0; }
+td.num, th.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+td.name { overflow-wrap: anywhere; }
+.mini { display: inline-block; height: 6px; border-radius: 3px; vertical-align: middle; margin-right: 6px; }
+.kind { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.status { white-space: nowrap; }
+.off { color: var(--muted); }
+.file { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+details { border-top: 1px solid var(--line); }
+details:first-of-type { border-top: 0; }
+summary { cursor: pointer; padding: 10px 2px; display: flex; gap: 10px; align-items: center; min-height: 44px; }
+summary::-webkit-details-marker { display: none; }
+summary::before { content: "▸"; color: var(--muted); width: 1em; }
+details[open] > summary::before { content: "▾"; }
+summary .count { color: var(--muted); margin-left: auto; font-variant-numeric: tabular-nums; }
+.trail { margin: 4px 0 0; padding-left: 18px; color: var(--muted); font-size: 13px; }
+.trail li:first-child { color: var(--fg); }
+dl.settings { display: grid; grid-template-columns: minmax(120px, max-content) 1fr; gap: 6px 16px; margin: 0; }
+dl.settings dt { color: var(--muted); }
+dl.settings dd { margin: 0; overflow-wrap: anywhere; }
+ul.plain { margin: 0; padding-left: 18px; }
+ul.plain li { margin: 3px 0; }
+ul.warn { list-style: none; padding-left: 0; }
+ul.warn li::before { content: "▲ "; color: var(--warn); }
+.scroll { overflow-x: auto; }
+footer { color: var(--muted); font-size: 13px; margin-top: 24px; }
+@media (max-width: 640px) {
+  h1 { font-size: 24px; }
+  .hide-sm { display: none; }
+  nav.tools { margin-left: 0; width: 100%; }
+}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"><p class="sub">Loading…</p></div>
+<noscript><p>This page needs JavaScript to draw. The same data is in <code>rigswig status --json</code>.</p></noscript>
+<script type="application/json" id="data" nonce="__NONCE__">__DATA__</script>
+<script nonce="__NONCE__">
+(function () {
+  "use strict";
+  var data = JSON.parse(document.getElementById("data").textContent);
+  var h = data.harness;
+  var KINDS = ["instruction", "agent", "skill", "command", "mcp", "hook", "permission"];
+  var TITLE = { instruction: "Instructions", agent: "Agents", skill: "Skills", command: "Commands", mcp: "MCP servers", hook: "Hooks", permission: "Permission rules" };
+  var WINDOWS = [128000, 200000, 272000, 400000, 1000000];
+
+  function el(tag, attrs, kids) {
+    var n = document.createElement(tag);
+    if (attrs) for (var k in attrs) {
+      if (k === "text") n.textContent = attrs[k];
+      else if (k === "cls") n.className = attrs[k];
+      else if (k === "style") n.style.cssText = attrs[k]; // CSSOM, which the CSP allows (a style attribute it would not)
+      else n.setAttribute(k, attrs[k]);
+    }
+    (kids || []).forEach(function (c) { if (c != null) n.appendChild(typeof c === "string" ? document.createTextNode(c) : c); });
+    return n;
+  }
+  function fmt(n) { return Math.round(n).toLocaleString("en-US"); }
+  function k(n) { return n >= 1000 ? (n / 1000).toFixed(n >= 100000 ? 0 : 1).replace(/\.0$/, "") + "k" : String(n); }
+  function tok(chars) { return Math.ceil(chars / 4); }
+  function color(kind) { return "var(--k-" + kind + ")"; }
+  function store(key, val) { try { if (val === undefined) return localStorage.getItem(key); localStorage.setItem(key, val); } catch (e) { return null; } }
+  var token = new URLSearchParams(location.search).get("t") || "";
+
+  var items = h.items;
+  var startup = items.filter(function (i) { return i.effective && i.load.when === "startup"; });
+  var total = h.context.chars.value;
+  var byKind = {};
+  startup.forEach(function (i) { byKind[i.kind] = (byKind[i.kind] || 0) + i.load.chars.value; });
+
+  var app = document.getElementById("app");
+  app.textContent = "";
+
+  // Header: the harness, the repo, and the other harnesses configured here.
+  var nav = el("nav", { cls: "tools", "aria-label": "Harness" });
+  data.tools.forEach(function (t) {
+    if (t.id === h.tool.id) nav.appendChild(el("span", { "aria-current": "page", text: t.id }));
+    else if (t.score > 0) {
+      var a = el("a", { href: "?t=" + encodeURIComponent(token) + "&tool=" + encodeURIComponent(t.id), text: t.id, title: t.evidence.join(", ") });
+      nav.appendChild(a);
+    }
+  });
+  app.appendChild(el("header", null, [
+    el("div", { cls: "mark", "aria-label": "rigswig" }, ["rig", el("span", { text: "swig" })]),
+    el("div", { cls: "where" }, ["What a ", el("b", { text: h.tool.id }), " session in ", el("b", { text: h.target.repo }), " loads"]),
+    el("span", { cls: "badge", text: "read-only · local" }),
+    nav
+  ]));
+
+  // The budget: the context window as the axis, measured kinds as segments, the unmeasured part hatched.
+  var win = Number(store("rigswig.window")) || 200000;
+  var budget = el("section", { cls: "card", "aria-labelledby": "budget-h" });
+  function drawBudget() {
+    budget.textContent = "";
+    var t = h.context.tokens;
+    var pct = t.value / win * 100;
+    var select = el("select", { "aria-label": "Context window size" });
+    WINDOWS.forEach(function (w) {
+      var o = el("option", { value: String(w), text: k(w) + " tokens" });
+      if (w === win) o.selected = true;
+      select.appendChild(o);
+    });
+    select.addEventListener("change", function () { win = Number(select.value); store("rigswig.window", String(win)); drawBudget(); });
+    budget.appendChild(el("h1", { id: "budget-h", text: "~" + k(t.value) + " tokens before you type" }));
+    budget.appendChild(el("p", { cls: "sub" }, [
+      (pct < 0.1 ? "<0.1" : pct.toFixed(pct < 10 ? 1 : 0)) + "% of a ",
+      select,
+      " window · between " + k(t.low) + " and " + k(t.high) + ", estimated from " + fmt(total) + " characters (" + t.method + ")"
+    ]));
+    var bar = el("div", { cls: "bar", role: "img", "aria-label": KINDS.filter(function (x) { return byKind[x]; }).map(function (x) { return TITLE[x] + " " + k(tok(byKind[x])) + " tokens"; }).join(", ") + "; plus parts not measured" });
+    KINDS.forEach(function (x) {
+      if (!byKind[x]) return;
+      var w = Math.min(100, tok(byKind[x]) / win * 100);
+      bar.appendChild(el("i", { style: "width:" + w + "%;background:" + color(x), title: TITLE[x] + ": ~" + k(tok(byKind[x])) + " tokens" }));
+    });
+    if (h.context.notMeasured.length) bar.appendChild(el("i", { cls: "unmeasured", title: "Not measured: " + h.context.notMeasured.map(function (n) { return n.what; }).join("; ") }));
+    budget.appendChild(bar);
+    budget.appendChild(el("div", { cls: "scale", "aria-hidden": "true" }, [el("span", { text: "0" }), el("span", { text: k(win / 2) }), el("span", { text: k(win) })]));
+    var legend = el("div", { cls: "legend" });
+    KINDS.forEach(function (x) {
+      if (!byKind[x]) return;
+      legend.appendChild(el("span", null, [el("i", { cls: "sw", style: "background:" + color(x) }), TITLE[x] + " ~" + k(tok(byKind[x])) + " (" + Math.round(byKind[x] / total * 100) + "%)"]));
+    });
+    h.context.notMeasured.forEach(function (n) {
+      legend.appendChild(el("span", { title: n.why }, [el("i", { cls: "sw hatch" }), "not measured: " + n.what]));
+    });
+    budget.appendChild(legend);
+    if (t.value > win) budget.appendChild(el("p", { cls: "note", text: "The measured part alone is larger than this window." }));
+  }
+  drawBudget();
+  app.appendChild(budget);
+
+  // What costs the most, filterable by kind.
+  var ranked = startup.filter(function (i) { return i.load.chars.value > 0; }).sort(function (a, b) { return b.load.chars.value - a.load.chars.value || (a.id < b.id ? -1 : 1); });
+  var top = el("section", { cls: "card", "aria-labelledby": "top-h" });
+  top.appendChild(el("h2", { id: "top-h", text: "What costs the most at startup" }));
+  var filter = null, showAll = false;
+  var chips = el("div", { cls: "chips", role: "group", "aria-label": "Filter by kind" });
+  var table = el("div", { cls: "scroll" });
+  function drawTop() {
+    chips.textContent = "";
+    [null].concat(KINDS.filter(function (x) { return byKind[x]; })).forEach(function (x) {
+      var b = el("button", { type: "button", "aria-pressed": String(filter === x), text: x ? TITLE[x] : "All" });
+      b.addEventListener("click", function () { filter = x; showAll = false; drawTop(); });
+      chips.appendChild(b);
+    });
+    var rows = ranked.filter(function (i) { return !filter || i.kind === filter; });
+    var shown = showAll ? rows : rows.slice(0, 15);
+    var max = rows.length ? rows[0].load.chars.value : 1;
+    var tb = el("tbody");
+    shown.forEach(function (i) {
+      var share = i.load.chars.value / total * 100;
+      tb.appendChild(el("tr", null, [
+        el("td", { cls: "name" }, [el("i", { cls: "mini", style: "width:" + Math.max(3, i.load.chars.value / max * 60) + "px;background:" + color(i.kind), "aria-hidden": "true" }), i.name]),
+        el("td", { cls: "hide-sm" }, [el("span", { cls: "kind", text: i.kind })]),
+        el("td", { cls: "hide-sm file", text: i.origin.layer }),
+        el("td", { cls: "num", text: "~" + k(tok(i.load.chars.value)) }),
+        el("td", { cls: "num", text: (share < 0.1 ? "<0.1" : share.toFixed(1)) + "%" })
+      ]));
+    });
+    table.textContent = "";
+    table.appendChild(el("table", null, [
+      el("thead", null, [el("tr", null, [el("th", { text: "Item" }), el("th", { cls: "hide-sm", text: "Kind" }), el("th", { cls: "hide-sm", text: "Layer" }), el("th", { cls: "num", text: "Tokens" }), el("th", { cls: "num", text: "Share" })])]),
+      tb
+    ]));
+    if (rows.length > shown.length) {
+      var more = el("button", { type: "button", text: "Show all " + rows.length });
+      more.addEventListener("click", function () { showAll = true; drawTop(); });
+      table.appendChild(el("p", null, [more]));
+    }
+  }
+  drawTop();
+  top.appendChild(chips);
+  top.appendChild(table);
+  app.appendChild(top);
+
+  // Settings, each with the layers that had a say.
+  var names = Object.keys(h.settings);
+  if (names.length) {
+    var dl = el("dl", { cls: "settings" });
+    names.forEach(function (name) {
+      var d = h.settings[name];
+      var v = d.value === null ? "the tool's default" : (typeof d.value === "string" ? d.value : JSON.stringify(d.value));
+      var dd = el("dd", null, [v, d.source ? el("span", { cls: "file", text: "  · set by " + d.source }) : null]);
+      if (d.trail.length > 1) {
+        dd.appendChild(el("ol", { cls: "trail" }, d.trail.map(function (s) {
+          return el("li", { text: s.layer + ": " + (typeof s.value === "string" ? s.value : JSON.stringify(s.value)) + (s.note ? " (" + s.note + ")" : "") });
+        })));
+      }
+      dl.appendChild(el("dt", { text: name }));
+      dl.appendChild(dd);
+    });
+    app.appendChild(el("section", { cls: "card", "aria-labelledby": "set-h" }, [el("h2", { id: "set-h", text: "Settings and where they came from" }), dl]));
+  }
+
+  // Everything found, by kind, with status as a shape and a word.
+  var inv = el("section", { cls: "card", "aria-labelledby": "inv-h" }, [el("h2", { id: "inv-h", text: "Everything found" })]);
+  var byId = {};
+  items.forEach(function (i) { byId[i.id] = i; });
+  function status(i) {
+    if (i.effective) return el("span", { cls: "status", text: "● in effect" });
+    if (i.shadowedBy) {
+      var w = byId[i.shadowedBy];
+      return el("span", { cls: "status off", text: "○ overridden by " + (w ? w.origin.layer : "another") });
+    }
+    if (i.kind === "mcp" && i.attrs.state) return el("span", { cls: "status off", text: "○ " + i.attrs.state });
+    return el("span", { cls: "status off", text: "○ off" });
+  }
+  KINDS.forEach(function (x) {
+    var all = items.filter(function (i) { return i.kind === x; });
+    if (!all.length) return;
+    var on = all.filter(function (i) { return i.effective; }).length;
+    var tb = el("tbody");
+    all.forEach(function (i) {
+      var extra = "";
+      if (x === "agent") extra = i.attrs.tools === "all" ? "every tool" : (i.attrs.tools.only || []).join(", ");
+      if (x === "hook") extra = i.attrs.event + (i.attrs.matcher ? " · " + i.attrs.matcher : "") + (i.attrs.script ? " · " + i.attrs.script : "");
+      if (x === "mcp") extra = i.attrs.transport + (i.attrs.target ? " · " + i.attrs.target : "");
+      if (x === "instruction" && i.attrs.appliesTo && i.attrs.appliesTo.length) extra = "when touching " + i.attrs.appliesTo.join(", ");
+      if (x === "permission") extra = i.attrs.effect;
+      tb.appendChild(el("tr", null, [
+        el("td", { cls: "name" }, [i.name, extra ? el("div", { cls: "file", text: extra }) : null, i.origin.file ? el("div", { cls: "file", text: i.origin.file }) : null]),
+        el("td", { cls: "hide-sm file", text: i.origin.layer }),
+        el("td", null, [status(i)]),
+        el("td", { cls: "num", text: i.load.chars.confidence === "unknown" ? "?" : (i.load.chars.value ? "~" + k(tok(i.load.chars.value)) : "–") })
+      ]));
+    });
+    var det = el("details", null, [
+      el("summary", null, [el("i", { cls: "sw", style: "background:" + color(x), "aria-hidden": "true" }), TITLE[x], el("span", { cls: "count", text: on + " in effect / " + all.length + " found" })]),
+      el("div", { cls: "scroll" }, [el("table", null, [
+        el("thead", null, [el("tr", null, [el("th", { text: "Name" }), el("th", { cls: "hide-sm", text: "Layer" }), el("th", { text: "Status" }), el("th", { cls: "num", text: "Tokens" })])]),
+        tb
+      ])])
+    ]);
+    inv.appendChild(det);
+  });
+  if (h.packages.length) {
+    var pk = el("tbody");
+    h.packages.forEach(function (p) {
+      pk.appendChild(el("tr", null, [
+        el("td", { cls: "name", text: p.id }),
+        el("td", null, [el("span", { cls: "status" + (p.enabled ? "" : " off"), text: p.enabled ? "● on" : "○ off" })]),
+        el("td", { cls: "file", text: p.decidedBy ? "decided by " + p.decidedBy : "" }),
+        el("td", { cls: "num", text: String(p.contributes.length) })
+      ]));
+    });
+    inv.appendChild(el("details", null, [
+      el("summary", null, ["Plugins", el("span", { cls: "count", text: h.packages.filter(function (p) { return p.enabled; }).length + " on / " + h.packages.length })]),
+      el("div", { cls: "scroll" }, [el("table", null, [el("thead", null, [el("tr", null, [el("th", { text: "Plugin" }), el("th", { text: "State" }), el("th", { text: "" }), el("th", { cls: "num", text: "Items" })])]), pk])])
+    ]));
+  }
+  app.appendChild(inv);
+
+  if (h.warnings.length) {
+    app.appendChild(el("section", { cls: "card", "aria-labelledby": "warn-h" }, [
+      el("h2", { id: "warn-h", text: "Warnings (" + h.warnings.length + ")" }),
+      el("ul", { cls: "plain warn" }, h.warnings.map(function (w) { return el("li", null, [w.message, w.file ? el("span", { cls: "file", text: "  " + w.file }) : null]); }))
+    ]));
+  }
+  app.appendChild(el("section", { cls: "card", "aria-labelledby": "cov-h" }, [
+    el("h2", { id: "cov-h", text: "What rigswig does not model here" }),
+    el("ul", { cls: "plain" }, h.coverage.notModelled.map(function (n) { return el("li", { text: n }); }))
+  ]));
+  app.appendChild(el("footer", { text: "rigswig " + data.version + " · " + h.tool.id + " adapter " + h.tool.adapterVersion + " · read from files on this machine; nothing was sent or written. Reload to read again." }));
+})();
+</script>
+</body>
+</html>

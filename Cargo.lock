@@ -123,6 +123,7 @@ name = "rigswig"
 version = "0.0.0"
 dependencies = [
  "rigswig-core",
+ "serde",
  "serde_json",
 ]
 

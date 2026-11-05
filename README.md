@@ -8,7 +8,7 @@ spread across user, project, local and managed scopes. rigswig reads all of it f
 there actually gets, which scope decided each setting, what is overridden, and roughly how much context it costs
 before you type a word.
 
-**Status: pre-alpha.** `rigswig status` works for Claude Code and Codex; the page is next. See
+**Status: pre-alpha.** `rigswig status` and the local page, `rigswig ui`, work for Claude Code and Codex. See
 [docs/ROADMAP.md](docs/ROADMAP.md).
 
 rigswig is a single binary written in Rust. Once released it will install with `cargo install rigswig`, Homebrew or
@@ -17,7 +17,11 @@ rigswig is a single binary written in Rust. Once released it will install with `
 ```sh
 cargo run -- status --repo path/to/repo          # a summary
 cargo run -- status --repo path/to/repo --json   # everything, as schema/harness.schema.json describes
+cargo run -- ui --repo path/to/repo              # the same as a page on 127.0.0.1, behind a random token
 ```
+
+The page is read-only and local: it listens on 127.0.0.1 only, answers only requests that carry its token and the
+right `Host`, loads nothing from anywhere else, and stops after 30 minutes without a request.
 
 ## Guarantees
 

@@ -2,6 +2,7 @@
 
 mod os_fs;
 mod render;
+mod ui;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -21,8 +22,10 @@ Usage:
   rigswig tools [--repo <path>]             the harnesses rigswig knows, and the evidence for each in this repo
   rigswig schema                            the JSON Schema of `status --json`
 
+  rigswig ui [--repo <path>] [--tool <id>] [--port <n>] [--idle <minutes>]
+                                            the same as a local, read-only page (stops after --idle minutes, default 30)
+
 Planned:
-  rigswig ui [--repo <path>]                the same as a local, read-only page
   rigswig compare <a> <b>                   two repos, or two harnesses on one repo
 
 rigswig never makes a network request, calls a model, or writes a file.
@@ -52,10 +55,19 @@ fn home() -> Option<PathBuf> {
     std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).map(PathBuf::from).filter(|p| p.is_absolute())
 }
 
-fn status(args: &[String], list_only: bool) -> ExitCode {
+#[derive(PartialEq)]
+enum Mode {
+    Status,
+    Tools,
+    Ui,
+}
+
+fn status(args: &[String], mode: Mode) -> ExitCode {
     let mut repo: Option<PathBuf> = None;
     let mut json = false;
     let mut tool: Option<String> = None;
+    let mut port: u16 = 0;
+    let mut idle_minutes: u64 = 30;
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -67,6 +79,14 @@ fn status(args: &[String], list_only: bool) -> ExitCode {
             "--tool" => match it.next() {
                 Some(t) if !t.starts_with("--") => tool = Some(t.clone()),
                 _ => return fail("--tool needs a harness id (see `rigswig tools`)"),
+            },
+            "--port" if mode == Mode::Ui => match it.next().and_then(|p| p.parse().ok()) {
+                Some(p) => port = p,
+                None => return fail("--port needs a number"),
+            },
+            "--idle" if mode == Mode::Ui => match it.next().and_then(|p| p.parse().ok()).filter(|m| *m > 0) {
+                Some(m) => idle_minutes = m,
+                None => return fail("--idle needs a number of minutes"),
             },
             other => return fail(&format!("unknown option: {other}")),
         }
@@ -85,12 +105,50 @@ fn status(args: &[String], list_only: bool) -> ExitCode {
     let scored: Vec<(&dyn Adapter, rigswig_core::adapter::Detection)> =
         adapters.iter().map(|a| (a.as_ref(), a.detect(&ctx_for(a.as_ref())))).collect();
 
-    if list_only {
+    if mode == Mode::Tools {
         for (a, d) in &scored {
             let ev = if d.evidence.is_empty() { "no sign of it here".into() } else { d.evidence.join(", ") };
             println!("{:<12} {:>3}  {}", a.id(), d.score, printable(&ev));
         }
         return ExitCode::SUCCESS;
+    }
+
+    if mode == Mode::Ui {
+        if let Some(t) = &tool {
+            if !scored.iter().any(|(a, _)| a.id() == t) {
+                return fail(&format!("no harness called {t} (see `rigswig tools`)"));
+            }
+        }
+        let default = tool
+            .clone()
+            .unwrap_or_else(|| scored.iter().max_by_key(|(_, d)| d.score).expect("an adapter").0.id().to_string());
+        let choices: Vec<ui::ToolChoice> = scored
+            .iter()
+            .map(|(a, d)| ui::ToolChoice {
+                id: a.id().into(),
+                score: d.score,
+                evidence: d.evidence.iter().map(|e| printable(e)).collect(),
+            })
+            .collect();
+        let render = |t: Option<&str>| {
+            let id = t.unwrap_or(&default);
+            let a = scored.iter().find(|(a, _)| a.id() == id)?.0;
+            let h = a.resolve(&ctx_for(a));
+            let tools = choices
+                .iter()
+                .map(|c| ui::ToolChoice { id: c.id.clone(), score: c.score, evidence: c.evidence.clone() })
+                .collect();
+            Some(ui::embed_json(&ui::PageData { harness: &h, tools, version: rigswig_core::VERSION }))
+        };
+        let idle = std::time::Duration::from_secs(idle_minutes * 60);
+        let started = ui::serve(port, idle, &render, &|url| {
+            println!("rigswig ui (read-only, local only): {url}");
+            println!("Stops after {idle_minutes} minutes without a request, or with Ctrl-C.");
+        });
+        return match started {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => fail(&format!("could not start the page: {e}")),
+        };
     }
 
     let chosen = match &tool {
@@ -129,8 +187,9 @@ fn main() -> ExitCode {
             println!("{}", serde_json::to_string_pretty(&rigswig_core::json_schema()).expect("a schema serialises"));
             ExitCode::SUCCESS
         }
-        Some("status") => status(&args[1..], false),
-        Some("tools") => status(&args[1..], true),
+        Some("status") => status(&args[1..], Mode::Status),
+        Some("tools") => status(&args[1..], Mode::Tools),
+        Some("ui") => status(&args[1..], Mode::Ui),
         Some(other) => fail(&format!("unknown or unimplemented command: {other}")),
     }
 }
