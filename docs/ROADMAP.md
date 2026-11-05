@@ -18,7 +18,9 @@
    [adapters/claude-code.md](adapters/claude-code.md); `rigswig status` runs it). Settings precedence, plugins and marketplaces, agents, skills, commands, hooks
    (honouring `disableAllHooks`), MCP servers and approval, permissions, managed settings on macOS, Linux and Windows,
    and overridden items detected rather than counted twice.
-4. **Codex adapter.** `AGENTS.md`, `~/.codex/config.toml`, MCP servers, managed requirements.
+4. **Codex adapter** (done: `rigswig-core/src/adapters/codex.rs`, its rules and sources in
+   [adapters/codex.md](adapters/codex.md)). Trust, layered `config.toml`, the shared `AGENTS.md` budget, skills,
+   prompts, TOML agents, hooks, MCP servers, requirements, installed plugins.
 5. **The page.** The headline is a context budget: one bar on the model's context-window scale, split by kind and
    then by source, the unmeasured part marked, with a ranked list underneath. Compare is two bars on one scale.
 

@@ -90,3 +90,16 @@ fn status_text_and_bad_options() {
     assert_eq!(s.status(&["--tool", "nope"]).status.code(), Some(2));
     assert_eq!(s.status(&["--bogus"]).status.code(), Some(2));
 }
+
+#[test]
+fn every_adapter_renders_with_no_config_at_all() {
+    let s = Sandbox::new("empty");
+    for tool in ["claude-code", "codex"] {
+        for extra in [&[][..], &["--json"][..]] {
+            let mut args = vec!["--tool", tool];
+            args.extend(extra);
+            let out = s.status(&args);
+            assert!(out.status.success(), "{tool} {extra:?}: {}", String::from_utf8_lossy(&out.stderr));
+        }
+    }
+}

@@ -237,6 +237,22 @@ impl<'a> Build<'a> {
         out
     }
 
+    /// Fill each package's `contributes` from the items in its layer (`plugin:<id>`), and set their `origin.package`.
+    pub fn link_packages(&mut self) {
+        for pkg in &mut self.packages {
+            let layer = format!("plugin:{}", pkg.id);
+            pkg.contributes = self
+                .items
+                .iter_mut()
+                .filter(|i| i.origin.layer == layer)
+                .map(|i| {
+                    i.origin.package = Some(pkg.id.clone());
+                    i.id.clone()
+                })
+                .collect();
+        }
+    }
+
     /// Assemble the harness: the context total from the effective startup items, and the coverage list.
     pub fn finish(self, adapter_version: &str, tool_version_assumed: Option<&str>, repo_label: String) -> Harness {
         let chars: u64 = self

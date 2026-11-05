@@ -34,12 +34,21 @@ pub fn text(h: &Harness) -> String {
     let p = |s: &str| printable(s);
     let _ = writeln!(o, "{} in {}", p(&h.tool.id), p(&h.target.repo));
 
-    let m = &h.settings["model"];
-    let model = match (&m.value, &m.source) {
-        (serde_json::Value::String(v), Some(src)) => format!("{} (set by {})", p(v), p(src)),
-        _ => "the tool's default (nothing sets it)".into(),
+    // Settings an adapter may or may not report: shown when present, never assumed.
+    let set_by = |key: &str| {
+        h.settings.get(key).and_then(|d| match (&d.value, &d.source) {
+            (serde_json::Value::String(v), Some(src)) => Some(format!("{} (set by {})", p(v), p(src))),
+            _ => None,
+        })
     };
+    let model = set_by("model").unwrap_or_else(|| "the tool's default (nothing sets it)".into());
     let _ = writeln!(o, "  Model     {model}");
+    if let Some(provider) = set_by("provider") {
+        let _ = writeln!(o, "  Provider  {provider}");
+    }
+    if let Some(trust) = h.settings.get("projectTrust").and_then(|d| d.value.as_str()) {
+        let _ = writeln!(o, "  Project   {} (project config loads only when trusted)", p(trust));
+    }
 
     let c = &h.context;
     let _ = writeln!(
