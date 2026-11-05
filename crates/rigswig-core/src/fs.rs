@@ -113,8 +113,9 @@ impl MemFs {
 
     /// Resolve every symlink in `path`, component by component.
     fn resolve(&self, path: &Path) -> io::Result<PathBuf> {
-        if !path.is_absolute() {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "MemFs paths must be absolute"));
+        // A root is enough: `/home/dev` is the test tree's absolute path on every OS (on Windows it has no drive).
+        if !path.has_root() {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "MemFs paths must start at the root"));
         }
         // Names still to walk, the next one last, so `pop` yields it. A link's target is pushed on top.
         fn push_all(stack: &mut Vec<OsString>, p: &Path) {

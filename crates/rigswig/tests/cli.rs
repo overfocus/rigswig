@@ -205,9 +205,11 @@ fn start_ui(s: &Sandbox, extra: &[&str]) -> (std::process::Child, u16, String) {
 fn write_mode_plans_applies_backs_up_and_undoes() {
     let s = Sandbox::new("writes");
     let mk = s.0.join("home/mk");
+    // The path goes into JSON, so it is JSON-escaped (Windows paths have backslashes).
+    let mk_json = serde_json::to_string(&mk.to_string_lossy()).unwrap();
     s.write(
         "home/.claude/plugins/known_marketplaces.json",
-        &format!(r#"{{"mk":{{"source":{{"source":"directory","path":"{}"}}}}}}"#, mk.display()),
+        &format!(r#"{{"mk":{{"source":{{"source":"directory","path":{mk_json}}}}}}}"#),
     );
     s.write("home/mk/.claude-plugin/marketplace.json", r#"{"plugins":[{"name":"fmt","source":"./fmt"}]}"#);
     s.write("home/mk/fmt/skills/pretty/SKILL.md", &format!("---\ndescription: {}\n---\n", "formats ".repeat(50)));
