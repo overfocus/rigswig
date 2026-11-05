@@ -64,6 +64,9 @@ button[aria-pressed="true"] { border-color: var(--fg); background: var(--soft); 
 .bar .unmeasured {
   background: repeating-linear-gradient(135deg, transparent 0 5px, var(--muted) 5px 6px); opacity: 0.6; min-width: 28px;
 }
+.barrow { display: grid; grid-template-columns: minmax(80px, max-content) 1fr; gap: 0 12px; align-items: center; }
+.barrow .bar { margin: 6px 0; }
+.barrow b { font-size: 13px; white-space: nowrap; }
 .scale { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; }
 .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 12px; font-size: 14px; }
 .legend span { display: inline-flex; align-items: center; gap: 6px; }
@@ -140,8 +143,13 @@ footer { color: var(--muted); font-size: 13px; margin-top: 24px; }
   var items = h.items;
   var startup = items.filter(function (i) { return i.effective && i.load.when === "startup"; });
   var total = h.context.chars.value;
-  var byKind = {};
-  startup.forEach(function (i) { byKind[i.kind] = (byKind[i.kind] || 0) + i.load.chars.value; });
+  function kindsOf(hh) {
+    var out = {};
+    hh.items.forEach(function (i) { if (i.effective && i.load.when === "startup") out[i.kind] = (out[i.kind] || 0) + i.load.chars.value; });
+    return out;
+  }
+  var byKind = kindsOf(h);
+  var other = data.other, cmp = data.comparison;
 
   var app = document.getElementById("app");
   app.textContent = "";
@@ -155,11 +163,22 @@ footer { color: var(--muted); font-size: 13px; margin-top: 24px; }
       nav.appendChild(a);
     }
   });
+  var vsNav = el("nav", { cls: "tools", "aria-label": "Compare with" });
+  data.tools.forEach(function (t) {
+    if (t.id === h.tool.id || t.score === 0) return;
+    if (other && other.tool.id === t.id) {
+      vsNav.appendChild(el("span", { "aria-current": "page", text: "vs " + t.id }));
+      vsNav.appendChild(el("a", { href: "?t=" + encodeURIComponent(token) + "&tool=" + encodeURIComponent(h.tool.id), text: "stop comparing" }));
+    } else {
+      vsNav.appendChild(el("a", { href: "?t=" + encodeURIComponent(token) + "&tool=" + encodeURIComponent(h.tool.id) + "&vs=" + encodeURIComponent(t.id), text: "compare with " + t.id }));
+    }
+  });
   app.appendChild(el("header", null, [
     el("div", { cls: "mark", "aria-label": "rigswig" }, ["rig", el("span", { text: "swig" })]),
     el("div", { cls: "where" }, ["What a ", el("b", { text: h.tool.id }), " session in ", el("b", { text: h.target.repo }), " loads"]),
     el("span", { cls: "badge", text: "read-only · local" }),
-    nav
+    nav,
+    vsNav.childNodes.length ? vsNav : null
   ]));
 
   // The budget: the context window as the axis, measured kinds as segments, the unmeasured part hatched.
@@ -182,14 +201,25 @@ footer { color: var(--muted); font-size: 13px; margin-top: 24px; }
       select,
       " window · between " + k(t.low) + " and " + k(t.high) + ", estimated from " + fmt(total) + " characters (" + t.method + ")"
     ]));
-    var bar = el("div", { cls: "bar", role: "img", "aria-label": KINDS.filter(function (x) { return byKind[x]; }).map(function (x) { return TITLE[x] + " " + k(tok(byKind[x])) + " tokens"; }).join(", ") + "; plus parts not measured" });
-    KINDS.forEach(function (x) {
-      if (!byKind[x]) return;
-      var w = Math.min(100, tok(byKind[x]) / win * 100);
-      bar.appendChild(el("i", { style: "width:" + w + "%;background:" + color(x), title: TITLE[x] + ": ~" + k(tok(byKind[x])) + " tokens" }));
-    });
-    if (h.context.notMeasured.length) bar.appendChild(el("i", { cls: "unmeasured", title: "Not measured: " + h.context.notMeasured.map(function (n) { return n.what; }).join("; ") }));
-    budget.appendChild(bar);
+    function barFor(hh) {
+      var kinds = kindsOf(hh);
+      var bar = el("div", { cls: "bar", role: "img", "aria-label": hh.tool.id + ": " + KINDS.filter(function (x) { return kinds[x]; }).map(function (x) { return TITLE[x] + " " + k(tok(kinds[x])) + " tokens"; }).join(", ") + "; plus parts not measured" });
+      KINDS.forEach(function (x) {
+        if (!kinds[x]) return;
+        var w = Math.min(100, tok(kinds[x]) / win * 100);
+        bar.appendChild(el("i", { style: "width:" + w + "%;background:" + color(x), title: TITLE[x] + ": ~" + k(tok(kinds[x])) + " tokens" }));
+      });
+      if (hh.context.notMeasured.length) bar.appendChild(el("i", { cls: "unmeasured", title: "Not measured: " + hh.context.notMeasured.map(function (n) { return n.what; }).join("; ") }));
+      return bar;
+    }
+    if (other) {
+      budget.appendChild(el("div", { cls: "barrow" }, [
+        el("b", { text: "A " + h.tool.id }), barFor(h),
+        el("b", { text: "B " + other.tool.id + " ~" + k(other.context.tokens.value) }), barFor(other)
+      ]));
+    } else {
+      budget.appendChild(barFor(h));
+    }
     budget.appendChild(el("div", { cls: "scale", "aria-hidden": "true" }, [el("span", { text: "0" }), el("span", { text: k(win / 2) }), el("span", { text: k(win) })]));
     var legend = el("div", { cls: "legend" });
     KINDS.forEach(function (x) {
@@ -204,6 +234,36 @@ footer { color: var(--muted); font-size: 13px; margin-top: 24px; }
   }
   drawBudget();
   app.appendChild(budget);
+
+  // Differences, when comparing: counts by kind, then what only one side has and what both have but differently.
+  if (cmp) {
+    var dsec = el("section", { cls: "card", "aria-labelledby": "diff-h" }, [el("h2", { id: "diff-h", text: "A " + cmp.a.tool + " and B " + cmp.b.tool + ": what differs" })]);
+    var delta = cmp.b.tokens - cmp.a.tokens;
+    dsec.appendChild(el("p", { cls: "sub", text: "A ~" + k(cmp.a.tokens) + " and B ~" + k(cmp.b.tokens) + " tokens before you type: " + (delta === 0 ? "the same" : "B has " + k(Math.abs(delta)) + (delta > 0 ? " more" : " fewer")) + "." }));
+    var ct = el("tbody");
+    KINDS.forEach(function (x) {
+      var c = cmp.kinds[x];
+      if (!c) return;
+      ct.appendChild(el("tr", null, [el("td", null, [el("span", { cls: "kind" }, [el("i", { cls: "sw", style: "background:" + color(x) }), TITLE[x]])]), el("td", { cls: "num", text: String(c.onlyA) }), el("td", { cls: "num", text: String(c.onlyB) }), el("td", { cls: "num", text: String(c.changed) }), el("td", { cls: "num", text: String(c.same) })]));
+    });
+    dsec.appendChild(el("div", { cls: "scroll" }, [el("table", null, [el("thead", null, [el("tr", null, [el("th", { text: "Kind" }), el("th", { cls: "num", text: "Only A" }), el("th", { cls: "num", text: "Only B" }), el("th", { cls: "num", text: "Changed" }), el("th", { cls: "num", text: "Same" })])]), ct])]));
+    function list(title, rows, cells) {
+      if (!rows.length) return;
+      var tb = el("tbody");
+      rows.slice(0, 15).forEach(function (r) { tb.appendChild(el("tr", null, cells(r))); });
+      dsec.appendChild(el("details", null, [
+        el("summary", null, [title, el("span", { cls: "count", text: String(rows.length) })]),
+        el("div", { cls: "scroll" }, [el("table", null, [tb])]),
+        rows.length > 15 ? el("p", { cls: "file", text: "The " + (rows.length - 15) + " smallest are left out; rigswig compare --json lists them all." }) : null
+      ]));
+    }
+    var one = function (e) { return [el("td", { cls: "name" }, [e.name, el("div", { cls: "file", text: e.kind + " · " + e.layer })]), el("td", { cls: "num", text: e.chars ? "~" + k(tok(e.chars)) : "–" })]; };
+    list("Only in A (" + cmp.a.tool + ")", cmp.onlyA, one);
+    list("Only in B (" + cmp.b.tool + ")", cmp.onlyB, one);
+    list("In both, but different", cmp.changed, function (c) { return [el("td", { cls: "name" }, [c.name, el("div", { cls: "file", text: c.kind })]), el("td", { cls: "num", text: "A ~" + k(tok(c.a.chars)) + " · B ~" + k(tok(c.b.chars)) })]; });
+    list("Settings that differ", cmp.settings, function (d) { var v = function (x) { return x === null ? "(not set)" : (typeof x === "string" ? x : JSON.stringify(x)); }; return [el("td", { cls: "name", text: d.name }), el("td", { cls: "num", text: "A " + v(d.a) + " · B " + v(d.b) })]; });
+    app.appendChild(dsec);
+  }
 
   // What costs the most, filterable by kind.
   var ranked = startup.filter(function (i) { return i.load.chars.value > 0; }).sort(function (a, b) { return b.load.chars.value - a.load.chars.value || (a.id < b.id ? -1 : 1); });

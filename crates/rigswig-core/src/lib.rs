@@ -9,6 +9,7 @@
 pub mod adapter;
 pub mod adapters;
 pub mod check;
+pub mod compare;
 pub mod fs;
 pub mod model;
 pub mod read;

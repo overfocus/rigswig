@@ -103,3 +103,31 @@ fn every_adapter_renders_with_no_config_at_all() {
         }
     }
 }
+
+#[test]
+fn compare_two_repos_and_two_tools() {
+    let s = Sandbox::new("compare");
+    s.write("repo/CLAUDE.md", "one");
+    s.write("repo/AGENTS.md", "shared");
+    s.write("other/CLAUDE.md", "two, longer");
+    let run = |args: &[&str]| {
+        Command::new(env!("CARGO_BIN_EXE_rigswig"))
+            .args(args)
+            .env("HOME", s.0.join("home"))
+            .env_remove("CLAUDE_CONFIG_DIR")
+            .output()
+            .unwrap()
+    };
+    let (repo, other) = (s.0.join("repo"), s.0.join("other"));
+    let out = run(&["compare", repo.to_str().unwrap(), other.to_str().unwrap(), "--tool", "claude-code", "--json"]);
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let c: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(c["changed"][0]["name"], "CLAUDE.md");
+
+    let out = run(&["compare", repo.to_str().unwrap(), "--tools", "claude-code,codex"]);
+    assert!(out.status.success());
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(text.contains("A  claude-code in repo") && text.contains("B  codex in repo"));
+
+    assert_eq!(run(&["compare", repo.to_str().unwrap()]).status.code(), Some(2), "one repo needs --tools");
+}

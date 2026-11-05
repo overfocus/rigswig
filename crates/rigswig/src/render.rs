@@ -119,3 +119,72 @@ pub fn text(h: &Harness) -> String {
     let _ = writeln!(o, "\n  Not modelled: {} things (see --json coverage.notModelled)", h.coverage.not_modelled.len());
     o
 }
+
+/// The text form of a comparison.
+pub fn compare_text(c: &rigswig_core::compare::Comparison) -> String {
+    let mut o = String::new();
+    let p = |s: &str| printable(s);
+    let label = |s: &rigswig_core::compare::Side| format!("{} in {}", p(&s.tool), p(&s.repo));
+    let (la, lb) = (label(&c.a), label(&c.b));
+    let _ = writeln!(o, "A  {la}\nB  {lb}\n");
+    let delta = c.b.tokens as i64 - c.a.tokens as i64;
+    let _ = writeln!(
+        o,
+        "  Context   A ~{}  B ~{}  tokens before you type  ({})",
+        thousands(c.a.tokens),
+        thousands(c.b.tokens),
+        match delta {
+            0 => "the same".to_string(),
+            d if d > 0 => format!("B has {} more", thousands(d.unsigned_abs())),
+            d => format!("B has {} fewer", thousands(d.unsigned_abs())),
+        }
+    );
+
+    let _ = writeln!(o, "\n  {:<18} {:>7} {:>7} {:>7} {:>7}", "", "only A", "only B", "changed", "same");
+    for (kind, title) in KINDS {
+        if let Some(k) = c.kinds.get(*kind) {
+            let _ = writeln!(o, "  {:<18} {:>7} {:>7} {:>7} {:>7}", title, k.only_a, k.only_b, k.changed, k.same);
+        }
+    }
+
+    let list = |o: &mut String, title: &str, items: &[rigswig_core::compare::Entry]| {
+        if items.is_empty() {
+            return;
+        }
+        let _ = writeln!(o, "\n  {title} ({})", items.len());
+        for e in items.iter().take(10) {
+            let size = if e.chars > 0 { format!("~{} tokens", thousands(e.chars.div_ceil(4))) } else { String::new() };
+            let _ = writeln!(o, "    {:<11} {}  ({})  {size}", e.kind, p(&e.name), p(&e.layer));
+        }
+        if items.len() > 10 {
+            let _ = writeln!(o, "    ... and {} more (--json for all)", items.len() - 10);
+        }
+    };
+    list(&mut o, "Only in A", &c.only_a);
+    list(&mut o, "Only in B", &c.only_b);
+    if !c.changed.is_empty() {
+        let _ = writeln!(o, "\n  Changed ({})", c.changed.len());
+        for x in c.changed.iter().take(10) {
+            let _ = writeln!(
+                o,
+                "    {:<11} {}  A ~{} / B ~{} tokens",
+                x.kind,
+                p(&x.name),
+                thousands(x.a.chars.div_ceil(4)),
+                thousands(x.b.chars.div_ceil(4))
+            );
+        }
+    }
+    if !c.settings.is_empty() {
+        let _ = writeln!(o, "\n  Settings that differ");
+        let v = |x: &serde_json::Value| match x {
+            serde_json::Value::Null => "(not set)".to_string(),
+            serde_json::Value::String(s) => p(s),
+            other => p(&other.to_string()),
+        };
+        for s in &c.settings {
+            let _ = writeln!(o, "    {:<24} A {}  B {}", p(&s.name), v(&s.a), v(&s.b));
+        }
+    }
+    o
+}

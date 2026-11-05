@@ -129,6 +129,9 @@ pub fn embed_json(v: &impl serde::Serialize) -> String {
 #[derive(serde::Serialize)]
 pub struct PageData<'a> {
     pub harness: &'a Harness,
+    /// A second harness on the same repo, and how the two differ (`?vs=<tool>`).
+    pub other: Option<&'a Harness>,
+    pub comparison: Option<rigswig_core::compare::Comparison>,
     pub tools: Vec<ToolChoice>,
     pub version: &'static str,
 }
@@ -140,9 +143,12 @@ pub struct ToolChoice {
     pub evidence: Vec<String>,
 }
 
-/// Answer one request. `render(tool)` resolves the harness for a tool id (or the default when `None`) and returns
-/// the page data as embedded JSON, or `None` for an unknown tool.
-pub fn handle(req: &Request, token: &str, port: u16, render: &dyn Fn(Option<&str>) -> Option<String>) -> Response {
+/// How a request is turned into page data: `(tool, vs)` to embedded JSON, `None` for an unknown tool.
+pub type Render<'a> = dyn Fn(Option<&str>, Option<&str>) -> Option<String> + 'a;
+
+/// Answer one request. `render(tool, vs)` resolves the harness for a tool id (or the default when `None`), and a
+/// second one to compare with when `vs` is given, and returns the page data as embedded JSON.
+pub fn handle(req: &Request, token: &str, port: u16, render: &Render) -> Response {
     let host_ok =
         req.header("Host").is_some_and(|h| h == format!("127.0.0.1:{port}") || h == format!("localhost:{port}"));
     if !host_ok {
@@ -165,7 +171,9 @@ pub fn handle(req: &Request, token: &str, port: u16, render: &dyn Fn(Option<&str
     if !req.param("t").is_some_and(|t| same(t, token)) {
         return plain(403, "missing or wrong token: use the address rigswig printed");
     }
-    let Some(data) = render(req.param("tool")) else { return plain(404, "no such harness") };
+    let Some(data) = render(req.param("tool"), req.param("vs").filter(|v| !v.is_empty())) else {
+        return plain(404, "no such harness");
+    };
     let nonce = random_hex();
     let body = PAGE.replace("__NONCE__", &nonce).replace("__DATA__", &data);
     Response {
@@ -240,12 +248,7 @@ fn read_head(stream: &TcpStream) -> Result<String, u16> {
 }
 
 /// Serve until `idle` passes with no request. `ready` is called with the page's address once listening.
-pub fn serve(
-    port: u16,
-    idle: Duration,
-    render: &dyn Fn(Option<&str>) -> Option<String>,
-    ready: &dyn Fn(&str),
-) -> std::io::Result<()> {
+pub fn serve(port: u16, idle: Duration, render: &Render, ready: &dyn Fn(&str)) -> std::io::Result<()> {
     let listener = TcpListener::bind(("127.0.0.1", port))?;
     let port = listener.local_addr()?.port();
     listener.set_nonblocking(true)?;
@@ -289,7 +292,7 @@ mod tests {
         parse(head).expect("parses")
     }
 
-    fn ok(_: Option<&str>) -> Option<String> {
+    fn ok(_: Option<&str>, _: Option<&str>) -> Option<String> {
         Some("{\"harness\":1}".into())
     }
 
@@ -321,7 +324,9 @@ mod tests {
         let post = handle(&req("POST /?t=abc123 HTTP/1.1\r\nHost: 127.0.0.1:4567\r\n\r\n"), TOKEN, PORT, &ok);
         assert_eq!(post.status, 405);
         let none =
-            handle(&req("GET /?t=abc123&tool=nope HTTP/1.1\r\nHost: 127.0.0.1:4567\r\n\r\n"), TOKEN, PORT, &|_| None);
+            handle(&req("GET /?t=abc123&tool=nope HTTP/1.1\r\nHost: 127.0.0.1:4567\r\n\r\n"), TOKEN, PORT, &|_, _| {
+                None
+            });
         assert_eq!(none.status, 404);
     }
 
