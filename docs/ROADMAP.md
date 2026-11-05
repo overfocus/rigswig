@@ -35,6 +35,8 @@ Also in v0.1: `rigswig check --max-tokens <n>` for CI, and a `--without <item>` 
 
 ## Later
 
+- Windows in CI: the in-memory test file system (`MemFs`) takes Unix paths only; it needs drive and UNC paths
+  before the Windows job can run. The binary itself has Windows paths (managed settings, `USERPROFILE`).
 - DeepSeek: show DeepSeek setups, as its own harness or as a model provider seen through other harnesses
   ([#1](https://github.com/overfocus/rigswig/issues/1)).
 - A WebAssembly build of `rigswig-core`, for a VS Code extension or a page that reads an uploaded `--json`.
