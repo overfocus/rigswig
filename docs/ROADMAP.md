@@ -35,6 +35,8 @@ Also in v0.1: `rigswig check --max-tokens <n>` for CI, and a `--without <item>` 
 
 ## Later
 
+- DeepSeek: show DeepSeek setups, as its own harness or as a model provider seen through other harnesses
+  ([#1](https://github.com/overfocus/rigswig/issues/1)).
 - A WebAssembly build of `rigswig-core`, for a VS Code extension or a page that reads an uploaded `--json`.
 - Real tokenizer counts where a harness's tokenizer is public, labelled as such.
 
