@@ -15,3 +15,6 @@ path = "src/main.rs"
 [dependencies]
 rigswig-core = { path = "../rigswig-core" }
 serde_json = "1.0.154"
+
+[dev-dependencies]
+rigswig-core = { path = "../rigswig-core" }

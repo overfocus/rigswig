@@ -68,3 +68,39 @@ pub fn strs_at(v: &Map<String, Value>, key: &str) -> Vec<String> {
         .map(|a| a.iter().filter_map(Value::as_str).map(String::from).collect())
         .unwrap_or_default()
 }
+
+/// Read a TOML file into the same JSON value shape, so adapters handle both alike.
+pub fn read_toml(fs: &dyn Fs, path: &Path) -> JsonFile {
+    if !fs.exists(path) {
+        return JsonFile::Missing;
+    }
+    match fs.read_to_string(path) {
+        Ok(text) => match toml::from_str::<Value>(text.strip_prefix('\u{feff}').unwrap_or(&text)) {
+            Ok(v) => JsonFile::Ok(v),
+            Err(_) => JsonFile::Malformed,
+        },
+        Err(_) => JsonFile::Malformed,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::fs::MemFs;
+
+    #[test]
+    fn toml_reads_as_json_values() {
+        let fs = MemFs::new()
+            .file(
+                "/c/config.toml",
+                "model = \"m\"\n[mcp_servers.docs]\ncommand = \"npx\"\nargs = [\"-y\"]\nenabled = false\n",
+            )
+            .file("/c/bad.toml", "model = ");
+        let v = read_toml(&fs, Path::new("/c/config.toml"));
+        let o = v.object();
+        assert_eq!(str_at(&o, "model"), Some("m"));
+        assert_eq!(o["mcp_servers"]["docs"]["enabled"], Value::Bool(false));
+        assert_eq!(read_toml(&fs, Path::new("/c/bad.toml")), JsonFile::Malformed);
+        assert_eq!(read_toml(&fs, Path::new("/c/none.toml")), JsonFile::Missing);
+    }
+}
