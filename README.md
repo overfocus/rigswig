@@ -20,6 +20,8 @@ cargo run -- status --repo path/to/repo --json   # everything, as schema/harness
 cargo run -- ui --repo path/to/repo              # the same as a page on 127.0.0.1, behind a random token
 cargo run -- compare repo-a repo-b               # what differs between two repos, one harness
 cargo run -- compare path/to/repo --tools claude-code,codex   # or between two harnesses on one repo
+cargo run -- check --repo path/to/repo --max-tokens 40k        # for CI: exit 1 when the budget is passed
+cargo run -- status --repo path/to/repo --without layer:user   # what-if: the totals without some items
 ```
 
 The page is read-only and local: it listens on 127.0.0.1 only, answers only requests that carry its token and the

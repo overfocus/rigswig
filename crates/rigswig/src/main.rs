@@ -19,6 +19,8 @@ Usage:
   rigswig status [--repo <path>] [--tool <id>] [--json]
                                             what a coding-agent session in a repo loads, and where each piece came from
                                             (--tool picks the harness; by default the one with the most evidence)
+  rigswig check [--repo <path>] [--tool <id>] [--max-tokens <n>] [--max-item-tokens <n>] [--no-warnings] [--json]
+                                            for CI: exits 1 when a limit is passed (n may be 40000, 40k or 1m)
   rigswig tools [--repo <path>]             the harnesses rigswig knows, and the evidence for each in this repo
   rigswig schema                            the JSON Schema of `status --json`
 
@@ -28,6 +30,9 @@ Usage:
   rigswig compare <repo-a> <repo-b> [--tool <id>] [--json]
   rigswig compare <repo> --tools <id-a>,<id-b> [--json]
                                             what differs: two repos with one harness, or two harnesses on one repo
+
+`status` and `check` take --without <what> (repeatable, or comma-separated): a plugin (name@marketplace), a
+layer (layer:user), a kind and name (agent:*, skill:deploy) or an item id. The totals are recomputed without them.
 
 rigswig never makes a network request, calls a model, or writes a file.
 ",
@@ -69,6 +74,7 @@ fn status(args: &[String], mode: Mode) -> ExitCode {
     let mut tool: Option<String> = None;
     let mut port: u16 = 0;
     let mut idle_minutes: u64 = 30;
+    let mut removals: Vec<String> = Vec::new();
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -80,6 +86,12 @@ fn status(args: &[String], mode: Mode) -> ExitCode {
             "--tool" => match it.next() {
                 Some(t) if !t.starts_with("--") => tool = Some(t.clone()),
                 _ => return fail("--tool needs a harness id (see `rigswig tools`)"),
+            },
+            "--without" if mode == Mode::Status => match it.next() {
+                Some(w) if !w.starts_with("--") => {
+                    removals.extend(w.split(',').map(|x| x.trim().to_string()).filter(|x| !x.is_empty()))
+                }
+                _ => return fail("--without needs what to take out"),
             },
             "--port" if mode == Mode::Ui => match it.next().and_then(|p| p.parse().ok()) {
                 Some(p) => port = p,
@@ -166,7 +178,16 @@ fn status(args: &[String], mode: Mode) -> ExitCode {
         },
         None => scored.iter().max_by_key(|(_, d)| d.score).expect("at least one adapter"),
     };
-    let h = chosen.0.resolve(&ctx_for(chosen.0));
+    let mut h = chosen.0.resolve(&ctx_for(chosen.0));
+    if !removals.is_empty() {
+        let (w, counts) = rigswig_core::whatif::without(&h, &removals);
+        for (pattern, n) in counts {
+            if n == 0 {
+                eprintln!("rigswig: --without {}: nothing in effect matches", printable(&pattern));
+            }
+        }
+        h = w;
+    }
     if json {
         println!("{}", serde_json::to_string_pretty(&h).expect("the model serialises"));
     } else {
@@ -196,6 +217,108 @@ fn resolve(repo: &std::path::Path, tool: Option<&str>) -> Result<rigswig_core::m
         None => adapters.iter().max_by_key(|a| a.detect(&ctx_for(a.as_ref())).score).expect("an adapter"),
     };
     Ok(a.resolve(&ctx_for(a.as_ref())))
+}
+
+/// `rigswig check`: limits for CI. Exit 0 when every limit holds, 1 when one does not, 2 on a usage error.
+fn check(args: &[String]) -> ExitCode {
+    let mut repo: Option<PathBuf> = None;
+    let mut tool: Option<String> = None;
+    let mut max_tokens: Option<u64> = None;
+    let mut max_item: Option<u64> = None;
+    let mut no_warnings = false;
+    let mut json = false;
+    let mut removals: Vec<String> = Vec::new();
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        let mut value =
+            |name: &str| it.next().filter(|v| !v.starts_with("--")).cloned().ok_or(format!("{name} needs a value"));
+        match a.as_str() {
+            "--json" => json = true,
+            "--no-warnings" => no_warnings = true,
+            "--repo" => match value("--repo") {
+                Ok(v) => repo = Some(PathBuf::from(v)),
+                Err(e) => return fail(&e),
+            },
+            "--tool" => match value("--tool") {
+                Ok(v) => tool = Some(v),
+                Err(e) => return fail(&e),
+            },
+            "--without" => match value("--without") {
+                Ok(v) => removals.extend(v.split(',').map(|x| x.trim().to_string()).filter(|x| !x.is_empty())),
+                Err(e) => return fail(&e),
+            },
+            "--max-tokens" | "--max-item-tokens" => {
+                let name = a.clone();
+                let Some(n) = value(&name).ok().and_then(|v| rigswig_core::whatif::parse_tokens(&v)) else {
+                    return fail(&format!("{name} needs a number of tokens, like 40000 or 40k"));
+                };
+                if name == "--max-tokens" { max_tokens = Some(n) } else { max_item = Some(n) }
+            }
+            other => return fail(&format!("unknown option: {other}")),
+        }
+    }
+    let here = repo.unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+    let mut h = match resolve(&here, tool.as_deref()) {
+        Ok(h) => h,
+        Err(e) => return fail(&e),
+    };
+    if !removals.is_empty() {
+        h = rigswig_core::whatif::without(&h, &removals).0;
+    }
+
+    // (name, passed, detail)
+    let mut results: Vec<(String, bool, String)> = Vec::new();
+    let errs = rigswig_core::check::contract_errors(&h);
+    results.push((
+        "contract".into(),
+        errs.is_empty(),
+        if errs.is_empty() { "the output keeps the contract".into() } else { errs.join("; ") },
+    ));
+    let t = &h.context.tokens;
+    if let Some(max) = max_tokens {
+        results.push((
+            "max-tokens".into(),
+            t.value <= max,
+            format!("~{} tokens before you type (estimate, {}..{}); limit {max}", t.value, t.low, t.high),
+        ));
+    }
+    if let Some(max) = max_item {
+        let over: Vec<String> = h
+            .items
+            .iter()
+            .filter(|i| {
+                i.effective
+                    && i.load.when == rigswig_core::model::LoadWhen::Startup
+                    && i.load.chars.value.div_ceil(4) > max
+            })
+            .map(|i| format!("{} {} (~{})", i.detail.kind(), printable(&i.name), i.load.chars.value.div_ceil(4)))
+            .collect();
+        let detail = if over.is_empty() {
+            format!("no item over {max} tokens")
+        } else {
+            format!("over {max} tokens: {}", over.join(", "))
+        };
+        results.push(("max-item-tokens".into(), over.is_empty(), detail));
+    }
+    if no_warnings {
+        let ws: Vec<String> =
+            h.warnings.iter().filter(|w| w.code != "what-if").map(|w| printable(&w.message)).collect();
+        let detail = if ws.is_empty() { "no warnings".into() } else { ws.join("; ") };
+        results.push(("no-warnings".into(), ws.is_empty(), detail));
+    }
+    let passed = results.iter().all(|(_, ok, _)| *ok);
+    if json {
+        let rows: Vec<serde_json::Value> =
+            results.iter().map(|(n, ok, d)| serde_json::json!({ "check": n, "passed": ok, "detail": d })).collect();
+        let out = serde_json::json!({ "tool": h.tool.id, "repo": h.target.repo, "passed": passed, "checks": rows });
+        println!("{}", serde_json::to_string_pretty(&out).expect("serialises"));
+    } else {
+        println!("rigswig check: {} in {}", printable(&h.tool.id), printable(&h.target.repo));
+        for (n, ok, d) in &results {
+            println!("  {} {:<16} {}", if *ok { "PASS" } else { "FAIL" }, n, d);
+        }
+    }
+    if passed { ExitCode::SUCCESS } else { ExitCode::from(1) }
 }
 
 fn compare(args: &[String]) -> ExitCode {
@@ -260,6 +383,7 @@ fn main() -> ExitCode {
         Some("tools") => status(&args[1..], Mode::Tools),
         Some("ui") => status(&args[1..], Mode::Ui),
         Some("compare") => compare(&args[1..]),
+        Some("check") => check(&args[1..]),
         Some(other) => fail(&format!("unknown or unimplemented command: {other}")),
     }
 }

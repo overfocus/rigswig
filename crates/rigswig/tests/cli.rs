@@ -131,3 +131,36 @@ fn compare_two_repos_and_two_tools() {
 
     assert_eq!(run(&["compare", repo.to_str().unwrap()]).status.code(), Some(2), "one repo needs --tools");
 }
+
+#[test]
+fn check_exit_codes_and_without() {
+    let s = Sandbox::new("check");
+    s.write("repo/CLAUDE.md", &"x".repeat(4_000)); // ~1,000 tokens
+    s.write("home/.claude/agents/a.md", "---\ndescription: helps\n---\n");
+    let repo = s.0.join("repo");
+    let run = |args: &[&str]| {
+        let mut all = vec!["check", "--repo", repo.to_str().unwrap(), "--tool", "claude-code"];
+        all.extend(args);
+        Command::new(env!("CARGO_BIN_EXE_rigswig"))
+            .args(&all)
+            .env("HOME", s.0.join("home"))
+            .env_remove("CLAUDE_CONFIG_DIR")
+            .output()
+            .unwrap()
+    };
+    assert_eq!(run(&["--max-tokens", "2k"]).status.code(), Some(0));
+    assert_eq!(run(&["--max-tokens", "900"]).status.code(), Some(1));
+    assert_eq!(run(&["--max-item-tokens", "500"]).status.code(), Some(1));
+    assert_eq!(run(&["--max-item-tokens", "500", "--without", "instruction:CLAUDE.md"]).status.code(), Some(0));
+    assert_eq!(run(&["--no-warnings"]).status.code(), Some(1), "the all-tools agent is a warning");
+    assert_eq!(
+        run(&["--no-warnings", "--without", "layer:user"]).status.code(),
+        Some(1),
+        "warnings come from the resolved setup"
+    );
+    assert_eq!(run(&["--max-tokens", "lots"]).status.code(), Some(2));
+    let out = run(&["--max-tokens", "900", "--json"]);
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(v["passed"], false);
+    assert_eq!(v["checks"][1]["check"], "max-tokens");
+}

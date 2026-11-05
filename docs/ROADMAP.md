@@ -34,7 +34,10 @@ Where they differ, the adapter follows the docs (overridden items, four import h
 CI. Installed with `cargo install rigswig`, Homebrew, or `npx rigswig`, which picks the right prebuilt binary from
 per-platform npm packages (as esbuild and Biome do). A Claude Code plugin wrapping the binary comes with it.
 
-Also in v0.1: `rigswig check --max-tokens <n>` for CI, and a `--without <item>` what-if.
+Also in v0.1 (done): `rigswig check` for CI (`--max-tokens`, `--max-item-tokens`, `--no-warnings`; exit 1 on a
+failed limit), and `--without` what-ifs on `status` and `check`.
+
+Left for v0.1: release builds and distribution (below).
 
 ## Later
 

@@ -13,6 +13,7 @@ pub mod compare;
 pub mod fs;
 pub mod model;
 pub mod read;
+pub mod whatif;
 
 /// The crate version, shared by the CLI.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
