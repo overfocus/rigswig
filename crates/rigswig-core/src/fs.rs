@@ -145,7 +145,7 @@ impl MemFs {
                         return Err(io::Error::other("too many levels of symbolic links"));
                     }
                     out.pop();
-                    if target.is_absolute() {
+                    if target.has_root() {
                         out = PathBuf::from("/");
                     }
                     push_all(&mut stack, target);
