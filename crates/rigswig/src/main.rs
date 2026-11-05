@@ -60,6 +60,23 @@ fn this_os() -> Os {
     }
 }
 
+/// The real path of `p`, in the form people and the rest of rigswig expect. On Windows, `canonicalize` returns a
+/// verbatim path (`\\?\C:\repo`) in which `/` is not a separator, so joins like `.claude/settings.json` would find
+/// nothing; a plain drive path is turned back into `C:\repo`. UNC and other verbatim paths are kept as they are.
+fn real_path(p: &std::path::Path) -> std::io::Result<PathBuf> {
+    let r = std::fs::canonicalize(p)?;
+    if cfg!(windows) {
+        let s = r.to_string_lossy();
+        if let Some(rest) = s.strip_prefix(r"\\?\") {
+            let b = rest.as_bytes();
+            if b.len() >= 2 && b[0].is_ascii_alphabetic() && b[1] == b':' {
+                return Ok(PathBuf::from(rest));
+            }
+        }
+    }
+    Ok(r)
+}
+
 fn home() -> Option<PathBuf> {
     std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).map(PathBuf::from).filter(|p| p.is_absolute())
 }
@@ -109,7 +126,7 @@ fn status(args: &[String], mode: Mode) -> ExitCode {
             other => return fail(&format!("unknown option: {other}")),
         }
     }
-    let repo = match repo.map_or_else(std::env::current_dir, Ok).and_then(std::fs::canonicalize) {
+    let repo = match repo.map_or_else(std::env::current_dir, Ok).and_then(|p| real_path(&p)) {
         Ok(r) => r,
         Err(_) => return fail("that repo folder does not exist"),
     };
@@ -273,7 +290,7 @@ fn status(args: &[String], mode: Mode) -> ExitCode {
 
 /// Resolve `tool` (or the adapter with the most evidence) for `repo`.
 fn resolve(repo: &std::path::Path, tool: Option<&str>) -> Result<rigswig_core::model::Harness, String> {
-    let repo = std::fs::canonicalize(repo).map_err(|_| format!("no such folder: {}", repo.display()))?;
+    let repo = real_path(repo).map_err(|_| format!("no such folder: {}", repo.display()))?;
     let home = home().ok_or("the home folder is not set")?;
     let adapters = rigswig_core::adapters::all();
     let ctx_for = |a: &dyn Adapter| {
