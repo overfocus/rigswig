@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 /// The version of the JSON contract (`schema/harness.schema.json`), not of the crate.
 pub const SCHEMA_VERSION: &str = "0.1.0";
 
-/// A layer's id, unique within one [`Harness`] (e.g. `user`, `project`, `plugin:loop@agent-kit`).
+/// A layer's id, unique within one [`Harness`] (e.g. `user`, `project`, `plugin:formatter@example-market`).
 pub type LayerId = String;
 /// An item's id: stable across runs, `<tool>:<kind>:<layer>:<name>`, so diffs and history can key on it.
 pub type ItemId = String;
@@ -197,7 +197,8 @@ pub enum LoadWhen {
     OnMatch,
     /// When the model or the user invokes it.
     OnInvoke,
-    /// Never: the item is present but not loaded (disabled, shadowed).
+    /// Never: nothing of it enters the model's context. Either it is not loaded (disabled, shadowed, blocked), or it
+    /// works outside the context (a hook, a permission rule).
     Never,
 }
 
@@ -314,6 +315,8 @@ pub enum HookHandler {
     Http,
     Prompt,
     Agent,
+    #[serde(rename = "mcp-tool")]
+    McpTool,
     Unknown,
 }
 

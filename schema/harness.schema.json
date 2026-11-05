@@ -160,6 +160,7 @@
         "http",
         "prompt",
         "agent",
+        "mcp-tool",
         "unknown"
       ],
       "type": "string"
@@ -444,7 +445,7 @@
         },
         {
           "const": "never",
-          "description": "Never: the item is present but not loaded (disabled, shadowed).",
+          "description": "Never: nothing of it enters the model's context. Either it is not loaded (disabled, shadowed, blocked), or it\nworks outside the context (a hook, a permission rule).",
           "type": "string"
         }
       ]

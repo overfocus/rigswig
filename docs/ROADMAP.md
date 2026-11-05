@@ -14,21 +14,22 @@
    - every figure labelled native, calculated, estimated or unknown.
    Adapters implement one trait (`detect`, `layers`, `read`, `resolve`) over an injected file system. The schema is
    generated from the Rust types (schemars) and checked in, so other tools can read the JSON without Rust.
-3. **Claude Code adapter.** Settings precedence, plugins and marketplaces, agents, skills, commands, hooks
+3. **Claude Code adapter** (done: `rigswig-core/src/adapters/claude_code/`, its rules and their sources in
+   [adapters/claude-code.md](adapters/claude-code.md); `rigswig status` runs it). Settings precedence, plugins and marketplaces, agents, skills, commands, hooks
    (honouring `disableAllHooks`), MCP servers and approval, permissions, managed settings on macOS, Linux and Windows,
    and overridden items detected rather than counted twice.
 4. **Codex adapter.** `AGENTS.md`, `~/.codex/config.toml`, MCP servers, managed requirements.
 5. **The page.** The headline is a context budget: one bar on the model's context-window scale, split by kind and
    then by source, the unmeasured part marked, with a ranked list underneath. Compare is two bars on one scale.
 
-**Reference behaviour.** The agent-kit cockpit (JavaScript) already resolves Claude Code correctly in the cases its 83
-tests cover. Its `status --json` on invented fixture homes becomes golden output that the Rust Claude Code adapter must
-match, field for field, except where the review found it wrong (overridden items, `disableAllHooks`, managed settings
-off macOS).
+**Reference behaviour.** The adapter was checked against the earlier JavaScript explorer it replaces, on a real setup:
+the same agents, skills, commands, hook scripts, MCP servers and plugins, name for name, and the same context total.
+Where they differ, the adapter follows the docs (overridden items, four import hops, `AGENTS.md` only without a
+`CLAUDE.md`, `disableAllHooks`, managed settings on every OS).
 
 **Distribution.** One static binary per platform (macOS arm64 and x64, Linux x64 and arm64 musl, Windows x64), built in
 CI. Installed with `cargo install rigswig`, Homebrew, or `npx rigswig`, which picks the right prebuilt binary from
-per-platform npm packages (as esbuild and Biome do). The agent-kit plugin becomes a thin wrapper that calls the binary.
+per-platform npm packages (as esbuild and Biome do). A Claude Code plugin wrapping the binary comes with it.
 
 Also in v0.1: `rigswig check --max-tokens <n>` for CI, and a `--without <item>` what-if.
 

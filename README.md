@@ -8,10 +8,16 @@ spread across user, project, local and managed scopes. rigswig reads all of it f
 there actually gets, which scope decided each setting, what is overridden, and roughly how much context it costs
 before you type a word.
 
-**Status: pre-alpha.** This is the repository skeleton. Nothing is implemented yet; see [docs/ROADMAP.md](docs/ROADMAP.md).
+**Status: pre-alpha.** `rigswig status` works for Claude Code; Codex and the page are next. See
+[docs/ROADMAP.md](docs/ROADMAP.md).
 
 rigswig is a single binary written in Rust. Once released it will install with `cargo install rigswig`, Homebrew or
-`npx rigswig`; until then, build it from source with `cargo run -- --help`.
+`npx rigswig`; until then, build it from source:
+
+```sh
+cargo run -- status --repo path/to/repo          # a summary
+cargo run -- status --repo path/to/repo --json   # everything, as schema/harness.schema.json describes
+```
 
 ## Guarantees
 
@@ -29,7 +35,7 @@ Harness-agnostic: each harness is an adapter that reads its own files into one s
 
 | Harness | Status |
 |---|---|
-| Claude Code | planned for v0.1 |
+| Claude Code | `rigswig status` ([the rules it models](docs/adapters/claude-code.md)) |
 | OpenAI Codex CLI | planned for v0.1 |
 | Gemini CLI | planned |
 | GitHub Copilot (repo files) | planned |

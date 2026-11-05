@@ -7,6 +7,7 @@
 //! - every output passes [`check::contract_errors`].
 
 pub mod adapter;
+pub mod adapters;
 pub mod check;
 pub mod fs;
 pub mod model;
