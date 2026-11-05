@@ -4,7 +4,8 @@
 
 1. **Repository** (done): name, licence, fresh history, a Rust workspace (`rigswig-core` library, `rigswig` binary),
    CLI skeleton, tests.
-2. **Data model and schema.** A harness-neutral model under a versioned JSON Schema:
+2. **Data model and schema** (done: `rigswig-core/src/model.rs`, `schema/`, the contract check, the read-only `Fs`
+   trait with an in-memory tree for tests, the `Adapter` trait; `rigswig schema` prints the schema). A harness-neutral model under a versioned JSON Schema:
    - layers: managed, org, user, project, local, package;
    - items (instructions, scoped instructions, agents, skills, commands, hooks, MCP servers, permissions, model), each
      with its origin, `effective`, `shadowedBy` and a content hash;

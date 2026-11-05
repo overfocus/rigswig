@@ -1,12 +1,19 @@
-//! rigswig: a harness-agnostic, read-only explorer for coding-agent setups. Nothing is implemented yet (docs/ROADMAP.md).
+//! rigswig: a harness-agnostic, read-only explorer for coding-agent setups (docs/ROADMAP.md).
 
 use std::process::ExitCode;
+
+// Used by the adapters once they land (roadmap step 3).
+#[allow(dead_code)]
+mod os_fs;
 
 fn usage() -> String {
     format!(
         "rigswig {}
 
-Not implemented yet. Planned:
+Usage:
+  rigswig schema                            print the JSON Schema of rigswig's output
+
+Planned:
   rigswig status [--repo <path>] [--json]   what a session in a repo loads, and where each piece came from
   rigswig ui [--repo <path>]                the same as a local, read-only page
   rigswig compare <a> <b>                   two repos, or two harnesses on one repo
@@ -26,6 +33,10 @@ fn main() -> ExitCode {
         }
         None | Some("--help" | "-h") => {
             print!("{}", usage());
+            ExitCode::SUCCESS
+        }
+        Some("schema") => {
+            println!("{}", serde_json::to_string_pretty(&rigswig_core::json_schema()).expect("a schema serialises"));
             ExitCode::SUCCESS
         }
         Some(other) => {

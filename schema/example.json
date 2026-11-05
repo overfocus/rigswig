@@ -1,0 +1,277 @@
+{
+  "schemaVersion": "0.1.0",
+  "tool": {
+    "id": "example-tool",
+    "adapterVersion": "0.0.0",
+    "detectedBy": [
+      "AGENTS.md"
+    ]
+  },
+  "target": {
+    "repo": "example-repo",
+    "os": "linux"
+  },
+  "layers": [
+    {
+      "id": "managed",
+      "kind": "managed",
+      "label": "managed settings",
+      "present": true,
+      "rank": 0,
+      "mode": "enforce"
+    },
+    {
+      "id": "project",
+      "kind": "project",
+      "label": "project settings",
+      "present": true,
+      "rank": 1,
+      "mode": "default"
+    },
+    {
+      "id": "user",
+      "kind": "user",
+      "label": "user settings",
+      "present": true,
+      "rank": 2,
+      "mode": "default"
+    },
+    {
+      "id": "plugin:docs@example-market",
+      "kind": "package",
+      "label": "plugin:docs@example-market settings",
+      "present": true,
+      "rank": 3,
+      "mode": "default"
+    }
+  ],
+  "packages": [
+    {
+      "id": "docs@example-market",
+      "kind": "plugin",
+      "source": "example-market",
+      "enabled": true,
+      "decidedBy": "user",
+      "scopes": {
+        "user": true
+      },
+      "contributes": [
+        "example-tool:skill:plugin:docs@example-market:write-docs"
+      ]
+    }
+  ],
+  "items": [
+    {
+      "id": "example-tool:instruction:project:AGENTS.md",
+      "name": "AGENTS.md",
+      "origin": {
+        "layer": "project"
+      },
+      "effective": true,
+      "load": {
+        "when": "startup",
+        "chars": {
+          "value": 4000,
+          "confidence": "calculated"
+        }
+      },
+      "kind": "instruction",
+      "attrs": {
+        "appliesTo": []
+      }
+    },
+    {
+      "id": "example-tool:agent:project:reviewer",
+      "name": "reviewer",
+      "origin": {
+        "layer": "project"
+      },
+      "effective": true,
+      "load": {
+        "when": "startup",
+        "chars": {
+          "value": 100,
+          "confidence": "calculated"
+        }
+      },
+      "kind": "agent",
+      "attrs": {
+        "tools": {
+          "only": [
+            "Read",
+            "Grep"
+          ]
+        },
+        "model": "small"
+      }
+    },
+    {
+      "id": "example-tool:agent:user:reviewer",
+      "name": "reviewer",
+      "origin": {
+        "layer": "user"
+      },
+      "effective": false,
+      "shadowedBy": "example-tool:agent:project:reviewer",
+      "load": {
+        "when": "never",
+        "chars": {
+          "value": 90,
+          "confidence": "calculated"
+        }
+      },
+      "kind": "agent",
+      "attrs": {
+        "tools": "all"
+      }
+    },
+    {
+      "id": "example-tool:skill:plugin:docs@example-market:write-docs",
+      "name": "write-docs",
+      "origin": {
+        "layer": "plugin:docs@example-market",
+        "package": "docs@example-market"
+      },
+      "effective": true,
+      "load": {
+        "when": "startup",
+        "chars": {
+          "value": 120,
+          "confidence": "calculated"
+        }
+      },
+      "kind": "skill",
+      "attrs": {
+        "bodyChars": 2400
+      }
+    },
+    {
+      "id": "example-tool:command:user:standup",
+      "name": "standup",
+      "origin": {
+        "layer": "user"
+      },
+      "effective": true,
+      "load": {
+        "when": "startup",
+        "chars": {
+          "value": 60,
+          "confidence": "calculated"
+        }
+      },
+      "kind": "command",
+      "attrs": {}
+    },
+    {
+      "id": "example-tool:hook:project:before-tool-0",
+      "name": "before-tool-0",
+      "origin": {
+        "layer": "project"
+      },
+      "effective": true,
+      "load": {
+        "when": "startup",
+        "chars": {
+          "value": 0,
+          "confidence": "calculated"
+        }
+      },
+      "kind": "hook",
+      "attrs": {
+        "event": "before-tool",
+        "nativeEvent": "PreToolUse",
+        "matcher": "Bash",
+        "handler": "command",
+        "script": "guard.sh"
+      }
+    },
+    {
+      "id": "example-tool:mcp:project:tickets",
+      "name": "tickets",
+      "origin": {
+        "layer": "project"
+      },
+      "effective": true,
+      "load": {
+        "when": "startup",
+        "chars": {
+          "value": 0,
+          "confidence": "calculated"
+        }
+      },
+      "kind": "mcp",
+      "attrs": {
+        "transport": "http",
+        "target": "https://tickets.example.com",
+        "state": "pending"
+      }
+    },
+    {
+      "id": "example-tool:permission:managed:deny-curl",
+      "name": "deny-curl",
+      "origin": {
+        "layer": "managed"
+      },
+      "effective": true,
+      "load": {
+        "when": "startup",
+        "chars": {
+          "value": 0,
+          "confidence": "calculated"
+        }
+      },
+      "kind": "permission",
+      "attrs": {
+        "effect": "deny",
+        "tool": "Bash",
+        "pattern": "curl:*"
+      }
+    }
+  ],
+  "settings": {
+    "model": {
+      "value": "large",
+      "source": "project",
+      "trail": [
+        {
+          "layer": "project",
+          "value": "large"
+        },
+        {
+          "layer": "user",
+          "value": "small",
+          "note": "overridden"
+        }
+      ]
+    }
+  },
+  "context": {
+    "chars": {
+      "value": 4280,
+      "confidence": "calculated"
+    },
+    "tokens": {
+      "method": "chars/4",
+      "value": 1070,
+      "low": 856,
+      "high": 1427
+    },
+    "notMeasured": [
+      {
+        "what": "system prompt",
+        "why": "not in any file"
+      }
+    ]
+  },
+  "coverage": {
+    "notModelled": [
+      "command-line flags"
+    ]
+  },
+  "warnings": [
+    {
+      "code": "agent-all-tools",
+      "message": "an agent has every tool"
+    }
+  ]
+}

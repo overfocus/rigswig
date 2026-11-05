@@ -7,6 +7,8 @@ open source project under Apache-2.0: write everything as if a stranger will rea
 cargo test                    # every crate
 cargo run -- --help           # the CLI
 cargo clippy --all-targets -- -D warnings
+cargo fmt --check             # rustfmt.toml: 120 columns
+RIGSWIG_BLESS=1 cargo test -p rigswig-core   # regenerate schema/ after changing the model
 ```
 
 - `crates/rigswig-core`: the harness-neutral data model and the adapters. A library with no I/O of its own.
@@ -17,6 +19,11 @@ Keep dependencies few and well known (serde, serde_json, toml, a YAML front-matt
 Schema); every new crate needs a reason in its commit message.
 
 ## Rules
+
+- **The model is the contract.** `rigswig-core/src/model.rs` is the source of `schema/harness.schema.json` and
+  `schema/example.json` (both generated; a test fails when they drift). Bump `SCHEMA_VERSION` when the JSON changes:
+  before 1.0.0 a minor bump may break, from 1.0.0 only a major one may. Every adapter's output must pass
+  `check::contract_errors`, and each rule there has a broken copy in `tests/model.rs` that must fail.
 
 - **The guarantees in README.md are invariants**: no network, no model calls, no writes to configuration, no secrets
   printed or served, no transcripts read. Every one needs a test, and no change may weaken one.
