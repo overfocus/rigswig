@@ -24,8 +24,10 @@ cargo run -- check --repo path/to/repo --max-tokens 40k        # for CI: exit 1 
 cargo run -- status --repo path/to/repo --without layer:user   # what-if: the totals without some items
 ```
 
-The page is read-only and local: it listens on 127.0.0.1 only, answers only requests that carry its token and the
-right `Host`, loads nothing from anywhere else, and stops after 30 minutes without a request.
+The page is local: it listens on 127.0.0.1 only, answers only requests that carry its token and the right `Host`,
+loads nothing from anywhere else, and stops after 30 minutes without a request. It is read-only unless started with
+`--allow-writes`, which lets it turn plugins and project MCP servers on and off, each with a preview (the file, the
+diff, the budget before and after), a backup and undo: see [docs/WRITE-MODE.md](docs/WRITE-MODE.md).
 
 ## Guarantees
 
@@ -33,7 +35,8 @@ These are the point of the tool, and they will be enforced by tests:
 
 - **No network.** rigswig never makes a request, and sends no telemetry.
 - **No model calls.** Everything it shows is read from files on your machine.
-- **Read-only.** It never writes to your configuration.
+- **Read-only by default.** Nothing is ever written unless you start the page with `rigswig ui --allow-writes`
+  ([write mode](docs/WRITE-MODE.md)).
 - **No secrets.** MCP server `env`, `headers` and `args`, URL paths and inline hook code are never printed or served.
 - **No transcripts.** It never reads session history.
 

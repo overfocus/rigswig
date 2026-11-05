@@ -3,6 +3,7 @@
 mod os_fs;
 mod render;
 mod ui;
+mod writes;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -24,8 +25,10 @@ Usage:
   rigswig tools [--repo <path>]             the harnesses rigswig knows, and the evidence for each in this repo
   rigswig schema                            the JSON Schema of `status --json`
 
-  rigswig ui [--repo <path>] [--tool <id>] [--port <n>] [--idle <minutes>]
-                                            the same as a local, read-only page (stops after --idle minutes, default 30)
+  rigswig ui [--repo <path>] [--tool <id>] [--port <n>] [--idle <minutes>] [--allow-writes]
+                                            the same as a local page (stops after --idle minutes, default 30); read-only
+                                            unless --allow-writes, which lets it turn plugins and project MCP servers on
+                                            and off, with a preview, a backup and undo
 
   rigswig compare <repo-a> <repo-b> [--tool <id>] [--json]
   rigswig compare <repo> --tools <id-a>,<id-b> [--json]
@@ -34,7 +37,7 @@ Usage:
 `status` and `check` take --without <what> (repeatable, or comma-separated): a plugin (name@marketplace), a
 layer (layer:user), a kind and name (agent:*, skill:deploy) or an item id. The totals are recomputed without them.
 
-rigswig never makes a network request, calls a model, or writes a file.
+rigswig never makes a network request or calls a model, and writes nothing unless `ui --allow-writes` is used.
 ",
         rigswig_core::VERSION
     )
@@ -75,6 +78,7 @@ fn status(args: &[String], mode: Mode) -> ExitCode {
     let mut port: u16 = 0;
     let mut idle_minutes: u64 = 30;
     let mut removals: Vec<String> = Vec::new();
+    let mut allow_writes = false;
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -93,6 +97,7 @@ fn status(args: &[String], mode: Mode) -> ExitCode {
                 }
                 _ => return fail("--without needs what to take out"),
             },
+            "--allow-writes" if mode == Mode::Ui => allow_writes = true,
             "--port" if mode == Mode::Ui => match it.next().and_then(|p| p.parse().ok()) {
                 Some(p) => port = p,
                 None => return fail("--port needs a number"),
@@ -156,13 +161,78 @@ fn status(args: &[String], mode: Mode) -> ExitCode {
                 .iter()
                 .map(|c| ui::ToolChoice { id: c.id.clone(), score: c.score, evidence: c.evidence.clone() })
                 .collect();
-            let page =
-                ui::PageData { harness: &h, other: other.as_ref(), comparison, tools, version: rigswig_core::VERSION };
+            let page = ui::PageData {
+                harness: &h,
+                other: other.as_ref(),
+                comparison,
+                tools,
+                version: rigswig_core::VERSION,
+                writes: allow_writes,
+            };
             Some(ui::embed_json(&page))
         };
+        // Write mode: plan, apply and undo, with the changes applied in this run kept for undo (newest last).
+        let journal: std::sync::Mutex<Vec<writes::Applied>> = std::sync::Mutex::new(Vec::new());
+        let backups = home.join(".rigswig/backups");
+        let act = |route: &str, t: Option<&str>, body: &str| -> Result<String, (u16, String)> {
+            let id = t.unwrap_or(&default);
+            let a = scored
+                .iter()
+                .find(|(a, _)| a.id() == id)
+                .map(|(a, _)| *a)
+                .ok_or((404, "no such harness".to_string()))?;
+            let ctx = ctx_for(a);
+            let bad = |e: serde_json::Error| (400, format!("bad request: {e}"));
+            match route {
+                "/api/plan" => {
+                    let change: rigswig_core::change::Change = serde_json::from_str(body).map_err(bad)?;
+                    let plan = a.plan(&ctx, &change).map_err(|e| (409, e))?;
+                    Ok(serde_json::to_string(&plan).expect("serialises"))
+                }
+                "/api/apply" => {
+                    #[derive(serde::Deserialize)]
+                    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+                    struct Apply {
+                        change: rigswig_core::change::Change,
+                        before_hash: Option<String>,
+                    }
+                    let req: Apply = serde_json::from_str(body).map_err(bad)?;
+                    let plan = a.plan(&ctx, &req.change).map_err(|e| (409, e))?;
+                    let done = writes::apply(&plan, req.before_hash.as_deref(), &backups).map_err(|e| (409, e))?;
+                    let out = serde_json::json!({
+                        "applied": done.file,
+                        "backup": done.backup.as_ref().map(|b| printable(&b.to_string_lossy())),
+                        "tokensAfter": plan.tokens_after,
+                        "takesEffect": plan.takes_effect,
+                    });
+                    journal.lock().expect("journal").push(done);
+                    Ok(out.to_string())
+                }
+                "/api/undo" => {
+                    let mut j = journal.lock().expect("journal");
+                    let last = j.pop().ok_or((409, "nothing to undo in this run of the page".to_string()))?;
+                    match writes::undo(&last) {
+                        Ok(()) => Ok(serde_json::json!({ "undone": last.file }).to_string()),
+                        Err(e) => {
+                            j.push(last);
+                            Err((409, e))
+                        }
+                    }
+                }
+                _ => Err((404, "no such action".into())),
+            }
+        };
         let idle = std::time::Duration::from_secs(idle_minutes * 60);
-        let started = ui::serve(port, idle, &render, &|url| {
-            println!("rigswig ui (read-only, local only): {url}");
+        let act_ref: Option<&ui::Act> = if allow_writes { Some(&act) } else { None };
+        let started = ui::serve(port, idle, &render, act_ref, &|url| {
+            if allow_writes {
+                println!("rigswig ui (WRITE MODE, local only): {url}");
+                println!(
+                    "The page can turn plugins and project MCP servers on and off; backups go to ~/.rigswig/backups."
+                );
+            } else {
+                println!("rigswig ui (read-only, local only): {url}");
+            }
             println!("Stops after {idle_minutes} minutes without a request, or with Ctrl-C.");
         });
         return match started {

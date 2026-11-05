@@ -8,6 +8,7 @@
 
 pub mod adapter;
 pub mod adapters;
+pub mod change;
 pub mod check;
 pub mod compare;
 pub mod fs;

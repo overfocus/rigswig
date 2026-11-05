@@ -164,3 +164,90 @@ fn check_exit_codes_and_without() {
     assert_eq!(v["passed"], false);
     assert_eq!(v["checks"][1]["check"], "max-tokens");
 }
+
+/// A tiny HTTP client for the end-to-end test: one request, the status and the body.
+fn http(port: u16, method: &str, path: &str, headers: &str, body: &str) -> (u16, String) {
+    use std::io::{Read, Write};
+    let mut s = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+    let req = format!(
+        "{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: {}\r\nConnection: close\r\n{headers}\r\n{body}",
+        body.len()
+    );
+    s.write_all(req.as_bytes()).unwrap();
+    let mut out = String::new();
+    s.read_to_string(&mut out).unwrap();
+    let status = out.split(' ').nth(1).and_then(|c| c.parse().ok()).unwrap_or(0);
+    (status, out.split("\r\n\r\n").nth(1).unwrap_or("").to_string())
+}
+
+/// Start `rigswig ui` in the sandbox; returns the child, the port and the token from the line it prints.
+fn start_ui(s: &Sandbox, extra: &[&str]) -> (std::process::Child, u16, String) {
+    use std::io::BufRead;
+    let repo = s.0.join("repo");
+    let mut args = vec!["ui", "--repo", repo.to_str().unwrap(), "--tool", "claude-code", "--idle", "1"];
+    args.extend(extra);
+    let mut child = Command::new(env!("CARGO_BIN_EXE_rigswig"))
+        .args(&args)
+        .env("HOME", s.0.join("home"))
+        .env_remove("CLAUDE_CONFIG_DIR")
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut line = String::new();
+    std::io::BufReader::new(child.stdout.as_mut().unwrap()).read_line(&mut line).unwrap();
+    let url = line.split_whitespace().last().unwrap().to_string();
+    let port = url.split(':').nth(2).unwrap().split('/').next().unwrap().parse().unwrap();
+    let token = url.split("t=").nth(1).unwrap().to_string();
+    (child, port, token)
+}
+
+#[test]
+fn write_mode_plans_applies_backs_up_and_undoes() {
+    let s = Sandbox::new("writes");
+    let mk = s.0.join("home/mk");
+    s.write(
+        "home/.claude/plugins/known_marketplaces.json",
+        &format!(r#"{{"mk":{{"source":{{"source":"directory","path":"{}"}}}}}}"#, mk.display()),
+    );
+    s.write("home/mk/.claude-plugin/marketplace.json", r#"{"plugins":[{"name":"fmt","source":"./fmt"}]}"#);
+    s.write("home/mk/fmt/skills/pretty/SKILL.md", &format!("---\ndescription: {}\n---\n", "formats ".repeat(50)));
+    let user_settings = "{\n  \"enabledPlugins\": {\n    \"fmt@mk\": true\n  }\n}\n";
+    s.write("home/.claude/settings.json", user_settings);
+
+    // Read-only by default: the write routes do not exist.
+    let (mut ro, port, token) = start_ui(&s, &[]);
+    let hdr = |port: u16, token: &str| {
+        format!("Origin: http://127.0.0.1:{port}\r\nX-Rigswig-Token: {token}\r\nContent-Type: application/json\r\n")
+    };
+    let change = r#"{"kind":"plugin","id":"fmt@mk","scope":"user","on":false}"#;
+    assert_eq!(http(port, "POST", "/api/plan", &hdr(port, &token), change).0, 404);
+    let _ = ro.kill();
+
+    let (mut rw, port, token) = start_ui(&s, &["--allow-writes"]);
+    let (code, plan) = http(port, "POST", "/api/plan", &hdr(port, &token), change);
+    assert_eq!(code, 200, "{plan}");
+    let plan: serde_json::Value = serde_json::from_str(&plan).unwrap();
+    assert_eq!(plan["file"], "~/.claude/settings.json");
+    assert_eq!(plan["takesEffect"], true);
+    assert!(plan["tokensAfter"].as_u64() < plan["tokensBefore"].as_u64());
+    assert!(
+        plan.get("after").is_none() && plan.get("path").is_none(),
+        "the new contents and the real path stay on the server"
+    );
+
+    let apply = format!(r#"{{"change":{change},"beforeHash":{}}}"#, plan["beforeHash"]);
+    let (code, done) = http(port, "POST", "/api/apply", &hdr(port, &token), &apply);
+    assert_eq!(code, 200, "{done}");
+    let written = std::fs::read_to_string(s.0.join("home/.claude/settings.json")).unwrap();
+    assert!(written.contains("\"fmt@mk\": false"));
+    let backups: Vec<_> = std::fs::read_dir(s.0.join("home/.rigswig/backups")).unwrap().collect();
+    assert_eq!(backups.len(), 1);
+
+    assert_eq!(http(port, "POST", "/api/apply", &hdr(port, &token), &apply).0, 409, "a stale plan is refused");
+
+    let (code, _) = http(port, "POST", "/api/undo", &hdr(port, &token), "{}");
+    assert_eq!(code, 200);
+    assert_eq!(std::fs::read_to_string(s.0.join("home/.claude/settings.json")).unwrap(), user_settings);
+    assert_eq!(http(port, "POST", "/api/undo", &hdr(port, &token), "{}").0, 409, "nothing left to undo");
+    let _ = rw.kill();
+}

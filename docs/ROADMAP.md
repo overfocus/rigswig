@@ -43,6 +43,8 @@ maintainer's accounts.
 
 ## Later
 
+- Write mode for Codex (`config.toml` with comments kept) and for more kinds (skills, hooks) where the tool
+  documents a switch.
 - Windows in CI: the in-memory test file system (`MemFs`) takes Unix paths only; it needs drive and UNC paths
   before the Windows job can run. The binary itself has Windows paths (managed settings, `USERPROFILE`).
 - DeepSeek: show DeepSeek setups, as its own harness or as a model provider seen through other harnesses

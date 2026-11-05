@@ -1,344 +1,136 @@
 {
-  "$comment": "schemaVersion 0.1.0",
-  "$defs": {
-    "AgentAttrs": {
-      "additionalProperties": false,
-      "properties": {
-        "model": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "tools": {
-          "$ref": "#/$defs/ToolAccess"
-        }
-      },
-      "required": [
-        "tools"
-      ],
-      "type": "object"
-    },
-    "CommandAttrs": {
-      "additionalProperties": false,
-      "type": "object"
-    },
-    "Confidence": {
-      "description": "How a figure was obtained.",
-      "oneOf": [
-        {
-          "const": "native",
-          "description": "Reported by the tool itself.",
-          "type": "string"
-        },
-        {
-          "const": "calculated",
-          "description": "Computed exactly from files (e.g. a character count).",
-          "type": "string"
-        },
-        {
-          "const": "estimated",
-          "description": "Approximated (e.g. tokens from characters).",
-          "type": "string"
-        },
-        {
-          "const": "unknown",
-          "description": "Could not be determined.",
-          "type": "string"
-        }
-      ]
-    },
-    "ContextEstimate": {
-      "additionalProperties": false,
-      "description": "What loads before the first message, and how much of it could be measured.",
-      "properties": {
-        "chars": {
-          "$ref": "#/$defs/Measure",
-          "description": "Characters of every effective startup item. The primary unit: exact, and the same for every model."
-        },
-        "notMeasured": {
-          "default": [],
-          "description": "Fixed costs the tool adds that no file shows (system prompt, built-in tool schemas, MCP tool lists).",
-          "items": {
-            "$ref": "#/$defs/NotMeasured"
-          },
-          "type": "array"
-        },
-        "tokens": {
-          "$ref": "#/$defs/TokenEstimate",
-          "description": "Tokens derived from `chars`; always an estimate, with a range."
-        }
-      },
-      "required": [
-        "chars",
-        "tokens"
-      ],
-      "type": "object"
-    },
-    "Coverage": {
-      "additionalProperties": false,
-      "description": "What the adapter knows it does not model. Required and never empty: no reading of a tool is complete.",
-      "properties": {
-        "notModelled": {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        }
-      },
-      "required": [
-        "notModelled"
-      ],
-      "type": "object"
-    },
-    "Decision": {
-      "additionalProperties": false,
-      "description": "A resolved setting and how it was decided.",
-      "properties": {
-        "source": {
-          "description": "The layer that decided it; absent when it is the tool's default.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "trail": {
-          "default": [],
-          "description": "Every layer that had a say, highest precedence first, including the ones that lost.",
-          "items": {
-            "$ref": "#/$defs/TrailStep"
-          },
-          "type": "array"
-        },
-        "value": {
-          "description": "The value in effect; `null` when nothing sets it and the tool's default applies."
-        }
-      },
-      "required": [
-        "value"
-      ],
-      "type": "object"
-    },
-    "HookAttrs": {
-      "additionalProperties": false,
-      "properties": {
-        "event": {
-          "description": "A tool-neutral event name (`before-tool`, `after-tool`, `session-start`, `prompt-submit`, `stop`, ...).",
-          "type": "string"
-        },
-        "handler": {
-          "$ref": "#/$defs/HookHandler"
-        },
-        "matcher": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "nativeEvent": {
-          "description": "The tool's own event name (`PreToolUse`, ...).",
-          "type": "string"
-        },
-        "script": {
-          "description": "The script's file name only, never the command line or inline code.",
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "event",
-        "nativeEvent",
-        "handler"
-      ],
-      "type": "object"
-    },
-    "HookHandler": {
-      "enum": [
-        "command",
-        "http",
-        "prompt",
-        "agent",
-        "mcp-tool",
-        "unknown"
-      ],
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Harness",
+  "description": "Everything one tool loads for a session in one repo.",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "description": "[`SCHEMA_VERSION`] at the time of writing.",
       "type": "string"
     },
-    "InstructionAttrs": {
-      "additionalProperties": false,
+    "tool": {
+      "$ref": "#/$defs/Tool"
+    },
+    "target": {
+      "$ref": "#/$defs/Target"
+    },
+    "layers": {
+      "description": "Every layer the adapter knows of for this tool, present or not, highest precedence first.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Layer"
+      }
+    },
+    "packages": {
+      "description": "Plugins, extensions or packs that contribute items.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Package"
+      },
+      "default": []
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Item"
+      }
+    },
+    "settings": {
+      "description": "Resolved scalar settings (`model`, `approvalMode`, ...), each with the trail that decided it.",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/Decision"
+      },
+      "default": {}
+    },
+    "context": {
+      "$ref": "#/$defs/ContextEstimate"
+    },
+    "coverage": {
+      "$ref": "#/$defs/Coverage"
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Warning"
+      },
+      "default": []
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "tool",
+    "target",
+    "layers",
+    "items",
+    "context",
+    "coverage"
+  ],
+  "$defs": {
+    "Tool": {
+      "description": "Which tool this is, and which rules were applied.",
+      "type": "object",
       "properties": {
-        "appliesTo": {
-          "default": [],
-          "description": "Globs it is scoped to; empty means it applies everywhere.",
+        "id": {
+          "description": "A short id: `claude-code`, `codex`, `gemini-cli`, ...",
+          "type": "string"
+        },
+        "adapterVersion": {
+          "description": "The adapter's own version: which reading of the tool's rules produced this.",
+          "type": "string"
+        },
+        "toolVersionAssumed": {
+          "description": "The tool version whose documented behaviour the adapter models, when known.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "detectedBy": {
+          "description": "Why the adapter thinks this tool is in use here (files found), as short labels.",
+          "type": "array",
           "items": {
             "type": "string"
           },
-          "type": "array"
-        },
-        "importedBy": {
-          "description": "The instruction item that imports this one (`@file` imports, nested AGENTS.md).",
-          "type": [
-            "string",
-            "null"
-          ]
+          "default": []
         }
       },
-      "type": "object"
-    },
-    "Item": {
-      "description": "One thing the session may load: an instruction file, an agent, a skill, a command, a hook, an MCP server or a\npermission rule.",
-      "oneOf": [
-        {
-          "properties": {
-            "attrs": {
-              "$ref": "#/$defs/InstructionAttrs"
-            },
-            "kind": {
-              "const": "instruction",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind",
-            "attrs"
-          ],
-          "type": "object"
-        },
-        {
-          "properties": {
-            "attrs": {
-              "$ref": "#/$defs/AgentAttrs"
-            },
-            "kind": {
-              "const": "agent",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind",
-            "attrs"
-          ],
-          "type": "object"
-        },
-        {
-          "properties": {
-            "attrs": {
-              "$ref": "#/$defs/SkillAttrs"
-            },
-            "kind": {
-              "const": "skill",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind",
-            "attrs"
-          ],
-          "type": "object"
-        },
-        {
-          "properties": {
-            "attrs": {
-              "$ref": "#/$defs/CommandAttrs"
-            },
-            "kind": {
-              "const": "command",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind",
-            "attrs"
-          ],
-          "type": "object"
-        },
-        {
-          "properties": {
-            "attrs": {
-              "$ref": "#/$defs/HookAttrs"
-            },
-            "kind": {
-              "const": "hook",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind",
-            "attrs"
-          ],
-          "type": "object"
-        },
-        {
-          "properties": {
-            "attrs": {
-              "$ref": "#/$defs/McpAttrs"
-            },
-            "kind": {
-              "const": "mcp",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind",
-            "attrs"
-          ],
-          "type": "object"
-        },
-        {
-          "properties": {
-            "attrs": {
-              "$ref": "#/$defs/PermissionAttrs"
-            },
-            "kind": {
-              "const": "permission",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind",
-            "attrs"
-          ],
-          "type": "object"
-        }
-      ],
-      "properties": {
-        "effective": {
-          "description": "False when the item is overridden (`shadowedBy`), disabled, or otherwise not loaded.",
-          "type": "boolean"
-        },
-        "id": {
-          "type": "string"
-        },
-        "load": {
-          "$ref": "#/$defs/Load"
-        },
-        "name": {
-          "type": "string"
-        },
-        "origin": {
-          "$ref": "#/$defs/Origin"
-        },
-        "shadowedBy": {
-          "description": "The item that wins over this one (same kind and name at a higher-precedence layer).",
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
+      "additionalProperties": false,
       "required": [
         "id",
-        "name",
-        "origin",
-        "effective",
-        "load"
-      ],
-      "type": "object"
+        "adapterVersion"
+      ]
+    },
+    "Target": {
+      "type": "object",
+      "properties": {
+        "repo": {
+          "description": "The repo, as a label (by default its folder name); full paths are opt-in.",
+          "type": "string"
+        },
+        "os": {
+          "$ref": "#/$defs/Os"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "repo",
+        "os"
+      ]
+    },
+    "Os": {
+      "type": "string",
+      "enum": [
+        "macos",
+        "linux",
+        "windows",
+        "other"
+      ]
     },
     "Layer": {
-      "additionalProperties": false,
       "description": "One source of configuration in the precedence stack.",
+      "type": "object",
       "properties": {
         "id": {
           "type": "string"
@@ -349,10 +141,6 @@
         "label": {
           "description": "Human label, e.g. \"project settings\".",
           "type": "string"
-        },
-        "mode": {
-          "$ref": "#/$defs/LayerMode",
-          "description": "`enforce` layers cannot be overridden by lower ones; `default` layers can."
         },
         "path": {
           "description": "Where it lives, as shown to the user (`~/...` or repo-relative); absent for layers with no file.",
@@ -367,11 +155,16 @@
         },
         "rank": {
           "description": "Precedence: lower wins. Unique within a harness.",
+          "type": "integer",
           "format": "uint32",
-          "minimum": 0,
-          "type": "integer"
+          "minimum": 0
+        },
+        "mode": {
+          "description": "`enforce` layers cannot be overridden by lower ones; `default` layers can.",
+          "$ref": "#/$defs/LayerMode"
         }
       },
+      "additionalProperties": false,
       "required": [
         "id",
         "kind",
@@ -379,10 +172,10 @@
         "present",
         "rank",
         "mode"
-      ],
-      "type": "object"
+      ]
     },
     "LayerKind": {
+      "type": "string",
       "enum": [
         "managed",
         "org",
@@ -391,207 +184,31 @@
         "local",
         "package",
         "session"
-      ],
-      "type": "string"
+      ]
     },
     "LayerMode": {
+      "type": "string",
       "enum": [
         "enforce",
         "default"
-      ],
-      "type": "string"
-    },
-    "Load": {
-      "additionalProperties": false,
-      "description": "When an item reaches the model, and how big it is when it does.",
-      "properties": {
-        "chars": {
-          "$ref": "#/$defs/Measure",
-          "description": "Characters that load at `when` (for a skill at startup: its name and description, not its body)."
-        },
-        "contentHash": {
-          "description": "SHA-256 of the item's content, hex; lets two harnesses or two runs be compared without sending content.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "when": {
-          "$ref": "#/$defs/LoadWhen"
-        }
-      },
-      "required": [
-        "when",
-        "chars"
-      ],
-      "type": "object"
-    },
-    "LoadWhen": {
-      "oneOf": [
-        {
-          "const": "startup",
-          "description": "Every session, before the first message.",
-          "type": "string"
-        },
-        {
-          "const": "on-match",
-          "description": "When a file matching the item's globs is touched.",
-          "type": "string"
-        },
-        {
-          "const": "on-invoke",
-          "description": "When the model or the user invokes it.",
-          "type": "string"
-        },
-        {
-          "const": "never",
-          "description": "Never: nothing of it enters the model's context. Either it is not loaded (disabled, shadowed, blocked), or it\nworks outside the context (a hook, a permission rule).",
-          "type": "string"
-        }
       ]
-    },
-    "McpAttrs": {
-      "additionalProperties": false,
-      "properties": {
-        "state": {
-          "$ref": "#/$defs/McpState"
-        },
-        "target": {
-          "description": "For a URL, the scheme and host only; for a command, its file name only. Never args, env, headers or paths.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "transport": {
-          "$ref": "#/$defs/McpTransport"
-        }
-      },
-      "required": [
-        "transport",
-        "state"
-      ],
-      "type": "object"
-    },
-    "McpState": {
-      "oneOf": [
-        {
-          "enum": [
-            "active",
-            "disabled",
-            "unknown"
-          ],
-          "type": "string"
-        },
-        {
-          "const": "pending",
-          "description": "Declared by the repo but waiting for the user's approval.",
-          "type": "string"
-        },
-        {
-          "const": "denied",
-          "description": "Refused by policy.",
-          "type": "string"
-        }
-      ]
-    },
-    "McpTransport": {
-      "enum": [
-        "stdio",
-        "http",
-        "sse",
-        "unknown"
-      ],
-      "type": "string"
-    },
-    "Measure": {
-      "additionalProperties": false,
-      "description": "A number and how much to trust it.",
-      "properties": {
-        "confidence": {
-          "$ref": "#/$defs/Confidence"
-        },
-        "value": {
-          "format": "uint64",
-          "minimum": 0,
-          "type": "integer"
-        }
-      },
-      "required": [
-        "value",
-        "confidence"
-      ],
-      "type": "object"
-    },
-    "NotMeasured": {
-      "additionalProperties": false,
-      "properties": {
-        "what": {
-          "type": "string"
-        },
-        "why": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "what",
-        "why"
-      ],
-      "type": "object"
-    },
-    "Origin": {
-      "additionalProperties": false,
-      "properties": {
-        "file": {
-          "description": "The file, as shown to the user (`~/...` or repo-relative).",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "layer": {
-          "type": "string"
-        },
-        "line": {
-          "format": "uint32",
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
-        },
-        "package": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "layer"
-      ],
-      "type": "object"
-    },
-    "Os": {
-      "enum": [
-        "macos",
-        "linux",
-        "windows",
-        "other"
-      ],
-      "type": "string"
     },
     "Package": {
-      "additionalProperties": false,
       "description": "A plugin, extension or pack.",
+      "type": "object",
       "properties": {
-        "contributes": {
-          "default": [],
-          "description": "The items it contributes.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/PackageKind"
+        },
+        "source": {
+          "description": "Where it came from, as a label (a marketplace name, `owner/repo`, a folder name); never a URL with a path.",
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
         },
         "decidedBy": {
           "description": "The layer whose setting decided `enabled`.",
@@ -600,230 +217,677 @@
             "null"
           ]
         },
-        "enabled": {
-          "type": "boolean"
-        },
-        "id": {
-          "type": "string"
-        },
-        "kind": {
-          "$ref": "#/$defs/PackageKind"
-        },
         "scopes": {
+          "description": "What each layer that mentions it says (on or off).",
+          "type": "object",
           "additionalProperties": {
             "type": "boolean"
           },
-          "default": {},
-          "description": "What each layer that mentions it says (on or off).",
-          "type": "object"
+          "default": {}
         },
-        "source": {
-          "description": "Where it came from, as a label (a marketplace name, `owner/repo`, a folder name); never a URL with a path.",
-          "type": "string"
+        "contributes": {
+          "description": "The items it contributes.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
         }
       },
+      "additionalProperties": false,
       "required": [
         "id",
         "kind",
         "source",
         "enabled"
-      ],
-      "type": "object"
+      ]
     },
     "PackageKind": {
+      "type": "string",
       "enum": [
         "plugin",
         "extension",
         "pack"
+      ]
+    },
+    "Item": {
+      "description": "One thing the session may load: an instruction file, an agent, a skill, a command, a hook, an MCP server or a\npermission rule.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "origin": {
+          "$ref": "#/$defs/Origin"
+        },
+        "effective": {
+          "description": "False when the item is overridden (`shadowedBy`), disabled, or otherwise not loaded.",
+          "type": "boolean"
+        },
+        "shadowedBy": {
+          "description": "The item that wins over this one (same kind and name at a higher-precedence layer).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "load": {
+          "$ref": "#/$defs/Load"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "origin",
+        "effective",
+        "load"
       ],
-      "type": "string"
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "instruction"
+            },
+            "attrs": {
+              "$ref": "#/$defs/InstructionAttrs"
+            }
+          },
+          "required": [
+            "kind",
+            "attrs"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "agent"
+            },
+            "attrs": {
+              "$ref": "#/$defs/AgentAttrs"
+            }
+          },
+          "required": [
+            "kind",
+            "attrs"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "skill"
+            },
+            "attrs": {
+              "$ref": "#/$defs/SkillAttrs"
+            }
+          },
+          "required": [
+            "kind",
+            "attrs"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "command"
+            },
+            "attrs": {
+              "$ref": "#/$defs/CommandAttrs"
+            }
+          },
+          "required": [
+            "kind",
+            "attrs"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "hook"
+            },
+            "attrs": {
+              "$ref": "#/$defs/HookAttrs"
+            }
+          },
+          "required": [
+            "kind",
+            "attrs"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "mcp"
+            },
+            "attrs": {
+              "$ref": "#/$defs/McpAttrs"
+            }
+          },
+          "required": [
+            "kind",
+            "attrs"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "permission"
+            },
+            "attrs": {
+              "$ref": "#/$defs/PermissionAttrs"
+            }
+          },
+          "required": [
+            "kind",
+            "attrs"
+          ]
+        }
+      ]
+    },
+    "Origin": {
+      "type": "object",
+      "properties": {
+        "layer": {
+          "type": "string"
+        },
+        "package": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "file": {
+          "description": "The file, as shown to the user (`~/...` or repo-relative).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "line": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "layer"
+      ]
+    },
+    "Load": {
+      "description": "When an item reaches the model, and how big it is when it does.",
+      "type": "object",
+      "properties": {
+        "when": {
+          "$ref": "#/$defs/LoadWhen"
+        },
+        "chars": {
+          "description": "Characters that load at `when` (for a skill at startup: its name and description, not its body).",
+          "$ref": "#/$defs/Measure"
+        },
+        "contentHash": {
+          "description": "SHA-256 of the item's content, hex; lets two harnesses or two runs be compared without sending content.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "when",
+        "chars"
+      ]
+    },
+    "LoadWhen": {
+      "oneOf": [
+        {
+          "description": "Every session, before the first message.",
+          "type": "string",
+          "const": "startup"
+        },
+        {
+          "description": "When a file matching the item's globs is touched.",
+          "type": "string",
+          "const": "on-match"
+        },
+        {
+          "description": "When the model or the user invokes it.",
+          "type": "string",
+          "const": "on-invoke"
+        },
+        {
+          "description": "Never: nothing of it enters the model's context. Either it is not loaded (disabled, shadowed, blocked), or it\nworks outside the context (a hook, a permission rule).",
+          "type": "string",
+          "const": "never"
+        }
+      ]
+    },
+    "Measure": {
+      "description": "A number and how much to trust it.",
+      "type": "object",
+      "properties": {
+        "value": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "confidence": {
+          "$ref": "#/$defs/Confidence"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "value",
+        "confidence"
+      ]
+    },
+    "Confidence": {
+      "description": "How a figure was obtained.",
+      "oneOf": [
+        {
+          "description": "Reported by the tool itself.",
+          "type": "string",
+          "const": "native"
+        },
+        {
+          "description": "Computed exactly from files (e.g. a character count).",
+          "type": "string",
+          "const": "calculated"
+        },
+        {
+          "description": "Approximated (e.g. tokens from characters).",
+          "type": "string",
+          "const": "estimated"
+        },
+        {
+          "description": "Could not be determined.",
+          "type": "string",
+          "const": "unknown"
+        }
+      ]
+    },
+    "InstructionAttrs": {
+      "type": "object",
+      "properties": {
+        "importedBy": {
+          "description": "The instruction item that imports this one (`@file` imports, nested AGENTS.md).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "appliesTo": {
+          "description": "Globs it is scoped to; empty means it applies everywhere.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      },
+      "additionalProperties": false
+    },
+    "AgentAttrs": {
+      "type": "object",
+      "properties": {
+        "tools": {
+          "$ref": "#/$defs/ToolAccess"
+        },
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "tools"
+      ]
+    },
+    "ToolAccess": {
+      "description": "Which tools an agent may use.",
+      "oneOf": [
+        {
+          "description": "Every tool the session has (the agent names none).",
+          "type": "string",
+          "const": "all"
+        },
+        {
+          "description": "Only these.",
+          "type": "object",
+          "properties": {
+            "only": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "only"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "SkillAttrs": {
+      "type": "object",
+      "properties": {
+        "bodyChars": {
+          "description": "Characters of the body, which load only when the skill is invoked.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "CommandAttrs": {
+      "type": "object",
+      "additionalProperties": false
+    },
+    "HookAttrs": {
+      "type": "object",
+      "properties": {
+        "event": {
+          "description": "A tool-neutral event name (`before-tool`, `after-tool`, `session-start`, `prompt-submit`, `stop`, ...).",
+          "type": "string"
+        },
+        "nativeEvent": {
+          "description": "The tool's own event name (`PreToolUse`, ...).",
+          "type": "string"
+        },
+        "matcher": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "handler": {
+          "$ref": "#/$defs/HookHandler"
+        },
+        "script": {
+          "description": "The script's file name only, never the command line or inline code.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "event",
+        "nativeEvent",
+        "handler"
+      ]
+    },
+    "HookHandler": {
+      "type": "string",
+      "enum": [
+        "command",
+        "http",
+        "prompt",
+        "agent",
+        "mcp-tool",
+        "unknown"
+      ]
+    },
+    "McpAttrs": {
+      "type": "object",
+      "properties": {
+        "transport": {
+          "$ref": "#/$defs/McpTransport"
+        },
+        "target": {
+          "description": "For a URL, the scheme and host only; for a command, its file name only. Never args, env, headers or paths.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state": {
+          "$ref": "#/$defs/McpState"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "transport",
+        "state"
+      ]
+    },
+    "McpTransport": {
+      "type": "string",
+      "enum": [
+        "stdio",
+        "http",
+        "sse",
+        "unknown"
+      ]
+    },
+    "McpState": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "active",
+            "disabled",
+            "unknown"
+          ]
+        },
+        {
+          "description": "Declared by the repo but waiting for the user's approval.",
+          "type": "string",
+          "const": "pending"
+        },
+        {
+          "description": "Refused by policy.",
+          "type": "string",
+          "const": "denied"
+        }
+      ]
     },
     "PermissionAttrs": {
-      "additionalProperties": false,
+      "type": "object",
       "properties": {
         "effect": {
           "$ref": "#/$defs/PermissionEffect"
+        },
+        "tool": {
+          "description": "The tool the rule is about (`Bash`, `shell`, `mcp__server__tool`, ...).",
+          "type": "string"
         },
         "pattern": {
           "type": [
             "string",
             "null"
           ]
-        },
-        "tool": {
-          "description": "The tool the rule is about (`Bash`, `shell`, `mcp__server__tool`, ...).",
-          "type": "string"
         }
       },
+      "additionalProperties": false,
       "required": [
         "effect",
         "tool"
-      ],
-      "type": "object"
+      ]
     },
     "PermissionEffect": {
+      "type": "string",
       "enum": [
         "allow",
         "deny",
         "ask"
-      ],
-      "type": "string"
+      ]
     },
-    "SkillAttrs": {
-      "additionalProperties": false,
+    "Decision": {
+      "description": "A resolved setting and how it was decided.",
+      "type": "object",
       "properties": {
-        "bodyChars": {
-          "description": "Characters of the body, which load only when the skill is invoked.",
-          "format": "uint64",
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
-        }
-      },
-      "type": "object"
-    },
-    "Target": {
-      "additionalProperties": false,
-      "properties": {
-        "os": {
-          "$ref": "#/$defs/Os"
-        },
-        "repo": {
-          "description": "The repo, as a label (by default its folder name); full paths are opt-in.",
-          "type": "string"
-        }
-      },
-      "required": [
-        "repo",
-        "os"
-      ],
-      "type": "object"
-    },
-    "TokenEstimate": {
-      "additionalProperties": false,
-      "properties": {
-        "high": {
-          "format": "uint64",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "low": {
-          "format": "uint64",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "method": {
-          "description": "How tokens were derived, e.g. `chars/4`.",
-          "type": "string"
-        },
         "value": {
-          "format": "uint64",
-          "minimum": 0,
-          "type": "integer"
-        }
-      },
-      "required": [
-        "method",
-        "value",
-        "low",
-        "high"
-      ],
-      "type": "object"
-    },
-    "Tool": {
-      "additionalProperties": false,
-      "description": "Which tool this is, and which rules were applied.",
-      "properties": {
-        "adapterVersion": {
-          "description": "The adapter's own version: which reading of the tool's rules produced this.",
-          "type": "string"
+          "description": "The value in effect; `null` when nothing sets it and the tool's default applies."
         },
-        "detectedBy": {
-          "default": [],
-          "description": "Why the adapter thinks this tool is in use here (files found), as short labels.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "id": {
-          "description": "A short id: `claude-code`, `codex`, `gemini-cli`, ...",
-          "type": "string"
-        },
-        "toolVersionAssumed": {
-          "description": "The tool version whose documented behaviour the adapter models, when known.",
+        "source": {
+          "description": "The layer that decided it; absent when it is the tool's default.",
           "type": [
             "string",
             "null"
           ]
+        },
+        "trail": {
+          "description": "Every layer that had a say, highest precedence first, including the ones that lost.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TrailStep"
+          },
+          "default": []
         }
       },
+      "additionalProperties": false,
       "required": [
-        "id",
-        "adapterVersion"
-      ],
-      "type": "object"
-    },
-    "ToolAccess": {
-      "description": "Which tools an agent may use.",
-      "oneOf": [
-        {
-          "const": "all",
-          "description": "Every tool the session has (the agent names none).",
-          "type": "string"
-        },
-        {
-          "additionalProperties": false,
-          "description": "Only these.",
-          "properties": {
-            "only": {
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            }
-          },
-          "required": [
-            "only"
-          ],
-          "type": "object"
-        }
+        "value"
       ]
     },
     "TrailStep": {
-      "additionalProperties": false,
+      "type": "object",
       "properties": {
         "layer": {
           "type": "string"
         },
+        "value": true,
         "note": {
           "type": [
             "string",
             "null"
           ]
-        },
-        "value": true
+        }
       },
+      "additionalProperties": false,
       "required": [
         "layer",
         "value"
-      ],
-      "type": "object"
+      ]
+    },
+    "ContextEstimate": {
+      "description": "What loads before the first message, and how much of it could be measured.",
+      "type": "object",
+      "properties": {
+        "chars": {
+          "description": "Characters of every effective startup item. The primary unit: exact, and the same for every model.",
+          "$ref": "#/$defs/Measure"
+        },
+        "tokens": {
+          "description": "Tokens derived from `chars`; always an estimate, with a range.",
+          "$ref": "#/$defs/TokenEstimate"
+        },
+        "notMeasured": {
+          "description": "Fixed costs the tool adds that no file shows (system prompt, built-in tool schemas, MCP tool lists).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/NotMeasured"
+          },
+          "default": []
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "chars",
+        "tokens"
+      ]
+    },
+    "TokenEstimate": {
+      "type": "object",
+      "properties": {
+        "method": {
+          "description": "How tokens were derived, e.g. `chars/4`.",
+          "type": "string"
+        },
+        "value": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "low": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "high": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "value",
+        "low",
+        "high"
+      ]
+    },
+    "NotMeasured": {
+      "type": "object",
+      "properties": {
+        "what": {
+          "type": "string"
+        },
+        "why": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "what",
+        "why"
+      ]
+    },
+    "Coverage": {
+      "description": "What the adapter knows it does not model. Required and never empty: no reading of a tool is complete.",
+      "type": "object",
+      "properties": {
+        "notModelled": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "notModelled"
+      ]
     },
     "Warning": {
-      "additionalProperties": false,
+      "type": "object",
       "properties": {
         "code": {
           "description": "A stable code, e.g. `stale-cache`, `agent-all-tools`.",
           "type": "string"
         },
-        "file": {
-          "type": [
-            "string",
-            "null"
-          ]
+        "message": {
+          "type": "string"
         },
         "item": {
           "type": [
@@ -831,84 +895,20 @@
             "null"
           ]
         },
-        "message": {
-          "type": "string"
+        "file": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
+      "additionalProperties": false,
       "required": [
         "code",
         "message"
-      ],
-      "type": "object"
+      ]
     }
   },
   "$id": "https://github.com/overfocus/rigswig/blob/main/schema/harness.schema.json",
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": false,
-  "description": "Everything one tool loads for a session in one repo.",
-  "properties": {
-    "context": {
-      "$ref": "#/$defs/ContextEstimate"
-    },
-    "coverage": {
-      "$ref": "#/$defs/Coverage"
-    },
-    "items": {
-      "items": {
-        "$ref": "#/$defs/Item"
-      },
-      "type": "array"
-    },
-    "layers": {
-      "description": "Every layer the adapter knows of for this tool, present or not, highest precedence first.",
-      "items": {
-        "$ref": "#/$defs/Layer"
-      },
-      "type": "array"
-    },
-    "packages": {
-      "default": [],
-      "description": "Plugins, extensions or packs that contribute items.",
-      "items": {
-        "$ref": "#/$defs/Package"
-      },
-      "type": "array"
-    },
-    "schemaVersion": {
-      "description": "[`SCHEMA_VERSION`] at the time of writing.",
-      "type": "string"
-    },
-    "settings": {
-      "additionalProperties": {
-        "$ref": "#/$defs/Decision"
-      },
-      "default": {},
-      "description": "Resolved scalar settings (`model`, `approvalMode`, ...), each with the trail that decided it.",
-      "type": "object"
-    },
-    "target": {
-      "$ref": "#/$defs/Target"
-    },
-    "tool": {
-      "$ref": "#/$defs/Tool"
-    },
-    "warnings": {
-      "default": [],
-      "items": {
-        "$ref": "#/$defs/Warning"
-      },
-      "type": "array"
-    }
-  },
-  "required": [
-    "schemaVersion",
-    "tool",
-    "target",
-    "layers",
-    "items",
-    "context",
-    "coverage"
-  ],
-  "title": "Harness",
-  "type": "object"
+  "$comment": "schemaVersion 0.1.0"
 }

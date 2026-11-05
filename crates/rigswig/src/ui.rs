@@ -16,7 +16,35 @@ use std::time::{Duration, Instant};
 use rigswig_core::model::Harness;
 
 const PAGE: &str = include_str!("../assets/ui.html");
+/// kevinferron.com's two faces (SIL OFL 1.1, unmodified upstream bytes; assets/fonts/README.md), inlined as data:
+/// fonts so the page makes no request.
+const JOSEFIN: &[u8] = include_bytes!("../assets/fonts/JosefinSans-wght.ttf");
+const PIXELIFY: &[u8] = include_bytes!("../assets/fonts/PixelifySans-wght.ttf");
+
+/// Standard base64 (RFC 4648, with padding).
+pub fn base64(bytes: &[u8]) -> String {
+    const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for c in bytes.chunks(3) {
+        let n = (c[0] as u32) << 16 | (*c.get(1).unwrap_or(&0) as u32) << 8 | *c.get(2).unwrap_or(&0) as u32;
+        out.push(T[(n >> 18) as usize & 63] as char);
+        out.push(T[(n >> 12) as usize & 63] as char);
+        out.push(if c.len() > 1 { T[(n >> 6) as usize & 63] as char } else { '=' });
+        out.push(if c.len() > 2 { T[n as usize & 63] as char } else { '=' });
+    }
+    out
+}
+
+/// The page with its fonts filled in, built once.
+fn page_template() -> &'static str {
+    static PAGE_WITH_FONTS: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    PAGE_WITH_FONTS.get_or_init(|| {
+        PAGE.replace("__FONT_JOSEFIN__", &base64(JOSEFIN)).replace("__FONT_PIXELIFY__", &base64(PIXELIFY))
+    })
+}
 const MAX_REQUEST: usize = 8 * 1024;
+/// Write-mode request bodies are one small JSON change.
+const MAX_BODY: usize = 16 * 1024;
 
 /// 128 random bits as hex: the OS's random source on Unix, else std's randomly keyed hasher.
 pub fn random_hex() -> String {
@@ -45,6 +73,7 @@ pub struct Request {
     pub path: String,
     pub query: Vec<(String, String)>,
     pub headers: Vec<(String, String)>,
+    pub body: String,
 }
 
 impl Request {
@@ -97,7 +126,7 @@ pub fn parse(head: &str) -> Option<Request> {
         .take_while(|l| !l.is_empty())
         .filter_map(|l| l.split_once(':').map(|(k, v)| (k.trim().to_string(), v.trim().to_string())))
         .collect();
-    Some(Request { method, path: path.to_string(), query, headers })
+    Some(Request { method, path: path.to_string(), query, headers, body: String::new() })
 }
 
 pub struct Response {
@@ -134,6 +163,8 @@ pub struct PageData<'a> {
     pub comparison: Option<rigswig_core::compare::Comparison>,
     pub tools: Vec<ToolChoice>,
     pub version: &'static str,
+    /// Started with `--allow-writes`: the page may offer changes.
+    pub writes: bool,
 }
 
 #[derive(serde::Serialize)]
@@ -146,9 +177,51 @@ pub struct ToolChoice {
 /// How a request is turned into page data: `(tool, vs)` to embedded JSON, `None` for an unknown tool.
 pub type Render<'a> = dyn Fn(Option<&str>, Option<&str>) -> Option<String> + 'a;
 
+/// Write mode's actions: `(route, tool, body)` to a JSON answer, or a status and a message. Present only when the page
+/// was started with `--allow-writes`.
+pub type Act<'a> = dyn Fn(&str, Option<&str>, &str) -> Result<String, (u16, String)> + 'a;
+
+fn json(status: u16, body: String) -> Response {
+    Response {
+        status,
+        headers: vec![
+            ("Content-Type", "application/json; charset=utf-8".into()),
+            ("Cache-Control", "no-store".into()),
+            ("X-Content-Type-Options", "nosniff".into()),
+        ],
+        body,
+    }
+}
+
+/// `/api/*`: write mode only, POST only, the token in a header (a cross-site form cannot set one), an exact Origin,
+/// a JSON body. The page's GET gate (Host, Sec-Fetch-Site) has already run.
+fn api(req: &Request, token: &str, port: u16, act: Option<&Act>) -> Response {
+    let refuse = |status: u16, msg: &str| json(status, serde_json::json!({ "error": msg }).to_string());
+    let Some(act) = act else { return refuse(404, "write mode is off: start the page with rigswig ui --allow-writes") };
+    if req.method != "POST" {
+        return refuse(405, "POST only");
+    }
+    let origin_ok = req
+        .header("Origin")
+        .is_some_and(|o| o == format!("http://127.0.0.1:{port}") || o == format!("http://localhost:{port}"));
+    if !origin_ok {
+        return refuse(403, "a write needs this page's Origin");
+    }
+    if !req.header("X-Rigswig-Token").is_some_and(|t| same(t, token)) {
+        return refuse(403, "missing or wrong token");
+    }
+    if !req.header("Content-Type").is_some_and(|c| c.starts_with("application/json")) {
+        return refuse(415, "JSON only");
+    }
+    match act(&req.path, req.param("tool").filter(|t| !t.is_empty()), &req.body) {
+        Ok(body) => json(200, body),
+        Err((status, msg)) => refuse(status, &msg),
+    }
+}
+
 /// Answer one request. `render(tool, vs)` resolves the harness for a tool id (or the default when `None`), and a
 /// second one to compare with when `vs` is given, and returns the page data as embedded JSON.
-pub fn handle(req: &Request, token: &str, port: u16, render: &Render) -> Response {
+pub fn handle(req: &Request, token: &str, port: u16, render: &Render, act: Option<&Act>) -> Response {
     let host_ok =
         req.header("Host").is_some_and(|h| h == format!("127.0.0.1:{port}") || h == format!("localhost:{port}"));
     if !host_ok {
@@ -162,8 +235,11 @@ pub fn handle(req: &Request, token: &str, port: u16, render: &Render) -> Respons
     if req.header("Sec-Fetch-Site").is_some_and(|s| s != "same-origin" && s != "none") {
         return plain(403, "cross-site request refused");
     }
+    if req.path.starts_with("/api/") {
+        return api(req, token, port, act);
+    }
     if req.method != "GET" {
-        return plain(405, "read-only: GET only");
+        return plain(405, "GET only");
     }
     if req.path != "/" {
         return plain(404, "not found");
@@ -175,7 +251,7 @@ pub fn handle(req: &Request, token: &str, port: u16, render: &Render) -> Respons
         return plain(404, "no such harness");
     };
     let nonce = random_hex();
-    let body = PAGE.replace("__NONCE__", &nonce).replace("__DATA__", &data);
+    let body = page_template().replace("__NONCE__", &nonce).replace("__DATA__", &data);
     Response {
         status: 200,
         headers: vec![
@@ -184,8 +260,9 @@ pub fn handle(req: &Request, token: &str, port: u16, render: &Render) -> Respons
             (
                 "Content-Security-Policy",
                 format!(
-                    "default-src 'none'; script-src 'nonce-{nonce}'; style-src 'nonce-{nonce}'; img-src data:; \
-                     base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+                    "default-src 'none'; script-src 'nonce-{nonce}'; style-src 'nonce-{nonce}'; img-src data:; font-src data:;{connect} \
+                     base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+                    connect = if act.is_some() { " connect-src 'self';" } else { "" }
                 ),
             ),
             ("X-Content-Type-Options", "nosniff".into()),
@@ -205,6 +282,8 @@ fn reason(status: u16) -> &'static str {
         403 => "Forbidden",
         404 => "Not Found",
         405 => "Method Not Allowed",
+        413 => "Content Too Large",
+        415 => "Unsupported Media Type",
         421 => "Misdirected Request",
         431 => "Request Header Fields Too Large",
         _ => "Error",
@@ -226,8 +305,9 @@ fn write(stream: &mut TcpStream, r: &Response) {
     let _ = stream.write_all(r.body.as_bytes());
 }
 
-fn read_head(stream: &TcpStream) -> Result<String, u16> {
-    let mut reader = BufReader::new(stream.take(MAX_REQUEST as u64 + 1));
+/// The request head, and the body when there is one (`Content-Length`, at most `MAX_BODY`), from one buffered reader.
+fn read_request(stream: &TcpStream) -> Result<(String, String), u16> {
+    let mut reader = BufReader::new(stream.take((MAX_REQUEST + MAX_BODY) as u64 + 1));
     let mut head = String::new();
     loop {
         let mut line = String::new();
@@ -239,16 +319,34 @@ fn read_head(stream: &TcpStream) -> Result<String, u16> {
                     return Err(431);
                 }
                 if line == "\r\n" || line == "\n" {
-                    return Ok(head);
+                    break;
                 }
             }
             Err(_) => return Err(400),
         }
     }
+    let len = head
+        .lines()
+        .find_map(|l| l.split_once(':').filter(|(k, _)| k.trim().eq_ignore_ascii_case("content-length")))
+        .map(|(_, v)| v.trim().parse::<usize>().map_err(|_| 400u16))
+        .transpose()?
+        .unwrap_or(0);
+    if len > MAX_BODY {
+        return Err(413);
+    }
+    let mut body = vec![0u8; len];
+    reader.read_exact(&mut body).map_err(|_| 400u16)?;
+    Ok((head, String::from_utf8(body).map_err(|_| 400u16)?))
 }
 
 /// Serve until `idle` passes with no request. `ready` is called with the page's address once listening.
-pub fn serve(port: u16, idle: Duration, render: &Render, ready: &dyn Fn(&str)) -> std::io::Result<()> {
+pub fn serve(
+    port: u16,
+    idle: Duration,
+    render: &Render,
+    act: Option<&Act>,
+    ready: &dyn Fn(&str),
+) -> std::io::Result<()> {
     let listener = TcpListener::bind(("127.0.0.1", port))?;
     let port = listener.local_addr()?.port();
     listener.set_nonblocking(true)?;
@@ -261,9 +359,12 @@ pub fn serve(port: u16, idle: Duration, render: &Render, ready: &dyn Fn(&str)) -
                 last = Instant::now();
                 let _ = stream.set_nonblocking(false);
                 let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
-                let resp = match read_head(&stream) {
-                    Ok(head) => match parse(&head.replace("\r\n", "\n").replace('\n', "\r\n")) {
-                        Some(req) => handle(&req, &token, port, render),
+                let resp = match read_request(&stream) {
+                    Ok((head, body)) => match parse(&head.replace("\r\n", "\n").replace('\n', "\r\n")) {
+                        Some(mut req) => {
+                            req.body = body;
+                            handle(&req, &token, port, render, act)
+                        }
                         None => plain(400, "bad request"),
                     },
                     Err(code) => plain(code, "bad request"),
@@ -297,7 +398,7 @@ mod tests {
     }
 
     fn get(path: &str, extra: &str) -> Response {
-        handle(&req(&format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{PORT}\r\n{extra}\r\n")), TOKEN, PORT, &ok)
+        handle(&req(&format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{PORT}\r\n{extra}\r\n")), TOKEN, PORT, &ok, None)
     }
 
     #[test]
@@ -319,14 +420,18 @@ mod tests {
         assert_eq!(get("/?t=abc123", "Sec-Fetch-Site: cross-site\r\n").status, 403);
         assert_eq!(get("/?t=abc123", "Origin: http://127.0.0.1:4567\r\nSec-Fetch-Site: same-origin\r\n").status, 200);
         assert_eq!(get("/x?t=abc123", "").status, 404);
-        let rebind = handle(&req("GET /?t=abc123 HTTP/1.1\r\nHost: attacker.example:4567\r\n\r\n"), TOKEN, PORT, &ok);
+        let rebind =
+            handle(&req("GET /?t=abc123 HTTP/1.1\r\nHost: attacker.example:4567\r\n\r\n"), TOKEN, PORT, &ok, None);
         assert_eq!(rebind.status, 421);
-        let post = handle(&req("POST /?t=abc123 HTTP/1.1\r\nHost: 127.0.0.1:4567\r\n\r\n"), TOKEN, PORT, &ok);
+        let post = handle(&req("POST /?t=abc123 HTTP/1.1\r\nHost: 127.0.0.1:4567\r\n\r\n"), TOKEN, PORT, &ok, None);
         assert_eq!(post.status, 405);
-        let none =
-            handle(&req("GET /?t=abc123&tool=nope HTTP/1.1\r\nHost: 127.0.0.1:4567\r\n\r\n"), TOKEN, PORT, &|_, _| {
-                None
-            });
+        let none = handle(
+            &req("GET /?t=abc123&tool=nope HTTP/1.1\r\nHost: 127.0.0.1:4567\r\n\r\n"),
+            TOKEN,
+            PORT,
+            &|_, _| None,
+            None,
+        );
         assert_eq!(none.status, 404);
     }
 
@@ -344,6 +449,60 @@ mod tests {
         assert_eq!(r.param("t"), Some("a b"));
         assert_eq!(r.param("tool"), Some("codex x"));
         assert!(parse("GARBAGE").is_none());
+    }
+
+    fn post(path: &str, headers: &str, body: &str, act: Option<&Act>) -> Response {
+        let head = format!("POST {path} HTTP/1.1\r\nHost: 127.0.0.1:{PORT}\r\n{headers}\r\n");
+        let mut r = req(&head);
+        r.body = body.into();
+        handle(&r, TOKEN, PORT, &ok, act)
+    }
+
+    #[test]
+    fn writes_need_write_mode_post_origin_header_token_and_json() {
+        let echo = |route: &str, tool: Option<&str>, body: &str| -> Result<String, (u16, String)> {
+            Ok(format!("{route}|{}|{body}", tool.unwrap_or("-")))
+        };
+        let act: Option<&Act> = Some(&echo);
+        let good = "Origin: http://127.0.0.1:4567\r\nX-Rigswig-Token: abc123\r\nContent-Type: application/json\r\n";
+        let r = post("/api/plan?tool=codex", good, "{}", act);
+        assert_eq!(r.status, 200);
+        assert_eq!(r.body, "/api/plan|codex|{}");
+
+        assert_eq!(post("/api/plan", good, "{}", None).status, 404, "write mode off: the routes do not exist");
+        let get = handle(
+            &req(&format!("GET /api/plan HTTP/1.1\r\nHost: 127.0.0.1:{PORT}\r\n{good}\r\n")),
+            TOKEN,
+            PORT,
+            &ok,
+            act,
+        );
+        assert_eq!(get.status, 405);
+        let no_origin = "X-Rigswig-Token: abc123\r\nContent-Type: application/json\r\n";
+        assert_eq!(post("/api/plan", no_origin, "{}", act).status, 403, "a write needs an Origin");
+        let foreign = "Origin: http://evil.example\r\nX-Rigswig-Token: abc123\r\nContent-Type: application/json\r\n";
+        assert_eq!(post("/api/plan", foreign, "{}", act).status, 403);
+        let query_token = "Origin: http://127.0.0.1:4567\r\nContent-Type: application/json\r\n";
+        assert_eq!(post("/api/plan?t=abc123", query_token, "{}", act).status, 403, "the token must be in the header");
+        let form = "Origin: http://127.0.0.1:4567\r\nX-Rigswig-Token: abc123\r\nContent-Type: text/plain\r\n";
+        assert_eq!(post("/api/plan", form, "{}", act).status, 415, "no simple (form-like) requests");
+        let cross = format!("{good}Sec-Fetch-Site: cross-site\r\n");
+        assert_eq!(post("/api/plan", &cross, "{}", act).status, 403);
+        let failing =
+            |_: &str, _: Option<&str>, _: &str| -> Result<String, (u16, String)> { Err((409, "nope".into())) };
+        let r = post("/api/apply", good, "{}", Some(&failing));
+        assert_eq!(r.status, 409);
+        assert_eq!(r.body, "{\"error\":\"nope\"}");
+    }
+
+    #[test]
+    fn base64_known_answers() {
+        assert_eq!(base64(b""), "");
+        assert_eq!(base64(b"f"), "Zg==");
+        assert_eq!(base64(b"fo"), "Zm8=");
+        assert_eq!(base64(b"foo"), "Zm9v");
+        assert_eq!(base64(b"foobar"), "Zm9vYmFy");
+        assert_eq!(base64(&[0xff, 0xfe, 0x00]), "//4A");
     }
 
     #[test]

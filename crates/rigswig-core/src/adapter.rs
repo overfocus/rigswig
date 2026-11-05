@@ -40,4 +40,10 @@ pub trait Adapter {
     fn detect(&self, ctx: &Ctx) -> Detection;
     /// Read and resolve everything. Never fails: what cannot be read becomes a warning or a coverage note.
     fn resolve(&self, ctx: &Ctx) -> Harness;
+
+    /// Plan a change (write mode): what applying it would do. Planning reads only; the binary applies a plan. The
+    /// default refuses: an adapter opts in kind by kind.
+    fn plan(&self, _ctx: &Ctx, _change: &crate::change::Change) -> Result<crate::change::Plan, String> {
+        Err(format!("rigswig cannot change {} settings yet", self.id()))
+    }
 }

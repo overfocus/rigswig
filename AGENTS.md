@@ -25,10 +25,16 @@ Schema); every new crate needs a reason in its commit message.
   before 1.0.0 a minor bump may break, from 1.0.0 only a major one may. Every adapter's output must pass
   `check::contract_errors`, and each rule there has a broken copy in `tests/model.rs` that must fail.
 
-- **The guarantees in README.md are invariants**: no network, no model calls, no writes to configuration, no secrets
-  printed or served, no transcripts read. Every one needs a test, and no change may weaken one.
-- **Nothing personal ships.** No maintainer's paths, repo names, vault or brand in code, tests, fixtures or docs.
-  Fixtures are invented. Private folders are a user-configured deny list, empty by default.
+- **The guarantees in README.md are invariants**: no network, no model calls, no secrets printed or served, no
+  transcripts read, and no writes unless `ui --allow-writes`. Every one needs a test, and no change may weaken one.
+- **Writes** (docs/WRITE-MODE.md): rigswig-core only plans (`Adapter::plan`); the binary applies (`src/writes.rs`).
+  A new kind of change needs a plan test, a refusal test and a browser check, and never targets managed settings,
+  `.claude.json` or a symlink.
+- **Nothing personal ships.** No maintainer's paths, repo names or vault in code, tests, fixtures or docs. Fixtures
+  are invented. Private folders are a user-configured deny list, empty by default.
+- **The page wears kevinferron.com's brand, by the maintainer's choice (2026-11-05):** black, neon green and cyan,
+  Josefin Sans and Pixelify Sans (OFL, inlined; `assets/fonts/README.md`), and the glowing kevinferron.com wordmark
+  under rigswig's as "brought to you by". The CLI stays plain.
 - **Adapters are pure.** An adapter reads through an injected file system (a trait in `rigswig-core`) and returns the
   shared data model; it does not print, spawn processes or touch the network. Tests use an in-memory file system with
   invented fixtures.

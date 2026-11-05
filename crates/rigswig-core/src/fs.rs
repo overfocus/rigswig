@@ -216,3 +216,61 @@ impl Fs for MemFs {
         Ok(real)
     }
 }
+
+/// Another file system with some files replaced (or added): what the setup would look like after a planned change,
+/// so an adapter can resolve it exactly. Still read-only.
+pub struct OverlayFs<'a> {
+    pub base: &'a dyn Fs,
+    pub files: BTreeMap<PathBuf, String>,
+}
+
+impl OverlayFs<'_> {
+    fn over(&self, path: &Path) -> Option<&String> {
+        self.files.get(&normalize(path))
+    }
+}
+
+impl Fs for OverlayFs<'_> {
+    fn read_to_string(&self, path: &Path) -> io::Result<String> {
+        match self.over(path) {
+            Some(s) => Ok(s.clone()),
+            None => self.base.read_to_string(path),
+        }
+    }
+
+    fn read_dir(&self, path: &Path) -> io::Result<Vec<DirEntry>> {
+        let mut out = self.base.read_dir(path).or_else(|e| {
+            if self.files.keys().any(|f| f.parent() == Some(normalize(path).as_path())) {
+                Ok(Vec::new())
+            } else {
+                Err(e)
+            }
+        })?;
+        for f in self.files.keys() {
+            if f.parent() == Some(normalize(path).as_path()) {
+                let name = f.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+                if !out.iter().any(|e| e.name == name) {
+                    out.push(DirEntry { name, kind: EntryKind::File });
+                }
+            }
+        }
+        out.sort_by(|a, b| a.name.cmp(&b.name));
+        Ok(out)
+    }
+
+    fn kind(&self, path: &Path) -> io::Result<EntryKind> {
+        if self.over(path).is_some() {
+            return Ok(EntryKind::File);
+        }
+        self.base.kind(path).or_else(|e| {
+            if self.files.keys().any(|f| f.starts_with(normalize(path))) { Ok(EntryKind::Dir) } else { Err(e) }
+        })
+    }
+
+    fn canonicalize(&self, path: &Path) -> io::Result<PathBuf> {
+        if self.over(path).is_some() {
+            return Ok(normalize(path));
+        }
+        self.base.canonicalize(path)
+    }
+}

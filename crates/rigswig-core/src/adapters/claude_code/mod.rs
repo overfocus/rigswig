@@ -1,5 +1,6 @@
 //! The Claude Code adapter. Every rule it models is in `docs/adapters/claude-code.md`, with the docs it comes from.
 
+mod change;
 mod files;
 mod hooks;
 mod mcp;
@@ -73,6 +74,10 @@ impl Adapter for ClaudeCode {
             }
         }
         Detection { score, evidence }
+    }
+
+    fn plan(&self, ctx: &Ctx, change: &crate::change::Change) -> Result<crate::change::Plan, String> {
+        change::plan(ctx, change)
     }
 
     fn resolve(&self, ctx: &Ctx) -> Harness {

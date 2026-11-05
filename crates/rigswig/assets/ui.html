@@ -4,113 +4,268 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
+<meta name="color-scheme" content="dark">
 <title>rigswig</title>
 <style nonce="__NONCE__">
+/* kevinferron.com's two faces, inlined by the server (src/ui.rs): no font is fetched. */
+@font-face { font-family: "Josefin Sans"; font-weight: 100 700; font-display: block; src: url(data:font/ttf;base64,__FONT_JOSEFIN__) format("truetype"); }
+@font-face { font-family: "Pixelify Sans"; font-weight: 400 700; font-display: block; src: url(data:font/ttf;base64,__FONT_PIXELIFY__) format("truetype"); }
+
+/* Dark is the brand (kevinferron.com): black, one neon green accent, a box edge per kind. */
 :root {
-  --bg: #f7f7f5; --card: #ffffff; --fg: #1b1b1f; --muted: #5d5d66; --line: #e2e2e6; --soft: #efeff2;
-  --accent: #3b45c4; --warn: #9a5b00; --warn-bg: #fff5e0; --ok: #1e7a4c;
-  --k-instruction: #0072b2; --k-agent: #d55e00; --k-skill: #009e73; --k-command: #cc79a7;
-  --k-hook: #7a7a85; --k-mcp: #e69f00; --k-permission: #56b4e9;
-  --radius: 10px;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #111114; --card: #1a1a1f; --fg: #ececf1; --muted: #a3a3ae; --line: #2c2c33; --soft: #24242a;
-    --accent: #9aa2ff; --warn: #ffc266; --warn-bg: #2d2412; --ok: #6fd3a0;
-    --k-instruction: #56a8e0; --k-agent: #f08a4b; --k-skill: #3cc49a; --k-command: #e2a0c9;
-    --k-hook: #a3a3ae; --k-mcp: #f2bd4c; --k-permission: #8fd0f5;
-  }
-}
-:root[data-theme="dark"] {
-  --bg: #111114; --card: #1a1a1f; --fg: #ececf1; --muted: #a3a3ae; --line: #2c2c33; --soft: #24242a;
-  --accent: #9aa2ff; --warn: #ffc266; --warn-bg: #2d2412; --ok: #6fd3a0;
-  --k-instruction: #56a8e0; --k-agent: #f08a4b; --k-skill: #3cc49a; --k-command: #e2a0c9;
-  --k-hook: #a3a3ae; --k-mcp: #f2bd4c; --k-permission: #8fd0f5;
+  color-scheme: dark;
+  --bg: #0a0a0a; --box: #111111; --soft: #1b1b1b; --fg: #f2f2f2; --muted: #a8a8b0; --line: rgba(255, 255, 255, 0.15);
+  --green: #39ff00; --cyan: #22d3ee; --warn: #ffc14d;
+  /* Kind colours: bright on black, and never the only cue (every kind is also named). */
+  --k-instruction: #22d3ee; --k-agent: #ff9f43; --k-skill: #39ff00; --k-command: #f472b6;
+  --k-mcp: #facc15; --k-hook: #b4b4bc; --k-permission: #a78bfa;
+  --a: #39ff00; --b: #22d3ee;
+  --pixel: "Pixelify Sans", ui-monospace, monospace;
+  --body: "Josefin Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 * { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; }
-body {
-  margin: 0; background: var(--bg); color: var(--fg);
-  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-}
-.wrap { max-width: 1080px; margin: 0 auto; padding: 20px 16px 48px; }
-header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-bottom: 18px; }
-.mark { font-weight: 800; letter-spacing: -0.02em; font-size: 20px; }
-.mark span { color: var(--accent); }
-.where { color: var(--muted); }
+html { -webkit-text-size-adjust: 100%; background: var(--bg); }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.45 var(--body); }
+.wrap { max-width: 1200px; margin: 0 auto; padding: 16px 16px 40px; }
+a { color: var(--green); }
+:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; border-radius: 4px; }
+.approx { font-family: var(--body); font-weight: 400; margin-right: 0.04em; }
+.hide-sm { display: none; }
+.mono { font-family: var(--mono); font-size: 13px; }
+.muted { color: var(--muted); }
+.px { font-family: var(--pixel); text-transform: uppercase; letter-spacing: 0.08em; }
+
+/* Header: the rigswig wordmark, "brought to you by" the glowing kevinferron.com, the harness switcher. */
+header.top { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 24px; padding-bottom: 14px; margin-bottom: 14px; border-bottom: 1px solid var(--line); }
+.brand { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.mark { font-family: var(--pixel); font-weight: 600; font-size: 34px; line-height: 1; letter-spacing: 0.02em; margin: 0; }
+.mark span { color: var(--green); text-shadow: 0 0 6px rgba(57, 255, 0, 0.45); }
+.by { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-height: 44px; }
+.by small { font-size: 13px; color: var(--muted); letter-spacing: 0.02em; }
+.by a { display: inline-flex; align-items: center; min-height: 44px; border-radius: 6px; }
+.by svg { width: 196px; height: auto; overflow: visible; display: block; }
+.where { color: var(--muted); font-size: 15px; margin: 2px 0 0; }
 .where b { color: var(--fg); font-weight: 600; }
-nav.tools { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
-nav.tools a, nav.tools span {
-  padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); text-decoration: none;
-  color: var(--fg); font-size: 14px; min-height: 36px; display: inline-flex; align-items: center;
+.switch { margin-left: auto; display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+nav.tools { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+nav.tools a, nav.tools span, .chip {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 14px; border-radius: 999px;
+  border: 1px solid var(--line); color: var(--fg); text-decoration: none; font: 15px var(--body); background: transparent;
 }
-nav.tools span[aria-current] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
-nav.tools a:hover { border-color: var(--accent); }
-.badge { font-size: 12px; color: var(--muted); border: 1px dashed var(--line); border-radius: 999px; padding: 2px 10px; }
-section.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; margin-bottom: 16px; }
-h1 { font-size: 30px; line-height: 1.2; margin: 0 0 4px; letter-spacing: -0.02em; }
-h2 { font-size: 16px; margin: 0 0 12px; }
-.sub { color: var(--muted); margin: 0; }
-.row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
-select, button {
-  font: inherit; color: var(--fg); background: var(--card); border: 1px solid var(--line); border-radius: 8px;
-  padding: 6px 10px; min-height: 36px; cursor: pointer;
+nav.tools a:hover, .chip:hover { border-color: var(--green); }
+nav.tools span[aria-current] { border-color: var(--green); color: var(--green); background: rgba(57, 255, 0, 0.08); }
+.badge { font-size: 13px; color: var(--muted); }
+
+/* Boxes: the home page's bento. A 2px coloured top edge, a Pixelify head, dense content. */
+.grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+.box { position: relative; background: var(--box); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px 14px; min-width: 0; }
+.box::before { content: ""; position: absolute; left: 12px; right: 12px; top: -1px; height: 2px; border-radius: 2px; background: var(--edge, var(--green)); }
+.head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin: 0 0 10px; padding-bottom: 8px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
+h2, .h2 { font-family: var(--pixel); font-weight: 500; font-size: 15px; text-transform: uppercase; letter-spacing: 0.1em; margin: 0; color: var(--edge-text, var(--green)); }
+.head .aside { margin-left: auto; color: var(--muted); font-size: 14px; }
+
+/* The budget. */
+.hero { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px 24px; }
+.big { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin: 0; font-weight: 400; }
+.big b { font-family: var(--pixel); font-weight: 600; font-size: 48px; line-height: 1; color: var(--green); text-shadow: 0 0 10px rgba(57, 255, 0, 0.35), 0 0 24px rgba(34, 211, 238, 0.18); }
+.big span { font-size: 20px; }
+.sub { color: var(--muted); margin: 6px 0 0; font-size: 15px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.sub strong { color: var(--fg); font-weight: 600; }
+select {
+  font: 15px var(--body); color: var(--fg); background: var(--soft); border: 1px solid var(--line); border-radius: 8px;
+  min-height: 44px; padding: 0 10px; cursor: pointer;
 }
-button[aria-pressed="true"] { border-color: var(--fg); background: var(--soft); font-weight: 600; }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.bar { position: relative; display: flex; height: 28px; margin: 16px 0 8px; border-radius: 6px; overflow: hidden; background: var(--soft); border: 1px solid var(--line); }
-.bar > i { display: block; height: 100%; min-width: 2px; }
-.bar > i + i { box-shadow: inset 1px 0 0 var(--card); }
-.bar .unmeasured {
-  background: repeating-linear-gradient(135deg, transparent 0 5px, var(--muted) 5px 6px); opacity: 0.6; min-width: 28px;
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; align-self: start; }
+.stat { background: var(--box); padding: 8px 10px; min-width: 0; }
+.stat b { display: block; font-family: var(--pixel); font-weight: 500; font-size: 20px; line-height: 1.15; overflow-wrap: anywhere; }
+.stat > span { display: block; font-size: 13px; color: var(--muted); }
+.stat.warn b { color: var(--warn); }
+
+.bars { margin-top: 14px; }
+.barrow { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px 12px; align-items: center; }
+.barrow > b { font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.bar { position: relative; display: flex; gap: 2px; height: 34px; border-radius: 6px; overflow: hidden; background: var(--soft); border: 1px solid var(--line); }
+.barrow .bar { height: 26px; margin-bottom: 6px; }
+.bar > i { display: block; height: 100%; min-width: 3px; flex: none; }
+.bar > i.unmeasured {
+  min-width: 34px; flex: none; display: flex; align-items: center; justify-content: center; font: 600 14px var(--body); font-style: normal; color: var(--fg);
+  background: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0 5px, rgba(255, 255, 255, 0.38) 5px 7px);
+  border-left: 1px dashed var(--fg);
 }
-.barrow { display: grid; grid-template-columns: minmax(80px, max-content) 1fr; gap: 0 12px; align-items: center; }
-.barrow .bar { margin: 6px 0; }
-.barrow b { font-size: 13px; white-space: nowrap; }
-.scale { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; }
-.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 12px; font-size: 14px; }
-.legend span { display: inline-flex; align-items: center; gap: 6px; }
-.sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; flex: none; }
-.sw.hatch { background: repeating-linear-gradient(135deg, transparent 0 3px, var(--muted) 3px 4px); border: 1px solid var(--muted); }
-.note { margin-top: 10px; padding: 8px 12px; border-radius: 8px; background: var(--warn-bg); color: var(--warn); font-size: 14px; }
+.scale { position: relative; height: 16px; color: var(--muted); font-size: 12px; margin-top: 2px; }
+.scale span { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; }
+.scale span:first-child { transform: none; }
+.scale span:last-child { transform: translateX(-100%); }
+.note { margin: 10px 0 0; padding: 8px 12px; border-radius: 8px; background: rgba(255, 193, 77, 0.1); border: 1px solid rgba(255, 193, 77, 0.35); color: var(--warn); font-size: 15px; }
+.sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; flex: none; background: var(--kc, var(--muted)); }
+.sw.hatch { background: repeating-linear-gradient(135deg, transparent 0 3px, var(--fg) 3px 4px); border: 1px solid var(--fg); }
+.unm { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 8px; font-size: 14px; color: var(--muted); }
+.unm span { display: inline-flex; align-items: center; gap: 6px; }
+
+/* Kind tiles: the legend of the bar, and each opens its inventory in place, under its own row. */
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 8px; margin-top: 14px; }
+.tile {
+  position: relative; text-align: left; min-height: 44px; padding: 10px 10px 9px; border-radius: 10px; cursor: pointer; color: var(--fg);
+  background: var(--soft); border: 1px solid var(--line); font: 15px var(--body); display: flex; flex-direction: column; gap: 3px; min-width: 0;
+}
+.tile::before { content: ""; position: absolute; left: 8px; right: 8px; top: -1px; height: 2px; border-radius: 2px; background: var(--kc); }
+.tile:hover { border-color: var(--kc); }
+.tile[aria-expanded="true"] { border-color: var(--kc); background: #222; }
+.tile .t { display: flex; align-items: center; gap: 6px; font-family: var(--pixel); font-size: 14px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--kc); }
+.tile .t::after { content: "+"; margin-left: auto; color: var(--muted); font-family: var(--body); font-size: 18px; line-height: 1; }
+.tile[aria-expanded="true"] .t::after { content: "\2212"; }
+.tile .v { font-family: var(--pixel); font-weight: 500; font-size: 22px; line-height: 1.1; }
+.tile .v small { font-family: var(--body); font-size: 14px; color: var(--muted); font-weight: 400; }
+.tile .c { font-size: 13px; color: var(--muted); }
+.tile .m { height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.1); overflow: hidden; margin-top: 3px; }
+.tile .m i { display: block; height: 100%; background: var(--kc); min-width: 1px; }
+.panel { grid-column: 1 / -1; background: #151515; border: 1px solid var(--kc); border-radius: 10px; padding: 10px 12px; min-width: 0; }
+.panel .head { margin-bottom: 4px; }
+.panel h3 { margin: 0; font-family: var(--pixel); font-weight: 500; font-size: 14px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--kc); }
+
+/* Rows: dense lists with a proportional bar behind the name. */
+ul.rows { list-style: none; margin: 0; padding: 0; }
+ul.rows > li { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 12px; align-items: center; padding: 6px 8px; border-top: 1px solid rgba(255, 255, 255, 0.07); min-height: 40px; }
+ul.rows > li:first-child { border-top: 0; }
+ul.rows > li:has(> button.act) { grid-template-columns: minmax(0, 1fr) auto auto; }
+ul.rows > li > button.act { margin-left: 0; }
+ul.rows > li > .fill { position: absolute; left: 0; top: 3px; bottom: 3px; border-radius: 4px; background: var(--kc); opacity: 0.16; pointer-events: none; }
+ul.rows > li > .fill::after { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; border-radius: 2px; background: var(--kc); opacity: 1; }
+.rowname { position: relative; min-width: 0; overflow-wrap: anywhere; }
+.rowname .meta { display: block; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+.rownum { position: relative; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; font-size: 15px; }
+.rownum small { display: block; font-size: 13px; color: var(--muted); }
+.status { white-space: nowrap; font-size: 14px; }
+.status.on { color: var(--green); }
+.status.off { color: var(--muted); }
+.k { display: inline-flex; align-items: center; gap: 5px; }
+
+/* What costs the most: a strip of the biggest pieces on the measured total, then the ranked rows. */
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-th, td { text-align: left; padding: 7px 8px; border-top: 1px solid var(--line); vertical-align: top; }
-th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; border-top: 0; }
-td.num, th.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
-td.name { overflow-wrap: anywhere; }
-.mini { display: inline-block; height: 6px; border-radius: 3px; vertical-align: middle; margin-right: 6px; }
-.kind { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
-.status { white-space: nowrap; }
-.off { color: var(--muted); }
-.file { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
-details { border-top: 1px solid var(--line); }
-details:first-of-type { border-top: 0; }
-summary { cursor: pointer; padding: 10px 2px; display: flex; gap: 10px; align-items: center; min-height: 44px; }
-summary::-webkit-details-marker { display: none; }
-summary::before { content: "▸"; color: var(--muted); width: 1em; }
-details[open] > summary::before { content: "▾"; }
-summary .count { color: var(--muted); margin-left: auto; font-variant-numeric: tabular-nums; }
-.trail { margin: 4px 0 0; padding-left: 18px; color: var(--muted); font-size: 13px; }
-.trail li:first-child { color: var(--fg); }
-dl.settings { display: grid; grid-template-columns: minmax(120px, max-content) 1fr; gap: 6px 16px; margin: 0; }
-dl.settings dt { color: var(--muted); }
-dl.settings dd { margin: 0; overflow-wrap: anywhere; }
-ul.plain { margin: 0; padding-left: 18px; }
+.chip { cursor: pointer; font-size: 14px; padding: 0 12px; }
+.chip[aria-pressed="true"] { border-color: var(--green); color: var(--green); background: rgba(57, 255, 0, 0.08); }
+.strip { display: flex; gap: 2px; height: 22px; border-radius: 5px; overflow: hidden; background: var(--soft); border: 1px solid var(--line); margin-bottom: 6px; }
+.strip i { display: block; height: 100%; min-width: 2px; flex: none; background: var(--kc); }
+.strip i.rest { background: repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.22) 0 2px, transparent 2px 4px); flex: 1 1 auto; }
+.lead { margin: 0 0 8px; font-size: 15px; }
+.lead b { font-family: var(--pixel); font-weight: 500; color: var(--green); }
+.more { margin-top: 8px; }
+button.link { font: 15px var(--body); color: var(--green); background: transparent; border: 1px solid var(--line); border-radius: 8px; min-height: 44px; padding: 0 14px; cursor: pointer; }
+button.link:hover { border-color: var(--green); }
+
+/* Collapsible boxes: the head is the summary. */
+details.box > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px 12px; min-height: 44px; margin: -6px 0; }
+details.box > summary::-webkit-details-marker { display: none; }
+details.box > summary::after { content: "+"; margin-left: 8px; color: var(--muted); font-size: 20px; line-height: 1; }
+details.box[open] > summary::after { content: "\2212"; }
+details.box[open] > summary { margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
+details.box > summary .aside { margin-left: auto; color: var(--muted); font-size: 14px; }
+details.sub2 { border-top: 1px solid rgba(255, 255, 255, 0.07); }
+details.sub2:first-of-type { border-top: 0; }
+details.sub2 > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 2px; }
+details.sub2 > summary::-webkit-details-marker { display: none; }
+details.sub2 > summary::before { content: "\25B8"; color: var(--muted); width: 1em; }
+details.sub2[open] > summary::before { content: "\25BE"; }
+details.sub2 > summary .aside { margin-left: auto; color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
+
+/* Settings: the value, then the decision trail as steps, the winner first. */
+.setting { padding: 8px 0; border-top: 1px solid rgba(255, 255, 255, 0.07); }
+.setting:first-child { border-top: 0; padding-top: 0; }
+.setting .n { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+.setting .val { overflow-wrap: anywhere; }
+ol.trail { list-style: none; display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0 0; padding: 0; }
+ol.trail li { font-size: 13px; padding: 3px 8px; border-radius: 6px; border: 1px solid var(--line); color: var(--muted); overflow-wrap: anywhere; max-width: 100%; }
+ol.trail li:first-child { color: var(--fg); border-color: var(--green); }
+ol.trail li + li::before { content: "beats "; }
+ul.warn { list-style: none; margin: 0; padding: 0; }
+ul.warn li { padding: 5px 0 5px 22px; position: relative; font-size: 15px; overflow-wrap: anywhere; }
+ul.warn li::before { content: "\25B2"; position: absolute; left: 2px; top: 6px; color: var(--warn); font-size: 12px; }
+ul.plain { margin: 0; padding-left: 18px; font-size: 15px; }
 ul.plain li { margin: 3px 0; }
-ul.warn { list-style: none; padding-left: 0; }
-ul.warn li::before { content: "▲ "; color: var(--warn); }
-.scroll { overflow-x: auto; }
-footer { color: var(--muted); font-size: 13px; margin-top: 24px; }
-@media (max-width: 640px) {
-  h1 { font-size: 24px; }
-  .hide-sm { display: none; }
-  nav.tools { margin-left: 0; width: 100%; }
+
+/* Comparing: the differences per kind as a split of counts. */
+.diffrow { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px 12px; padding: 6px 0; border-top: 1px solid rgba(255, 255, 255, 0.07); align-items: center; }
+.diffrow:first-of-type { border-top: 0; }
+.dsplit { display: flex; gap: 2px; height: 10px; border-radius: 4px; overflow: hidden; background: var(--soft); }
+.dsplit i { display: block; height: 100%; min-width: 3px; }
+.d-a { background: var(--a); } .d-b { background: var(--b); }
+.d-c { background: repeating-linear-gradient(135deg, var(--warn) 0 3px, transparent 3px 5px); border: 1px solid var(--warn); }
+.d-s { background: #555; }
+.dnums { display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.dnums b { color: var(--fg); font-weight: 600; }
+.dkey { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+.dkey span { display: inline-flex; align-items: center; gap: 5px; }
+.dkey i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+
+footer { color: var(--muted); font-size: 14px; margin-top: 20px; }
+
+@media (min-width: 560px) {
+  .barrow { grid-template-columns: minmax(96px, max-content) minmax(0, 1fr); }
+  .barrow .bar { margin: 3px 0; }
+  .hide-sm { display: block; }
+  .diffrow { grid-template-columns: 130px minmax(0, 1fr); }
+  .diffrow .dnums { grid-column: 2; }
 }
+@media (min-width: 760px) {
+  ul.rows.dense > li { min-height: 36px; padding-top: 4px; padding-bottom: 4px; }
+  ul.rows.dense .rowname .meta { display: inline; margin-left: 10px; }
+  ul.rows.dense .rownum small { display: inline-block; min-width: 4.2em; margin-left: 8px; }
+  .hero { grid-template-columns: minmax(0, 1fr) minmax(260px, 340px); }
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (min-width: 1000px) {
+  .diffrow { grid-template-columns: 130px minmax(0, 1fr) auto; }
+  .diffrow .dnums { grid-column: 3; justify-content: flex-end; }
+  .grid.two { grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); align-items: start; }
+  .col { display: grid; gap: 12px; min-width: 0; }
+}
+@media (max-width: 559px) {
+  .switch { margin-left: 0; align-items: flex-start; width: 100%; }
+  nav.tools { justify-content: flex-start; }
+  .big b { font-size: 40px; }
+  .mark { font-size: 30px; }
+}
+@media (max-width: 399px) {
+  /* Too narrow for two tiles a row: each tile becomes one compact row, name left and size right. */
+  .tiles { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .tile { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 8px; align-items: baseline; padding: 8px 10px; }
+  .tile .t { grid-column: 1; grid-row: 1; }
+  .tile .v { grid-column: 2; grid-row: 1 / span 2; font-size: 18px; text-align: right; align-self: center; }
+  .tile .c { grid-column: 1; grid-row: 2; }
+  .tile .m { grid-column: 1 / -1; grid-row: 3; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .tile, .chip, nav.tools a, button.link { transition: border-color 150ms ease, background-color 150ms ease; }
+  .panel { animation: open 160ms ease-out; }
+  @keyframes open { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+
+/* Write mode (rigswig ui --allow-writes): the change sheet, the diff, the banner. */
+.badge.writes { color: var(--warn); font-weight: 700; }
+button.act { font: 600 14px/1 var(--body); color: var(--bg); background: var(--green); border: 0; border-radius: 8px; min-height: 44px; padding: 0 14px; cursor: pointer; margin-left: 10px; white-space: nowrap; }
+button.act.off { background: transparent; color: var(--fg); box-shadow: inset 0 0 0 1px var(--line); }
+.sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; max-height: 75vh; overflow: auto; background: var(--box); border-top: 2px solid var(--warn); box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.6); padding: 16px max(16px, calc((100vw - 1060px) / 2)); }
+.sheet h2 { font: 700 16px/1.2 var(--pixel); color: var(--warn); text-transform: uppercase; letter-spacing: 0.06em; margin: 0 0 10px; }
+.sheet fieldset { border: 0; padding: 0; margin: 0 0 10px; display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.sheet legend { color: var(--muted); font-size: 14px; margin-bottom: 4px; }
+.sheet label { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; cursor: pointer; }
+.sheet .row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.sheet .err { color: var(--warn); }
+.sheet ul.notes { margin: 8px 0 0; padding-left: 18px; color: var(--muted); }
+pre.diff { font: 13px/1.5 var(--mono); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; overflow-x: auto; margin: 8px 0 0; max-height: 40vh; }
+pre.diff span { display: block; white-space: pre; }
+pre.diff .add { color: var(--green); }
+pre.diff .del { color: #ff7a7a; }
+.banner { position: sticky; top: 0; z-index: 15; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; background: #1d1a0d; border: 1px solid var(--warn); border-radius: 10px; padding: 8px 14px; margin-bottom: 14px; }
+.banner[hidden] { display: none; }
 </style>
 </head>
 <body>
-<div class="wrap" id="app"><p class="sub">Loading…</p></div>
+<div class="wrap" id="app"><p class="muted">Loading…</p></div>
 <noscript><p>This page needs JavaScript to draw. The same data is in <code>rigswig status --json</code>.</p></noscript>
 <script type="application/json" id="data" nonce="__NONCE__">__DATA__</script>
 <script nonce="__NONCE__">
@@ -119,30 +274,46 @@ footer { color: var(--muted); font-size: 13px; margin-top: 24px; }
   var data = JSON.parse(document.getElementById("data").textContent);
   var h = data.harness;
   var KINDS = ["instruction", "agent", "skill", "command", "mcp", "hook", "permission"];
-  var TITLE = { instruction: "Instructions", agent: "Agents", skill: "Skills", command: "Commands", mcp: "MCP servers", hook: "Hooks", permission: "Permission rules" };
+  var TITLE = { instruction: "Instructions", agent: "Agents", skill: "Skills", command: "Commands", mcp: "MCP servers", hook: "Hooks", permission: "Permissions" };
   var WINDOWS = [128000, 200000, 272000, 400000, 1000000];
+  var SVG = "http://www.w3.org/2000/svg";
 
+  // Every value from the data goes in through textContent or a non-style attribute; styles only through el.style (the CSP allows CSSOM, not a style attribute).
   function el(tag, attrs, kids) {
     var n = document.createElement(tag);
-    if (attrs) for (var k in attrs) {
-      if (k === "text") n.textContent = attrs[k];
-      else if (k === "cls") n.className = attrs[k];
-      else if (k === "style") n.style.cssText = attrs[k]; // CSSOM, which the CSP allows (a style attribute it would not)
-      else n.setAttribute(k, attrs[k]);
+    if (attrs) for (var key in attrs) {
+      var v = attrs[key];
+      if (v == null) continue;
+      if (key === "text") n.textContent = v;
+      else if (key === "cls") n.className = v;
+      else if (key === "style") n.style.cssText = v;
+      else n.setAttribute(key, v);
     }
     (kids || []).forEach(function (c) { if (c != null) n.appendChild(typeof c === "string" ? document.createTextNode(c) : c); });
+    return n;
+  }
+  function svg(tag, attrs, kids) {
+    var n = document.createElementNS(SVG, tag);
+    for (var key in attrs) n.setAttribute(key, attrs[key]);
+    (kids || []).forEach(function (c) { n.appendChild(c); });
     return n;
   }
   function fmt(n) { return Math.round(n).toLocaleString("en-US"); }
   function k(n) { return n >= 1000 ? (n / 1000).toFixed(n >= 100000 ? 0 : 1).replace(/\.0$/, "") + "k" : String(n); }
   function tok(chars) { return Math.ceil(chars / 4); }
-  function color(kind) { return "var(--k-" + kind + ")"; }
-  function store(key, val) { try { if (val === undefined) return localStorage.getItem(key); localStorage.setItem(key, val); } catch (e) { return null; } }
+  function ap(n) { return [el("span", { cls: "approx", text: "~" }), k(n)]; }
+  function pct(x) { return x <= 0 ? "0%" : x < 0.1 ? "<0.1%" : (x < 10 ? x.toFixed(1) : Math.round(x)) + "%"; }
+  function kc(kind) { return "--kc:var(--k-" + kind + ")"; }
+  function val(x) { return x === null || x === undefined ? "(not set)" : (typeof x === "string" ? x : JSON.stringify(x)); }
+  function store(key, v) { try { if (v === undefined) return localStorage.getItem(key); localStorage.setItem(key, v); } catch (e) { return null; } return null; }
   var token = new URLSearchParams(location.search).get("t") || "";
+  function href(tool, vs) { return "?t=" + encodeURIComponent(token) + "&tool=" + encodeURIComponent(tool) + (vs ? "&vs=" + encodeURIComponent(vs) : ""); }
 
   var items = h.items;
+  var byId = {};
+  items.forEach(function (i) { byId[i.id] = i; });
   var startup = items.filter(function (i) { return i.effective && i.load.when === "startup"; });
-  var total = h.context.chars.value;
+  var total = h.context.chars.value || 1;
   function kindsOf(hh) {
     var out = {};
     hh.items.forEach(function (i) { if (i.effective && i.load.when === "startup") out[i.kind] = (out[i.kind] || 0) + i.load.chars.value; });
@@ -150,253 +321,513 @@ footer { color: var(--muted); font-size: 13px; margin-top: 24px; }
   }
   var byKind = kindsOf(h);
   var other = data.other, cmp = data.comparison;
+  var ranked = startup.filter(function (i) { return i.load.chars.value > 0; }).sort(function (a, b) { return b.load.chars.value - a.load.chars.value || (a.id < b.id ? -1 : 1); });
 
   var app = document.getElementById("app");
   app.textContent = "";
 
-  // Header: the harness, the repo, and the other harnesses configured here.
+  // ---- Header -------------------------------------------------------------------------------------------------
+  // kevinferron.com's wordmark: ElectricText's phosphor variant (Pixelify 600, one green-to-cyan gradient across the word, a tight green
+  // and a wide cyan glow at the header's strength, 0.5), drawn here as SVG so nothing is fetched.
+  function wordmark(text, uid, glow) {
+    var spacing = 25, pad = 1, w = Math.max(100, text.length * spacing + 2 * pad), hgt = 60;
+    var size = Math.min(40, 800 / text.length), cw = (w - 2 * pad) / text.length;
+    var fillId = "phosphor-" + uid, glowId = "glow-" + uid;
+    var defs = svg("defs", {}, [
+      svg("linearGradient", { id: fillId, gradientUnits: "userSpaceOnUse", x1: "0", y1: "0", x2: String(w), y2: "0" }, [
+        svg("stop", { offset: "0", "stop-color": "#39ff00" }),
+        svg("stop", { offset: "0.45", "stop-color": "#7dffb0" }),
+        svg("stop", { offset: "1", "stop-color": "#22d3ee" })
+      ]),
+      svg("filter", { id: glowId, x: "-10%", y: "-60%", width: "120%", height: "220%", "color-interpolation-filters": "sRGB" }, [
+        svg("feDropShadow", { dx: "0", dy: "0", stdDeviation: String(0.35 * glow), "flood-color": "#39ff00", "flood-opacity": String(0.55 * glow), result: "tight" }),
+        svg("feDropShadow", { "in": "tight", dx: "0", dy: "0", stdDeviation: String(2.4 * glow), "flood-color": "#22d3ee", "flood-opacity": String(0.25 * glow) })
+      ])
+    ]);
+    var g = svg("g", { filter: "url(#" + glowId + ")" });
+    text.split("").forEach(function (ch, i) {
+      var t = svg("text", {
+        x: String(pad + cw * (i + 0.5)), y: String(hgt / 2), "font-family": "Pixelify Sans", "font-size": String(size), "font-weight": "600",
+        "text-anchor": "middle", "dominant-baseline": "middle", fill: "url(#" + fillId + ")"
+      });
+      t.textContent = ch;
+      g.appendChild(t);
+    });
+    return svg("svg", { viewBox: "0 0 " + w + " " + hgt, preserveAspectRatio: "xMidYMid meet", "aria-hidden": "true", focusable: "false" }, [defs, g]);
+  }
+
   var nav = el("nav", { cls: "tools", "aria-label": "Harness" });
   data.tools.forEach(function (t) {
-    if (t.id === h.tool.id) nav.appendChild(el("span", { "aria-current": "page", text: t.id }));
-    else if (t.score > 0) {
-      var a = el("a", { href: "?t=" + encodeURIComponent(token) + "&tool=" + encodeURIComponent(t.id), text: t.id, title: t.evidence.join(", ") });
-      nav.appendChild(a);
-    }
+    if (t.id === h.tool.id) nav.appendChild(el("span", { "aria-current": "page", text: "● " + t.id }));
+    else if (t.score > 0) nav.appendChild(el("a", { href: href(t.id), text: t.id, title: "evidence: " + t.evidence.join(", ") }));
   });
   var vsNav = el("nav", { cls: "tools", "aria-label": "Compare with" });
   data.tools.forEach(function (t) {
     if (t.id === h.tool.id || t.score === 0) return;
     if (other && other.tool.id === t.id) {
       vsNav.appendChild(el("span", { "aria-current": "page", text: "vs " + t.id }));
-      vsNav.appendChild(el("a", { href: "?t=" + encodeURIComponent(token) + "&tool=" + encodeURIComponent(h.tool.id), text: "stop comparing" }));
-    } else {
-      vsNav.appendChild(el("a", { href: "?t=" + encodeURIComponent(token) + "&tool=" + encodeURIComponent(h.tool.id) + "&vs=" + encodeURIComponent(t.id), text: "compare with " + t.id }));
-    }
+      vsNav.appendChild(el("a", { href: href(h.tool.id), text: "stop comparing" }));
+    } else vsNav.appendChild(el("a", { href: href(h.tool.id, t.id), text: "compare with " + t.id }));
   });
-  app.appendChild(el("header", null, [
-    el("div", { cls: "mark", "aria-label": "rigswig" }, ["rig", el("span", { text: "swig" })]),
-    el("div", { cls: "where" }, ["What a ", el("b", { text: h.tool.id }), " session in ", el("b", { text: h.target.repo }), " loads"]),
-    el("span", { cls: "badge", text: "read-only · local" }),
-    nav,
-    vsNav.childNodes.length ? vsNav : null
+  app.appendChild(el("header", { cls: "top" }, [
+    el("div", { cls: "brand" }, [
+      el("h1", { cls: "mark", "aria-label": "rigswig" }, ["rig", el("span", { text: "swig" })]),
+      el("div", { cls: "by" }, [
+        el("small", { text: "brought to you by" }),
+        el("a", { href: "https://kevinferron.com", rel: "noopener noreferrer", "aria-label": "kevinferron.com" }, [wordmark("kevinferron.com", "rw-kf", 0.5)])
+      ]),
+      el("p", { cls: "where" }, ["What a ", el("b", { text: h.tool.id }), " session in ", el("b", { text: h.target.repo }), " loads ", data.writes ? el("span", { cls: "badge writes", text: "· write mode · local" }) : el("span", { cls: "badge", text: "· read-only · local" })])
+    ]),
+    el("div", { cls: "switch" }, [nav, vsNav.childNodes.length ? vsNav : null])
   ]));
 
-  // The budget: the context window as the axis, measured kinds as segments, the unmeasured part hatched.
+  // ---- The budget ---------------------------------------------------------------------------------------------
   var win = Number(store("rigswig.window")) || 200000;
-  var budget = el("section", { cls: "card", "aria-labelledby": "budget-h" });
+  if (WINDOWS.indexOf(win) < 0) win = 200000;
+  var budget = el("section", { cls: "box", "aria-labelledby": "budget-h" });
+  var openKind = null;
+
+  function barFor(hh, label) {
+    var kinds = kindsOf(hh);
+    var present = KINDS.filter(function (x) { return kinds[x]; });
+    var bar = el("div", { cls: "bar", role: "img", "aria-label": label + ": " + present.map(function (x) { return TITLE[x] + " about " + k(tok(kinds[x])) + " tokens"; }).join(", ") + (hh.context.notMeasured.length ? "; plus parts not measured" : "") + ", on a " + k(win) + " token window" });
+    present.forEach(function (x) {
+      var w = Math.min(100, tok(kinds[x]) / win * 100);
+      bar.appendChild(el("i", { style: "width:" + w + "%;background:var(--k-" + x + ")", title: TITLE[x] + ": ~" + k(tok(kinds[x])) + " tokens" }));
+    });
+    if (hh.context.notMeasured.length) bar.appendChild(el("i", { cls: "unmeasured", text: "?", title: "Not measured: " + hh.context.notMeasured.map(function (n) { return n.what; }).join("; ") }));
+    return bar;
+  }
+
+  function scaleRow() {
+    var scale = el("div", { cls: "scale", "aria-hidden": "true" });
+    [0, 0.25, 0.5, 0.75, 1].forEach(function (f) { scale.appendChild(el("span", { text: f === 0 ? "0" : k(win * f), style: "left:" + f * 100 + "%" })); });
+    return scale;
+  }
   function drawBudget() {
     budget.textContent = "";
     var t = h.context.tokens;
-    var pct = t.value / win * 100;
+    var share = t.value / win * 100;
     var select = el("select", { "aria-label": "Context window size" });
     WINDOWS.forEach(function (w) {
-      var o = el("option", { value: String(w), text: k(w) + " tokens" });
+      var o = el("option", { value: String(w), text: k(w) + " window" });
       if (w === win) o.selected = true;
       select.appendChild(o);
     });
-    select.addEventListener("change", function () { win = Number(select.value); store("rigswig.window", String(win)); drawBudget(); });
-    budget.appendChild(el("h1", { id: "budget-h", text: "~" + k(t.value) + " tokens before you type" }));
-    budget.appendChild(el("p", { cls: "sub" }, [
-      (pct < 0.1 ? "<0.1" : pct.toFixed(pct < 10 ? 1 : 0)) + "% of a ",
-      select,
-      " window · between " + k(t.low) + " and " + k(t.high) + ", estimated from " + fmt(total) + " characters (" + t.method + ")"
+    select.addEventListener("change", function () { win = Number(select.value); store("rigswig.window", String(win)); drawBudget(); select = budget.querySelector("select"); if (select) select.focus(); });
+
+    var biggest = ranked[0];
+    var top3 = ranked.slice(0, 3).reduce(function (s, i) { return s + i.load.chars.value; }, 0);
+    var effective = items.filter(function (i) { return i.effective; }).length;
+    var pkOn = h.packages.filter(function (p) { return p.enabled; }).length;
+    var stats = el("div", { cls: "stats", role: "list", "aria-label": "Summary" }, [
+      el("div", { cls: "stat", role: "listitem" }, [el("b", { text: String(startup.length) }), el("span", { text: "load at startup" })]),
+      el("div", { cls: "stat", role: "listitem" }, [el("b", { text: effective + "/" + items.length }), el("span", { text: "found are in effect" })]),
+      el("div", { cls: "stat", role: "listitem" }, [el("b", { text: pct(top3 / total * 100) }), el("span", { text: "of it is the 3 biggest pieces" })]),
+      el("div", { cls: "stat", role: "listitem" }, [el("b", null, biggest ? ap(tok(biggest.load.chars.value)) : ["–"]), el("span", { text: biggest ? "biggest: " + biggest.name : "nothing measured" })]),
+      el("div", { cls: "stat", role: "listitem" }, [el("b", { text: h.packages.length ? pkOn + "/" + h.packages.length : "0" }), el("span", { text: "plugins on" })]),
+      el("div", { cls: "stat" + (h.warnings.length ? " warn" : ""), role: "listitem" }, [el("b", { text: (h.warnings.length ? "▲ " : "") + h.warnings.length }), el("span", { text: h.warnings.length === 1 ? "warning" : "warnings" })])
+    ]);
+
+    budget.appendChild(el("div", { cls: "hero" }, [
+      el("div", null, [
+        el("h2", { id: "budget-h", text: "Context budget" }),
+        el("p", { cls: "big" }, [el("b", null, ap(t.value)), el("span", { text: "tokens before you type" })]),
+        el("p", { cls: "sub" }, [el("strong", { text: pct(share) }), " of a", select]),
+        el("p", { cls: "sub", text: "Between " + k(t.low) + " and " + k(t.high) + ", estimated from " + fmt(h.context.chars.value) + " characters (" + t.method + ")." })
+      ]),
+      stats
     ]));
-    function barFor(hh) {
-      var kinds = kindsOf(hh);
-      var bar = el("div", { cls: "bar", role: "img", "aria-label": hh.tool.id + ": " + KINDS.filter(function (x) { return kinds[x]; }).map(function (x) { return TITLE[x] + " " + k(tok(kinds[x])) + " tokens"; }).join(", ") + "; plus parts not measured" });
-      KINDS.forEach(function (x) {
-        if (!kinds[x]) return;
-        var w = Math.min(100, tok(kinds[x]) / win * 100);
-        bar.appendChild(el("i", { style: "width:" + w + "%;background:" + color(x), title: TITLE[x] + ": ~" + k(tok(kinds[x])) + " tokens" }));
-      });
-      if (hh.context.notMeasured.length) bar.appendChild(el("i", { cls: "unmeasured", title: "Not measured: " + hh.context.notMeasured.map(function (n) { return n.what; }).join("; ") }));
-      return bar;
-    }
+
+    var bars = el("div", { cls: "bars" });
     if (other) {
-      budget.appendChild(el("div", { cls: "barrow" }, [
-        el("b", { text: "A " + h.tool.id }), barFor(h),
-        el("b", { text: "B " + other.tool.id + " ~" + k(other.context.tokens.value) }), barFor(other)
+      bars.appendChild(el("div", { cls: "barrow" }, [
+        el("b", { text: "A " + h.tool.id + " ~" + k(t.value) }), barFor(h, "A " + h.tool.id),
+        el("b", { text: "B " + other.tool.id + " ~" + k(other.context.tokens.value) }), barFor(other, "B " + other.tool.id),
+        el("span", { cls: "hide-sm", "aria-hidden": "true" }), scaleRow()
       ]));
-    } else {
-      budget.appendChild(barFor(h));
+    } else { bars.appendChild(barFor(h, h.tool.id)); bars.appendChild(scaleRow()); }
+    budget.appendChild(bars);
+    if (h.context.notMeasured.length) {
+      budget.appendChild(el("div", { cls: "unm" }, h.context.notMeasured.map(function (n) {
+        return el("span", { title: n.why }, [el("i", { cls: "sw hatch", "aria-hidden": "true" }), "? not measured: " + n.what]);
+      })));
     }
-    budget.appendChild(el("div", { cls: "scale", "aria-hidden": "true" }, [el("span", { text: "0" }), el("span", { text: k(win / 2) }), el("span", { text: k(win) })]));
-    var legend = el("div", { cls: "legend" });
-    KINDS.forEach(function (x) {
-      if (!byKind[x]) return;
-      legend.appendChild(el("span", null, [el("i", { cls: "sw", style: "background:" + color(x) }), TITLE[x] + " ~" + k(tok(byKind[x])) + " (" + Math.round(byKind[x] / total * 100) + "%)"]));
-    });
-    h.context.notMeasured.forEach(function (n) {
-      legend.appendChild(el("span", { title: n.why }, [el("i", { cls: "sw hatch" }), "not measured: " + n.what]));
-    });
-    budget.appendChild(legend);
-    if (t.value > win) budget.appendChild(el("p", { cls: "note", text: "The measured part alone is larger than this window." }));
-  }
-  drawBudget();
-  app.appendChild(budget);
-
-  // Differences, when comparing: counts by kind, then what only one side has and what both have but differently.
-  if (cmp) {
-    var dsec = el("section", { cls: "card", "aria-labelledby": "diff-h" }, [el("h2", { id: "diff-h", text: "A " + cmp.a.tool + " and B " + cmp.b.tool + ": what differs" })]);
-    var delta = cmp.b.tokens - cmp.a.tokens;
-    dsec.appendChild(el("p", { cls: "sub", text: "A ~" + k(cmp.a.tokens) + " and B ~" + k(cmp.b.tokens) + " tokens before you type: " + (delta === 0 ? "the same" : "B has " + k(Math.abs(delta)) + (delta > 0 ? " more" : " fewer")) + "." }));
-    var ct = el("tbody");
-    KINDS.forEach(function (x) {
-      var c = cmp.kinds[x];
-      if (!c) return;
-      ct.appendChild(el("tr", null, [el("td", null, [el("span", { cls: "kind" }, [el("i", { cls: "sw", style: "background:" + color(x) }), TITLE[x]])]), el("td", { cls: "num", text: String(c.onlyA) }), el("td", { cls: "num", text: String(c.onlyB) }), el("td", { cls: "num", text: String(c.changed) }), el("td", { cls: "num", text: String(c.same) })]));
-    });
-    dsec.appendChild(el("div", { cls: "scroll" }, [el("table", null, [el("thead", null, [el("tr", null, [el("th", { text: "Kind" }), el("th", { cls: "num", text: "Only A" }), el("th", { cls: "num", text: "Only B" }), el("th", { cls: "num", text: "Changed" }), el("th", { cls: "num", text: "Same" })])]), ct])]));
-    function list(title, rows, cells) {
-      if (!rows.length) return;
-      var tb = el("tbody");
-      rows.slice(0, 15).forEach(function (r) { tb.appendChild(el("tr", null, cells(r))); });
-      dsec.appendChild(el("details", null, [
-        el("summary", null, [title, el("span", { cls: "count", text: String(rows.length) })]),
-        el("div", { cls: "scroll" }, [el("table", null, [tb])]),
-        rows.length > 15 ? el("p", { cls: "file", text: "The " + (rows.length - 15) + " smallest are left out; rigswig compare --json lists them all." }) : null
-      ]));
-    }
-    var one = function (e) { return [el("td", { cls: "name" }, [e.name, el("div", { cls: "file", text: e.kind + " · " + e.layer })]), el("td", { cls: "num", text: e.chars ? "~" + k(tok(e.chars)) : "–" })]; };
-    list("Only in A (" + cmp.a.tool + ")", cmp.onlyA, one);
-    list("Only in B (" + cmp.b.tool + ")", cmp.onlyB, one);
-    list("In both, but different", cmp.changed, function (c) { return [el("td", { cls: "name" }, [c.name, el("div", { cls: "file", text: c.kind })]), el("td", { cls: "num", text: "A ~" + k(tok(c.a.chars)) + " · B ~" + k(tok(c.b.chars)) })]; });
-    list("Settings that differ", cmp.settings, function (d) { var v = function (x) { return x === null ? "(not set)" : (typeof x === "string" ? x : JSON.stringify(x)); }; return [el("td", { cls: "name", text: d.name }), el("td", { cls: "num", text: "A " + v(d.a) + " · B " + v(d.b) })]; });
-    app.appendChild(dsec);
+    if (t.value > win) budget.appendChild(el("p", { cls: "note", text: "▲ The measured part alone is larger than this window." }));
+    budget.appendChild(tiles);
+    placePanel();
   }
 
-  // What costs the most, filterable by kind.
-  var ranked = startup.filter(function (i) { return i.load.chars.value > 0; }).sort(function (a, b) { return b.load.chars.value - a.load.chars.value || (a.id < b.id ? -1 : 1); });
-  var top = el("section", { cls: "card", "aria-labelledby": "top-h" });
-  top.appendChild(el("h2", { id: "top-h", text: "What costs the most at startup" }));
-  var filter = null, showAll = false;
-  var chips = el("div", { cls: "chips", role: "group", "aria-label": "Filter by kind" });
-  var table = el("div", { cls: "scroll" });
-  function drawTop() {
-    chips.textContent = "";
-    [null].concat(KINDS.filter(function (x) { return byKind[x]; })).forEach(function (x) {
-      var b = el("button", { type: "button", "aria-pressed": String(filter === x), text: x ? TITLE[x] : "All" });
-      b.addEventListener("click", function () { filter = x; showAll = false; drawTop(); });
-      chips.appendChild(b);
-    });
-    var rows = ranked.filter(function (i) { return !filter || i.kind === filter; });
-    var shown = showAll ? rows : rows.slice(0, 15);
-    var max = rows.length ? rows[0].load.chars.value : 1;
-    var tb = el("tbody");
-    shown.forEach(function (i) {
-      var share = i.load.chars.value / total * 100;
-      tb.appendChild(el("tr", null, [
-        el("td", { cls: "name" }, [el("i", { cls: "mini", style: "width:" + Math.max(3, i.load.chars.value / max * 60) + "px;background:" + color(i.kind), "aria-hidden": "true" }), i.name]),
-        el("td", { cls: "hide-sm" }, [el("span", { cls: "kind", text: i.kind })]),
-        el("td", { cls: "hide-sm file", text: i.origin.layer }),
-        el("td", { cls: "num", text: "~" + k(tok(i.load.chars.value)) }),
-        el("td", { cls: "num", text: (share < 0.1 ? "<0.1" : share.toFixed(1)) + "%" })
-      ]));
-    });
-    table.textContent = "";
-    table.appendChild(el("table", null, [
-      el("thead", null, [el("tr", null, [el("th", { text: "Item" }), el("th", { cls: "hide-sm", text: "Kind" }), el("th", { cls: "hide-sm", text: "Layer" }), el("th", { cls: "num", text: "Tokens" }), el("th", { cls: "num", text: "Share" })])]),
-      tb
-    ]));
-    if (rows.length > shown.length) {
-      var more = el("button", { type: "button", text: "Show all " + rows.length });
-      more.addEventListener("click", function () { showAll = true; drawTop(); });
-      table.appendChild(el("p", null, [more]));
-    }
-  }
-  drawTop();
-  top.appendChild(chips);
-  top.appendChild(table);
-  app.appendChild(top);
-
-  // Settings, each with the layers that had a say.
-  var names = Object.keys(h.settings);
-  if (names.length) {
-    var dl = el("dl", { cls: "settings" });
-    names.forEach(function (name) {
-      var d = h.settings[name];
-      var v = d.value === null ? "the tool's default" : (typeof d.value === "string" ? d.value : JSON.stringify(d.value));
-      var dd = el("dd", null, [v, d.source ? el("span", { cls: "file", text: "  · set by " + d.source }) : null]);
-      if (d.trail.length > 1) {
-        dd.appendChild(el("ol", { cls: "trail" }, d.trail.map(function (s) {
-          return el("li", { text: s.layer + ": " + (typeof s.value === "string" ? s.value : JSON.stringify(s.value)) + (s.note ? " (" + s.note + ")" : "") });
-        })));
-      }
-      dl.appendChild(el("dt", { text: name }));
-      dl.appendChild(dd);
-    });
-    app.appendChild(el("section", { cls: "card", "aria-labelledby": "set-h" }, [el("h2", { id: "set-h", text: "Settings and where they came from" }), dl]));
-  }
-
-  // Everything found, by kind, with status as a shape and a word.
-  var inv = el("section", { cls: "card", "aria-labelledby": "inv-h" }, [el("h2", { id: "inv-h", text: "Everything found" })]);
-  var byId = {};
-  items.forEach(function (i) { byId[i.id] = i; });
+  // ---- Kind tiles and their inventories -----------------------------------------------------------------------
   function status(i) {
-    if (i.effective) return el("span", { cls: "status", text: "● in effect" });
+    if (i.effective) return el("span", { cls: "status on", text: "● in effect" + (i.kind === "mcp" && i.attrs.state && i.attrs.state !== "active" ? " · " + i.attrs.state : "") });
     if (i.shadowedBy) {
       var w = byId[i.shadowedBy];
-      return el("span", { cls: "status off", text: "○ overridden by " + (w ? w.origin.layer : "another") });
+      return el("span", { cls: "status off", text: "◇ overridden by " + (w ? w.origin.layer : "another") });
     }
     if (i.kind === "mcp" && i.attrs.state) return el("span", { cls: "status off", text: "○ " + i.attrs.state });
     return el("span", { cls: "status off", text: "○ off" });
   }
+  function extraOf(i) {
+    var x = i.kind, a = i.attrs || {};
+    if (x === "agent") return a.tools === "all" ? "every tool" : "tools: " + ((a.tools && a.tools.only) || []).join(", ");
+    if (x === "hook") return a.event + (a.matcher ? " · " + a.matcher : "") + (a.script ? " · " + a.script : "");
+    if (x === "mcp") return a.transport + (a.target ? " · " + a.target : "");
+    if (x === "instruction" && a.appliesTo && a.appliesTo.length) return "when touching " + a.appliesTo.join(", ");
+    if (x === "permission") return a.effect;
+    return "";
+  }
+  var tiles = el("div", { cls: "tiles", role: "group", "aria-label": "Kinds: open one to see everything found" });
+  var tileBtns = {};
+  var panel = el("div", { cls: "panel", id: "kind-panel", role: "region" });
+  var panelShowAll = false;
   KINDS.forEach(function (x) {
     var all = items.filter(function (i) { return i.kind === x; });
     if (!all.length) return;
     var on = all.filter(function (i) { return i.effective; }).length;
-    var tb = el("tbody");
-    all.forEach(function (i) {
-      var extra = "";
-      if (x === "agent") extra = i.attrs.tools === "all" ? "every tool" : (i.attrs.tools.only || []).join(", ");
-      if (x === "hook") extra = i.attrs.event + (i.attrs.matcher ? " · " + i.attrs.matcher : "") + (i.attrs.script ? " · " + i.attrs.script : "");
-      if (x === "mcp") extra = i.attrs.transport + (i.attrs.target ? " · " + i.attrs.target : "");
-      if (x === "instruction" && i.attrs.appliesTo && i.attrs.appliesTo.length) extra = "when touching " + i.attrs.appliesTo.join(", ");
-      if (x === "permission") extra = i.attrs.effect;
-      tb.appendChild(el("tr", null, [
-        el("td", { cls: "name" }, [i.name, extra ? el("div", { cls: "file", text: extra }) : null, i.origin.file ? el("div", { cls: "file", text: i.origin.file }) : null]),
-        el("td", { cls: "hide-sm file", text: i.origin.layer }),
-        el("td", null, [status(i)]),
-        el("td", { cls: "num", text: i.load.chars.confidence === "unknown" ? "?" : (i.load.chars.value ? "~" + k(tok(i.load.chars.value)) : "–") })
-      ]));
-    });
-    var det = el("details", null, [
-      el("summary", null, [el("i", { cls: "sw", style: "background:" + color(x), "aria-hidden": "true" }), TITLE[x], el("span", { cls: "count", text: on + " in effect / " + all.length + " found" })]),
-      el("div", { cls: "scroll" }, [el("table", null, [
-        el("thead", null, [el("tr", null, [el("th", { text: "Name" }), el("th", { cls: "hide-sm", text: "Layer" }), el("th", { text: "Status" }), el("th", { cls: "num", text: "Tokens" })])]),
-        tb
-      ])])
+    var chars = byKind[x] || 0;
+    var runtime = !chars && all.every(function (i) { return i.load.when !== "startup"; });
+    var b = el("button", { type: "button", cls: "tile", style: kc(x), "aria-expanded": "false", "aria-controls": "kind-panel", id: "tile-" + x }, [
+      el("span", { cls: "t" }, [x === "mcp" ? "MCP" : TITLE[x]]),
+      el("span", { cls: "v" }, chars ? ap(tok(chars)).concat([el("small", { text: " " + pct(chars / total * 100) })]) : [el("small", { text: runtime ? "not in context" : "? not measured" })]),
+      el("span", { cls: "c", text: on + "/" + all.length + " in effect" }),
+      el("span", { cls: "m", "aria-hidden": "true" }, [el("i", { style: "width:" + (chars / total * 100) + "%" })])
     ]);
-    inv.appendChild(det);
+    b.addEventListener("click", function () { openKind = openKind === x ? null : x; panelShowAll = false; drawPanel(); });
+    tileBtns[x] = b;
+    tiles.appendChild(b);
   });
   if (h.packages.length) {
-    var pk = el("tbody");
-    h.packages.forEach(function (p) {
-      pk.appendChild(el("tr", null, [
-        el("td", { cls: "name", text: p.id }),
-        el("td", null, [el("span", { cls: "status" + (p.enabled ? "" : " off"), text: p.enabled ? "● on" : "○ off" })]),
-        el("td", { cls: "file", text: p.decidedBy ? "decided by " + p.decidedBy : "" }),
-        el("td", { cls: "num", text: String(p.contributes.length) })
+    // Plugins as a tile too: what each one adds at startup.
+    var pkOn = h.packages.filter(function (p) { return p.enabled; }).length;
+    var pkChars = 0;
+    h.packages.forEach(function (p) { p.contributes.forEach(function (id) { var i = byId[id]; if (i && i.effective && i.load.when === "startup") pkChars += i.load.chars.value; }); });
+    var pb = el("button", { type: "button", cls: "tile", style: "--kc:#e8e8e8", "aria-expanded": "false", "aria-controls": "kind-panel", id: "tile-plugins" }, [
+      el("span", { cls: "t" }, ["Plugins"]),
+      el("span", { cls: "v" }, ap(tok(pkChars)).concat([el("small", { text: " " + pct(pkChars / total * 100) })])),
+      el("span", { cls: "c", text: pkOn + "/" + h.packages.length + " on" }),
+      el("span", { cls: "m", "aria-hidden": "true" }, [el("i", { style: "width:" + (pkChars / total * 100) + "%" })])
+    ]);
+    pb.addEventListener("click", function () { openKind = openKind === "plugins" ? null : "plugins"; panelShowAll = false; drawPanel(); });
+    tileBtns.plugins = pb;
+    tiles.appendChild(pb);
+  }
+
+  // The panel goes after the last tile of the opened tile's row, so it opens in place and the reading order matches what is seen.
+  function placePanel() {
+    if (!openKind || !tileBtns[openKind]) { if (panel.parentNode) panel.parentNode.removeChild(panel); return; }
+    // Measure the rows without the panel in the grid, or the tiles after it would count as a later row.
+    var hadFocus = panel.contains(document.activeElement) ? document.activeElement : null;
+    if (panel.parentNode) panel.parentNode.removeChild(panel);
+    var me = tileBtns[openKind], row = me.offsetTop, after = me;
+    Object.keys(tileBtns).forEach(function (x) { var b = tileBtns[x]; if (b.offsetTop === row && b.compareDocumentPosition(after) & Node.DOCUMENT_POSITION_PRECEDING) after = b; });
+    tiles.insertBefore(panel, after.nextSibling);
+    if (hadFocus) hadFocus.focus();
+  }
+  function drawPanel() {
+    Object.keys(tileBtns).forEach(function (x) { tileBtns[x].setAttribute("aria-expanded", String(openKind === x)); });
+    panel.textContent = "";
+    if (!openKind) { placePanel(); return; }
+    var LIMIT = 25, rows = el("ul", { cls: "rows dense" }), list, count;
+    if (openKind === "plugins") {
+      panel.style.cssText = "--kc:#e8e8e8";
+      list = h.packages.map(function (p) {
+        var c = 0;
+        p.contributes.forEach(function (id) { var i = byId[id]; if (i && i.effective && i.load.when === "startup") c += i.load.chars.value; });
+        return { p: p, chars: c };
+      }).sort(function (a, b) { return b.chars - a.chars; });
+      var pmax = list.length ? Math.max(1, list[0].chars) : 1;
+      count = list.length;
+      (panelShowAll ? list : list.slice(0, LIMIT)).forEach(function (r) {
+        var p = r.p;
+        rows.appendChild(el("li", null, [
+          el("i", { cls: "fill", style: "width:" + Math.max(0.5, r.chars / pmax * 100) + "%", "aria-hidden": "true" }),
+          el("span", { cls: "rowname" }, [el("span", { cls: "mono", text: p.id }), el("span", { cls: "meta" }, [el("span", { cls: "status " + (p.enabled ? "on" : "off"), text: p.enabled ? "● on" : "○ off" }), p.decidedBy ? " · decided by " + p.decidedBy : "", " · " + p.contributes.length + " items"])]),
+          el("span", { cls: "rownum" }, [r.chars ? "~" + k(tok(r.chars)) : "–", el("small", { text: r.chars ? pct(r.chars / total * 100) : "at startup" })]),
+          data.writes ? actButton(p.enabled ? "Turn off" : "Turn on", p.enabled, function () { openChange({ kind: "plugin", id: p.id, on: !p.enabled }, (p.enabled ? "Turn off " : "Turn on ") + p.id); }) : null
+        ]));
+      });
+      panel.appendChild(el("div", { cls: "head" }, [el("h3", { id: "panel-h", text: "Plugins" }), el("span", { cls: "aside", text: "what each adds at startup" })]));
+    } else {
+      var x = openKind;
+      panel.style.cssText = kc(x);
+      list = items.filter(function (i) { return i.kind === x; });
+      count = list.length;
+      var kmax = Math.max.apply(null, list.map(function (i) { return i.load.chars.value; }).concat([1]));
+      (panelShowAll ? list : list.slice(0, LIMIT)).forEach(function (i) {
+        var extra = extraOf(i);
+        var c = i.load.chars;
+        var live = i.effective && i.load.when === "startup";
+        rows.appendChild(el("li", null, [
+          live && c.value ? el("i", { cls: "fill", style: "width:" + Math.max(0.5, c.value / kmax * 100) + "%", "aria-hidden": "true" }) : null,
+          el("span", { cls: "rowname" }, [
+            i.name,
+            el("span", { cls: "meta" }, [status(i), " · " + i.origin.layer + (i.load.when !== "startup" ? " · loads " + i.load.when : "")]),
+            extra ? el("span", { cls: "meta", text: extra }) : null,
+            i.origin.file ? el("span", { cls: "meta mono", text: i.origin.file }) : null
+          ]),
+          el("span", { cls: "rownum", text: c.confidence === "unknown" ? "?" : (c.value ? "~" + k(tok(c.value)) : "–") }),
+          data.writes && h.tool.id === "claude-code" && i.kind === "mcp" && i.origin.layer === "project" && !i.shadowedBy
+            ? (function (active) {
+              return actButton(active ? "Disable" : "Approve", active, function () { openChange({ kind: "mcpJson", name: i.name, on: !active }, (active ? "Disable " : "Approve ") + i.name); });
+            })(i.attrs.state === "active")
+            : null
+        ]));
+      });
+      var on = list.filter(function (i) { return i.effective; }).length;
+      panel.appendChild(el("div", { cls: "head" }, [el("h3", { id: "panel-h", text: TITLE[x] }), el("span", { cls: "aside", text: on + " in effect / " + list.length + " found · tokens" })]));
+    }
+    panel.setAttribute("aria-labelledby", "panel-h");
+    panel.appendChild(rows);
+    if (count > LIMIT && !panelShowAll) {
+      var more = el("button", { type: "button", cls: "link", text: "Show all " + count });
+      more.addEventListener("click", function () { panelShowAll = true; drawPanel(); var r = panel.querySelectorAll("ul.rows > li")[LIMIT]; if (r) { r.setAttribute("tabindex", "-1"); r.focus(); } });
+      panel.appendChild(el("div", { cls: "more" }, [more]));
+    }
+    placePanel();
+  }
+  var resizeQueued = false;
+  window.addEventListener("resize", function () { if (resizeQueued) return; resizeQueued = true; requestAnimationFrame(function () { resizeQueued = false; placePanel(); }); });
+
+  app.appendChild(el("div", { cls: "grid" }, [budget]));
+  drawBudget();
+
+  // ---- Differences, when comparing ----------------------------------------------------------------------------
+  var main = el("div", { cls: "grid two" });
+  var left = el("div", { cls: "col" }), right = el("div", { cls: "col" });
+  main.appendChild(left); main.appendChild(right);
+  app.appendChild(el("div", { style: "height:12px" }));
+  app.appendChild(main);
+
+  if (cmp) {
+    var dsec = el("section", { cls: "box", style: "--edge:linear-gradient(90deg,var(--a),var(--b));--edge-text:var(--cyan)", "aria-labelledby": "diff-h" });
+    var delta = cmp.b.tokens - cmp.a.tokens;
+    dsec.appendChild(el("div", { cls: "head" }, [el("h2", { id: "diff-h", text: "What differs" }), el("span", { cls: "aside", text: "A " + cmp.a.tool + " · B " + cmp.b.tool })]));
+    dsec.appendChild(el("p", { cls: "lead" }, ["A ~" + k(cmp.a.tokens) + " and B ~" + k(cmp.b.tokens) + " tokens before you type: ", el("b", { text: delta === 0 ? "the same" : "B has " + k(Math.abs(delta)) + (delta > 0 ? " more" : " fewer") }), "."]));
+    dsec.appendChild(el("div", { cls: "dkey", "aria-hidden": "true" }, [
+      el("span", null, [el("i", { cls: "d-a" }), "only A"]), el("span", null, [el("i", { cls: "d-c" }), "changed"]),
+      el("span", null, [el("i", { cls: "d-s" }), "same"]), el("span", null, [el("i", { cls: "d-b" }), "only B"])
+    ]));
+    KINDS.forEach(function (x) {
+      var c = cmp.kinds[x];
+      if (!c) return;
+      var sum = c.onlyA + c.changed + c.same + c.onlyB || 1;
+      var split = el("div", { cls: "dsplit", "aria-hidden": "true" });
+      [["d-a", c.onlyA], ["d-c", c.changed], ["d-s", c.same], ["d-b", c.onlyB]].forEach(function (p) { if (p[1]) split.appendChild(el("i", { cls: p[0], style: "width:" + p[1] / sum * 100 + "%" })); });
+      dsec.appendChild(el("div", { cls: "diffrow" }, [
+        el("span", { cls: "k" }, [el("i", { cls: "sw", style: kc(x), "aria-hidden": "true" }), TITLE[x]]),
+        split,
+        el("div", { cls: "dnums" }, [
+          el("span", null, ["only A ", el("b", { text: String(c.onlyA) })]), el("span", null, ["changed ", el("b", { text: String(c.changed) })]),
+          el("span", null, ["same ", el("b", { text: String(c.same) })]), el("span", null, ["only B ", el("b", { text: String(c.onlyB) })])
+        ])
       ]));
     });
-    inv.appendChild(el("details", null, [
-      el("summary", null, ["Plugins", el("span", { cls: "count", text: h.packages.filter(function (p) { return p.enabled; }).length + " on / " + h.packages.length })]),
-      el("div", { cls: "scroll" }, [el("table", null, [el("thead", null, [el("tr", null, [el("th", { text: "Plugin" }), el("th", { text: "State" }), el("th", { text: "" }), el("th", { cls: "num", text: "Items" })])]), pk])])
-    ]));
+    function list(title, rows, cells) {
+      if (!rows.length) return;
+      var ul = el("ul", { cls: "rows" });
+      rows.slice(0, 15).forEach(function (r) { ul.appendChild(cells(r)); });
+      dsec.appendChild(el("details", { cls: "sub2" }, [
+        el("summary", null, [title, el("span", { cls: "aside", text: String(rows.length) })]),
+        ul,
+        rows.length > 15 ? el("p", { cls: "muted", text: "The " + (rows.length - 15) + " smallest are left out; rigswig compare --json lists them all." }) : null
+      ]));
+    }
+    var one = function (e) { return el("li", null, [el("span", { cls: "rowname" }, [e.name, el("span", { cls: "meta", text: e.kind + " · " + e.layer })]), el("span", { cls: "rownum", text: e.chars ? "~" + k(tok(e.chars)) : "–" })]); };
+    var wrapDiffs = el("div", { style: "margin-top:8px" });
+    dsec.appendChild(wrapDiffs);
+    var dlist = dsec;
+    dsec = wrapDiffs;
+    list("Only in A (" + cmp.a.tool + ")", cmp.onlyA, one);
+    list("Only in B (" + cmp.b.tool + ")", cmp.onlyB, one);
+    list("In both, but different", cmp.changed, function (c) { return el("li", null, [el("span", { cls: "rowname" }, [c.name, el("span", { cls: "meta", text: c.kind })]), el("span", { cls: "rownum", text: "A ~" + k(tok(c.a.chars)) + " · B ~" + k(tok(c.b.chars)) })]); });
+    list("Settings that differ", cmp.settings, function (d) { return el("li", null, [el("span", { cls: "rowname mono", text: d.name }), el("span", { cls: "rownum", text: "A " + val(d.a) + " · B " + val(d.b) })]); });
+    left.appendChild(dlist);
   }
-  app.appendChild(inv);
 
-  if (h.warnings.length) {
-    app.appendChild(el("section", { cls: "card", "aria-labelledby": "warn-h" }, [
-      el("h2", { id: "warn-h", text: "Warnings (" + h.warnings.length + ")" }),
-      el("ul", { cls: "plain warn" }, h.warnings.map(function (w) { return el("li", null, [w.message, w.file ? el("span", { cls: "file", text: "  " + w.file }) : null]); }))
-    ]));
+  // ---- What costs the most ------------------------------------------------------------------------------------
+  var top = el("section", { cls: "box", "aria-labelledby": "top-h" });
+  top.appendChild(el("div", { cls: "head" }, [el("h2", { id: "top-h", text: "What costs the most" }), el("span", { cls: "aside", text: "at startup, by tokens" })]));
+  var filter = null, showAll = false;
+  var chips = el("div", { cls: "chips", role: "group", "aria-label": "Filter by kind" });
+  var body = el("div");
+  function drawTop(focusKind) {
+    chips.textContent = "";
+    [null].concat(KINDS.filter(function (x) { return byKind[x]; })).forEach(function (x) {
+      var b = el("button", { type: "button", cls: "chip", style: x ? kc(x) : null, "aria-pressed": String(filter === x), "data-k": x || "all" }, [x ? el("i", { cls: "sw", "aria-hidden": "true" }) : null, x ? TITLE[x] : "All"]);
+      b.addEventListener("click", function () { filter = x; showAll = false; drawTop(x || "all"); });
+      chips.appendChild(b);
+    });
+    if (focusKind) { var f = chips.querySelector('[data-k="' + focusKind + '"]'); if (f) f.focus(); }
+    body.textContent = "";
+    var rows = ranked.filter(function (i) { return !filter || i.kind === filter; });
+    var sum = rows.reduce(function (s, i) { return s + i.load.chars.value; }, 0);
+    var n = Math.min(3, rows.length);
+    var topN = rows.slice(0, n).reduce(function (s, i) { return s + i.load.chars.value; }, 0);
+    if (rows.length) {
+      body.appendChild(el("p", { cls: "lead" }, [
+        rows.length + " " + (filter ? TITLE[filter].toLowerCase() : "pieces") + " cost ~" + k(tok(sum)) + (filter ? " (" + pct(sum / total * 100) + " of what is measured)" : "") + "; the " + (n === 1 ? "biggest" : n + " biggest") + " are ",
+        el("b", { text: pct(topN / total * 100) }), "."
+      ]));
+    }
+    // The strip: each piece's share of the whole measured total, biggest first; the rest of the total hatched.
+    var strip = el("div", { cls: "strip", "aria-hidden": "true" });
+    rows.slice(0, 40).forEach(function (i) { strip.appendChild(el("i", { style: kc(i.kind) + ";width:" + i.load.chars.value / total * 100 + "%", title: i.name + ": ~" + k(tok(i.load.chars.value)) })); });
+    strip.appendChild(el("i", { cls: "rest", title: "everything else measured" }));
+    body.appendChild(strip);
+    var shown = showAll ? rows : rows.slice(0, 12);
+    var max = rows.length ? rows[0].load.chars.value : 1;
+    var ul = el("ul", { cls: "rows dense" });
+    shown.forEach(function (i) {
+      ul.appendChild(el("li", { style: kc(i.kind) }, [
+        el("i", { cls: "fill", style: "width:" + Math.max(0.5, i.load.chars.value / max * 100) + "%", "aria-hidden": "true" }),
+        el("span", { cls: "rowname" }, [i.name, el("span", { cls: "meta" }, [el("span", { cls: "k" }, [el("i", { cls: "sw", "aria-hidden": "true" }), i.kind]), " · " + i.origin.layer])]),
+        el("span", { cls: "rownum" }, ["~" + k(tok(i.load.chars.value)), el("small", { text: pct(i.load.chars.value / total * 100) })])
+      ]));
+    });
+    body.appendChild(ul);
+    if (rows.length > shown.length) {
+      var more = el("button", { type: "button", cls: "link", text: "Show all " + rows.length });
+      more.addEventListener("click", function () { showAll = true; drawTop(); var r = body.querySelectorAll("ul.rows > li")[12]; if (r) { r.setAttribute("tabindex", "-1"); r.focus(); } });
+      body.appendChild(el("div", { cls: "more" }, [more]));
+    }
   }
-  app.appendChild(el("section", { cls: "card", "aria-labelledby": "cov-h" }, [
-    el("h2", { id: "cov-h", text: "What rigswig does not model here" }),
+  drawTop();
+  top.appendChild(chips);
+  top.appendChild(body);
+  left.appendChild(top);
+
+  // ---- Side column: warnings, settings, what is not modelled (collapsed; the count is in the head) --------------
+  function side(id, title, aside, edge, kids, open) {
+    var d = el("details", { cls: "box", style: edge ? "--edge:" + edge + ";--edge-text:" + edge : null }, [
+      el("summary", null, [el("span", { cls: "h2", id: id, text: title }), aside ? el("span", { cls: "aside", text: aside }) : null])
+    ].concat(kids));
+    if (open) d.open = true;
+    return d;
+  }
+  if (h.warnings.length) {
+    var groups = {}, order = [];
+    h.warnings.forEach(function (w) { if (!groups[w.code]) { groups[w.code] = []; order.push(w.code); } groups[w.code].push(w); });
+    var wl = el("ul", { cls: "warn" });
+    order.forEach(function (code) {
+      groups[code].forEach(function (w) { wl.appendChild(el("li", null, [w.message, w.file ? el("span", { cls: "meta mono muted", text: " " + w.file }) : null])); });
+    });
+    right.appendChild(side("warn-h", "▲ Warnings", h.warnings.length + " · " + order.join(", "), "var(--warn)", [wl], h.warnings.length <= 3));
+  }
+  var names = Object.keys(h.settings);
+  if (names.length) {
+    var sl = el("div");
+    names.forEach(function (name) {
+      var d = h.settings[name];
+      var v = d.value === null ? "the tool's default" : val(d.value);
+      var row = el("div", { cls: "setting" }, [
+        el("div", { cls: "n", text: name }),
+        el("div", { cls: "val" }, [v, d.source ? el("span", { cls: "muted", text: " · set by " + d.source }) : null])
+      ]);
+      if (d.trail.length > 1) row.appendChild(el("ol", { cls: "trail", "aria-label": "Decision trail, the winner first" }, d.trail.map(function (s) {
+        return el("li", { text: s.layer + ": " + val(s.value) + (s.note ? " (" + s.note + ")" : "") });
+      })));
+      sl.appendChild(row);
+    });
+    right.appendChild(side("set-h", "Settings", names.length + " · where each came from", "var(--cyan)", [sl], false));
+  }
+  right.appendChild(side("cov-h", "Not modelled", String(h.coverage.notModelled.length), "#b4b4bc", [
     el("ul", { cls: "plain" }, h.coverage.notModelled.map(function (n) { return el("li", { text: n }); }))
-  ]));
+  ], false));
+
   app.appendChild(el("footer", { text: "rigswig " + data.version + " · " + h.tool.id + " adapter " + h.tool.adapterVersion + " · read from files on this machine; nothing was sent or written. Reload to read again." }));
+
+  // ---- Write mode (rigswig ui --allow-writes) ------------------------------------------------------------------
+  // A change is planned on the server (file, diff, budget after) and applied only on Apply; the server re-checks the
+  // file is unchanged, writes atomically after a backup, and keeps the change for Undo.
+  function actButton(label, on, onClick) {
+    var b = el("button", { type: "button", cls: "act" + (on ? " off" : ""), text: label });
+    b.addEventListener("click", onClick);
+    return b;
+  }
+  function call(route, body) {
+    return fetch(route + "?tool=" + encodeURIComponent(h.tool.id), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Rigswig-Token": token },
+      body: JSON.stringify(body),
+      credentials: "same-origin"
+    }).then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || ("HTTP " + r.status)); return j; }); });
+  }
+  var banner = el("div", { cls: "banner", hidden: "", role: "status", "aria-live": "polite" });
+  if (data.writes) app.insertBefore(banner, app.children[1] || null);
+  function say(parts) {
+    banner.textContent = "";
+    parts.forEach(function (x) { if (x) banner.appendChild(typeof x === "string" ? document.createTextNode(x) : x); });
+    banner.removeAttribute("hidden");
+  }
+  var sheet = null, opener = null;
+  function closeSheet() {
+    if (sheet) { sheet.remove(); sheet = null; }
+    if (opener) { opener.focus(); opener = null; }
+  }
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && sheet) closeSheet(); });
+  function openChange(base, title) {
+    closeSheet();
+    opener = document.activeElement;
+    var scope = "local";
+    sheet = el("section", { cls: "sheet", role: "dialog", "aria-modal": "false", "aria-labelledby": "sheet-h" });
+    var body = el("div");
+    var fs = el("fieldset", null, [el("legend", { text: "Where to write it" })]);
+    [["local", "This repo, just me"], ["project", "This repo, everyone (committed)"], ["user", "Every repo, just me"]].forEach(function (o) {
+      var input = el("input", { type: "radio", name: "scope", value: o[0] });
+      if (o[0] === scope) input.checked = true;
+      input.addEventListener("change", function () { scope = o[0]; preview(); });
+      fs.appendChild(el("label", null, [input, o[1]]));
+    });
+    sheet.appendChild(el("h2", { id: "sheet-h", text: title }));
+    sheet.appendChild(fs);
+    sheet.appendChild(body);
+    document.body.appendChild(sheet);
+    fs.querySelector("input").focus();
+    function change() { var c = JSON.parse(JSON.stringify(base)); c.scope = scope; return c; }
+    function preview() {
+      body.textContent = "Planning…";
+      call("/api/plan", change()).then(function (plan) {
+        body.textContent = "";
+        body.appendChild(el("p", null, [
+          (plan.createsFile ? "Creates " : "Changes ") , el("b", { cls: "mono", text: plan.file }),
+          " · budget ", el("b", { text: "~" + k(plan.tokensBefore) + " → ~" + k(plan.tokensAfter) }), " tokens"
+        ]));
+        var pre = el("pre", { cls: "diff", "aria-label": "The change to the file" });
+        plan.diff.forEach(function (l) { pre.appendChild(el("span", { cls: l.op === "+" ? "add" : l.op === "-" ? "del" : "", text: l.op + " " + l.text })); });
+        body.appendChild(pre);
+        body.appendChild(el("ul", { cls: "notes" }, plan.notes.map(function (n) { return el("li", { text: n }); })));
+        var apply = el("button", { type: "button", cls: "act", text: plan.takesEffect ? "Apply" : "Apply anyway" });
+        var cancel = el("button", { type: "button", cls: "act off", text: "Cancel" });
+        cancel.addEventListener("click", closeSheet);
+        apply.addEventListener("click", function () {
+          apply.disabled = true;
+          call("/api/apply", { change: change(), beforeHash: plan.beforeHash }).then(function (done) {
+            closeSheet();
+            var undo = actButton("Undo", true, function () {
+              undo.disabled = true;
+              call("/api/undo", {}).then(function (u) { say(["Undone: ", el("b", { cls: "mono", text: u.undone }), " is back as it was. ", reload()]); })
+                .catch(function (e) { say(["Undo failed: " + e.message]); });
+            });
+            say(["Applied to ", el("b", { cls: "mono", text: done.applied }), done.backup ? " · backup saved" : " · new file", " · takes effect in the next session. ", undo, reload()]);
+            undo.focus();
+          }).catch(function (e) { apply.disabled = false; body.appendChild(el("p", { cls: "err", text: e.message })); });
+        });
+        body.appendChild(el("div", { cls: "row" }, [apply, cancel]));
+      }).catch(function (e) {
+        body.textContent = "";
+        body.appendChild(el("p", { cls: "err", text: e.message }));
+        var cancel = el("button", { type: "button", cls: "act off", text: "Close" });
+        cancel.addEventListener("click", closeSheet);
+        body.appendChild(el("div", { cls: "row" }, [cancel]));
+      });
+    }
+    preview();
+  }
+  function reload() {
+    var b = actButton("Reload to read again", false, function () { location.reload(); });
+    return b;
+  }
 })();
 </script>
 </body>
