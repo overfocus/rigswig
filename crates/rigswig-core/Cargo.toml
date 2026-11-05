@@ -1,0 +1,11 @@
+[package]
+name = "rigswig-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+description = "The harness-neutral data model and the per-harness adapters behind rigswig. No I/O of its own: adapters read through an injected file system."
+
+[dependencies]

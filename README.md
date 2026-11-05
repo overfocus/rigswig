@@ -10,6 +10,9 @@ before you type a word.
 
 **Status: pre-alpha.** This is the repository skeleton. Nothing is implemented yet; see [docs/ROADMAP.md](docs/ROADMAP.md).
 
+rigswig is a single binary written in Rust. Once released it will install with `cargo install rigswig`, Homebrew or
+`npx rigswig`; until then, build it from source with `cargo run -- --help`.
+
 ## Guarantees
 
 These are the point of the tool, and they will be enforced by tests:

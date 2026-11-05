@@ -1,0 +1,12 @@
+[workspace]
+resolver = "3"
+members = ["crates/rigswig-core", "crates/rigswig"]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.85"
+license = "Apache-2.0"
+repository = "https://github.com/overfocus/rigswig"
+description = "See everything your coding agent loads before you type, and where each piece came from. Harness-agnostic, local, read-only."
+publish = false

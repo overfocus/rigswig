@@ -1,4 +1,4 @@
-node_modules/
+target/
 planning/
 .DS_Store
 *.log
