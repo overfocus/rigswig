@@ -37,7 +37,9 @@ per-platform npm packages (as esbuild and Biome do). A Claude Code plugin wrappi
 Also in v0.1 (done): `rigswig check` for CI (`--max-tokens`, `--max-item-tokens`, `--no-warnings`; exit 1 on a
 failed limit), and `--without` what-ifs on `status` and `check`.
 
-Left for v0.1: release builds and distribution (below).
+Release builds (done, not yet run): a version tag builds five platform binaries into a draft GitHub release
+([RELEASING.md](RELEASING.md)). Left for v0.1: the first tag, and crates.io, npm and Homebrew, which need the
+maintainer's accounts.
 
 ## Later
 
