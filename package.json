@@ -1,0 +1,32 @@
+{
+  "name": "rigswig",
+  "version": "0.0.0",
+  "private": true,
+  "description": "See everything your coding agent loads before you type, and where each piece came from. Harness-agnostic, local, read-only.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "rigswig": "bin/rigswig.mjs"
+  },
+  "files": [
+    "bin",
+    "src",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "keywords": [
+    "agent",
+    "harness",
+    "claude-code",
+    "codex",
+    "context",
+    "mcp",
+    "agents-md"
+  ]
+}
