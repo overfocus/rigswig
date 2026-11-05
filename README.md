@@ -2,6 +2,23 @@
 
 See everything your coding agent loads before you type, and where each piece came from.
 
+![rigswig's page for a repo: about 11.4k tokens load before you type, most of it AGENTS.md, with every kind of item as a tile](docs/images/overview.png)
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/compare.png" alt="Claude Code and Codex on the same repo, two budgets on one scale and what differs by kind"></td>
+    <td width="50%"><img src="docs/images/write-mode.png" alt="Write mode: turning a plugin off shows the file, the diff and the budget after, before anything is written"></td>
+  </tr>
+  <tr>
+    <td><b>Compare</b> two harnesses on one repo (or two repos): Codex cuts this <code>AGENTS.md</code> at its 32&nbsp;KiB budget.</td>
+    <td><b>Write mode</b> (opt-in): every change shows the file, the diff and the new budget first, with a backup and undo.</td>
+  </tr>
+</table>
+
+<img src="docs/images/agents.png" alt="Every agent found, with its status, layer, tools and file; a user agent overridden by a project agent of the same name">
+
+<sub>Screenshots of an invented setup, rebuilt with <code>docs/demo/make-demo.sh</code>.</sub>
+
 A coding agent's **harness** is everything around the model: instruction files (`CLAUDE.md`, `AGENTS.md`,
 `GEMINI.md`, rules), subagents, skills, commands, hooks, MCP servers, plugins, permissions and the model setting,
 spread across user, project, local and managed scopes. rigswig reads all of it for a repo and shows what a session
