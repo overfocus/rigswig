@@ -51,6 +51,77 @@ fn strip_jsonc(text: &str) -> std::borrow::Cow<'_, str> {
     std::borrow::Cow::Borrowed(text.strip_prefix('\u{feff}').unwrap_or(text))
 }
 
+/// Line and block comments stripped outside string literals (Devin CLI's JSON-with-comments config format).
+/// Backslash escapes and `//` inside strings are respected; newlines inside block comments are kept so the
+/// stripped text stays line-aligned.
+#[must_use]
+pub fn jsonc(text: &str) -> String {
+    let text = text.strip_prefix('\u{feff}').unwrap_or(text);
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    let mut in_string = false;
+    let mut escaped = false;
+    while let Some(c) = chars.next() {
+        if in_string {
+            out.push(c);
+            if escaped {
+                escaped = false;
+            } else if c == '\\' {
+                escaped = true;
+            } else if c == '"' {
+                in_string = false;
+            }
+            continue;
+        }
+        match c {
+            '"' => {
+                in_string = true;
+                out.push(c);
+            }
+            '/' => match chars.peek() {
+                Some('/') => {
+                    chars.next();
+                    for l in chars.by_ref() {
+                        if l == '\n' {
+                            out.push('\n');
+                            break;
+                        }
+                    }
+                }
+                Some('*') => {
+                    chars.next();
+                    while let Some(n) = chars.next() {
+                        if n == '\n' {
+                            out.push('\n');
+                        }
+                        if n == '*' && chars.peek() == Some(&'/') {
+                            chars.next();
+                            break;
+                        }
+                    }
+                }
+                _ => out.push(c),
+            },
+            other => out.push(other),
+        }
+    }
+    out
+}
+
+/// Read a JSON-with-comments file (Devin CLI's config files).
+pub fn read_jsonc(fs: &dyn Fs, path: &Path) -> JsonFile {
+    if !fs.exists(path) {
+        return JsonFile::Missing;
+    }
+    match fs.read_to_string(path) {
+        Ok(text) => match serde_json::from_str(jsonc(&text).as_ref()) {
+            Ok(v) => JsonFile::Ok(v),
+            Err(_) => JsonFile::Malformed,
+        },
+        Err(_) => JsonFile::Malformed,
+    }
+}
+
 /// `v[key]` as a non-empty string.
 pub fn str_at<'a>(v: &'a Map<String, Value>, key: &str) -> Option<&'a str> {
     v.get(key).and_then(Value::as_str).filter(|s| !s.is_empty())
@@ -102,5 +173,36 @@ mod tests {
         assert_eq!(o["mcp_servers"]["docs"]["enabled"], Value::Bool(false));
         assert_eq!(read_toml(&fs, Path::new("/c/bad.toml")), JsonFile::Malformed);
         assert_eq!(read_toml(&fs, Path::new("/c/none.toml")), JsonFile::Missing);
+    }
+
+    #[test]
+    fn jsonc_strips_comments_and_keeps_strings() {
+        let doc = "{\n  // one\n  \"model\": \"m\", /* two\n  lines */ // trailing\n  \"url\": \"https://host/x\" // in the url it must survive? outside\n  /*\n\"url2\": \"https://real\" */\n, \"b\": true\n}";
+        let cleaned = jsonc(doc);
+        assert!(!cleaned.contains("one"));
+        assert!(!cleaned.contains("t two"));
+        let v: Value = serde_json::from_str(cleaned.as_str()).expect("valid after strip");
+        assert_eq!(str_at(v.as_object().unwrap(), "url"), Some("https://host/x"), "the // inside a string stays");
+        assert_eq!(v["b"], Value::Bool(true));
+        // Escaped quotes keep the string open.
+        let q = jsonc("{\"a\": \"say \\\"ok //not-comment\\\"\" }");
+        assert_eq!(
+            serde_json::from_str::<Value>(q.as_str()).unwrap()["a"],
+            Value::String("say \"ok //not-comment\"".into())
+        );
+    }
+
+    #[test]
+    fn jsonc_reads_devin_style_config() {
+        let fs = MemFs::new().file(
+            "/c/config.json",
+            "// user config\n{\n  // Agent behavior\n  \"agent\": { \"model\": \"swe-1-6-fast\" },\n  /* multi\n     line */\n  \"permissions\": { \"allow\": [\"Exec(npm run)\"] }\n}",
+        );
+        let v = read_jsonc(&fs, Path::new("/c/config.json"));
+        let o = v.object();
+        assert_eq!(str_at(obj_at(&o, "agent").unwrap(), "model"), Some("swe-1-6-fast"));
+        assert_eq!(o["permissions"]["allow"][0], Value::String("Exec(npm run)".into()));
+        assert_eq!(read_jsonc(&fs, Path::new("/c/none.json")), JsonFile::Missing);
+        assert_eq!(read_jsonc(&fs, Path::new("/c/broken")), JsonFile::Missing);
     }
 }

@@ -3,12 +3,14 @@
 pub mod build;
 pub mod claude_code;
 pub mod codex;
+pub mod devin;
 pub mod hermes;
 pub mod ollama;
 pub mod shared;
 
 pub use claude_code::ClaudeCode;
 pub use codex::Codex;
+pub use devin::Devin;
 pub use hermes::Hermes;
 pub use ollama::Ollama;
 
@@ -16,5 +18,5 @@ use crate::adapter::Adapter;
 
 /// Every adapter rigswig ships, in the order they are offered.
 pub fn all() -> Vec<Box<dyn Adapter>> {
-    vec![Box::new(ClaudeCode), Box::new(Codex), Box::new(Hermes), Box::new(Ollama)]
+    vec![Box::new(ClaudeCode), Box::new(Codex), Box::new(Hermes), Box::new(Ollama), Box::new(Devin)]
 }

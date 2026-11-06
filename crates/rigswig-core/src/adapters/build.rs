@@ -6,7 +6,7 @@ use std::path::Path;
 use crate::adapter::Ctx;
 use crate::fs::{EntryKind, Fs};
 use crate::model::*;
-use crate::read::json::{JsonFile, read_json, read_toml};
+use crate::read::json::{JsonFile, read_json, read_jsonc, read_toml};
 use crate::read::redact::printable;
 
 pub struct Build<'a> {
@@ -75,6 +75,15 @@ impl<'a> Build<'a> {
         let j = read_json(self.fs(), path);
         if matches!(j, JsonFile::Malformed) {
             self.warn("malformed-json", "not valid JSON, skipped", Some(path));
+        }
+        j
+    }
+
+    /// Read JSON *with comments* (Devin CLI's config format), warning when malformed after stripping.
+    pub fn jsonc(&mut self, path: &Path) -> JsonFile {
+        let j = read_jsonc(self.fs(), path);
+        if matches!(j, JsonFile::Malformed) {
+            self.warn("malformed-jsonc", "not valid JSON (comments allowed), skipped", Some(path));
         }
         j
     }
