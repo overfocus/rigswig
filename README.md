@@ -37,7 +37,8 @@ there actually gets, which scope decided each setting, what is overridden, and r
 before you type a word.
 
 **Status: 0.1, pre-1.0.** `rigswig status`, `rigswig audit` and the local page, `rigswig ui`, work for Claude Code,
-Codex, Hermes Agent, Ollama, the Devin CLI, Cursor and Gemini CLI. See [docs/ROADMAP.md](docs/ROADMAP.md).
+Codex, Hermes Agent, Ollama, the Devin CLI, Cursor, Gemini CLI and the two DeepSeek CLIs. See
+[docs/ROADMAP.md](docs/ROADMAP.md).
 
 rigswig is a single binary written in Rust. Install it with `cargo install rigswig`
 ([crates.io](https://crates.io/crates/rigswig); add `--no-default-features` for a build with no network code), with
@@ -103,7 +104,8 @@ Harness-agnostic: each harness is an adapter that reads its own files into one s
 | Devin CLI | `rigswig status --tool devin` ([the rules it models](docs/adapters/devin.md)) |
 | Cursor | `rigswig status --tool cursor` ([the rules it models](docs/adapters/cursor.md)) |
 | Gemini CLI | `rigswig status --tool gemini` ([the rules it models](docs/adapters/gemini.md)) |
-| DeepSeek | planned |
+| DeepSeek Harness | `rigswig status --tool dsh` ([the rules it models](docs/adapters/dsh.md)) |
+| DeepSeek-CLI (community) | `rigswig status --tool deepseek` ([the rules it models](docs/adapters/deepseek-cli.md)) |
 | GitHub Copilot (repo files) | planned |
 | OpenCode, others | adapters welcome |
 
