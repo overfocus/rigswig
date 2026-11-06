@@ -1338,6 +1338,10 @@ impl Recommendation {
                 item.judged,
                 if n == 1 { "that one".to_string() } else { format!("those {n}") }
             ),
+            // A plugin is judged by the repo's files (its signals), not by name.
+            Self::Archive if item.kind == "plugin" => {
+                format!("none of {} repos has the files it is for: turn it off at user scope", item.judged)
+            }
             Self::Archive => {
                 format!("nothing in {} repos references it: archive it, unless you call it by hand", item.judged)
             }

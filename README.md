@@ -17,7 +17,18 @@ See everything your coding agent loads before you type, and where each piece cam
 
 <img src="docs/images/agents.png" alt="Every agent found, with its status, layer, tools and file; a user agent overridden by a project agent of the same name">
 
-<sub>Screenshots of an invented setup, rebuilt with <code>docs/demo/make-demo.sh</code>.</sub>
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/audit.png" alt="The audit on the page: 10 findings, 2 of them high, about 1.7k tokens a session they could save; an instruction file over 200 lines with its largest sections, risky permission rules, user-scope agents nothing in the repo references"></td>
+    <td width="50%"><img src="docs/images/audit-fleet.png" alt="Fleet mode across three repos: 28 user-scope items to archive or move, about 1.9k tokens a session; each repo with its findings, then each item with its recommendation"></td>
+  </tr>
+  <tr>
+    <td><b>Audit</b> a repo: ranked findings, each with its evidence, the tokens it would save and a fix. Filter them, and open the items they name.</td>
+    <td><b>Fleet mode</b> across many repos: which user-scope agents, skills and plugins any repo needs, and what to archive or move to project scope.</td>
+  </tr>
+</table>
+
+<sub>Screenshots of an invented setup, rebuilt with <code>docs/demo/make-demo.sh</code> (the audit's with <code>docs/demo/shoot.mjs</code>).</sub>
 
 A coding agent's **harness** is everything around the model: instruction files (`CLAUDE.md`, `AGENTS.md`,
 `GEMINI.md`, rules), subagents, skills, commands, hooks, MCP servers, plugins, permissions and the model setting,

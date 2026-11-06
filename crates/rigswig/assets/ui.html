@@ -830,7 +830,7 @@ ul.rows > li.flash { outline: 2px solid var(--green); outline-offset: -2px; bord
       }
     }
     body.appendChild(el("p", { cls: "fix" }, [el("b", { text: "Fix: " }), f.proposal]));
-    if (here && f.items.length) {
+    if (here && f.items && f.items.length) {
       var shown = f.items.filter(function (id) { return byId[id] || h.packages.some(function (p) { return p.id === id; }); });
       if (shown.length) {
         var refs = el("div", { cls: "refs", "aria-label": "Show in the inventory" });
@@ -986,7 +986,7 @@ ul.rows > li.flash { outline: 2px solid var(--green); outline-offset: -2px; bord
       shown.forEach(function (i) {
         var colour = i.kind === "plugin" ? "--kc:#e8e8e8" : kc(i.kind);
         var sentence = i.recommendation === "keep" ? "needed in " + i.neededIn.length + " of " + i.judged
-          : i.recommendation === "archive" ? "nothing in " + i.judged + " repos references it"
+          : i.recommendation === "archive" ? (i.kind === "plugin" ? "none of " + i.judged + " repos has the files it is for" : "nothing in " + i.judged + " repos references it")
           : i.recommendation === "unknown" ? "no signal to judge it by"
           : "needed in " + i.neededIn.length + " of " + i.judged + ": " + i.neededIn.join(", ");
         itemsUl.appendChild(el("li", { style: colour }, [

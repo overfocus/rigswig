@@ -306,6 +306,9 @@ fn fleet_mode_recommends_by_how_many_repos_need_each_item() {
     assert_eq!(f.items[0].id, "none", "archive first");
     assert!(rec("one").recommendation.sentence(rec("one")).contains("needed in 1 of 3"));
     assert_eq!(f.repos.len(), 3);
+    let mut plugin = rec("none").clone();
+    plugin.kind = "plugin".into();
+    assert!(plugin.recommendation.sentence(&plugin).contains("has the files it is for"), "plugins are judged by files");
 }
 
 #[test]

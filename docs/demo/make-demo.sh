@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
-# Builds an invented setup for rigswig's screenshots: a home folder and a repo, "acme-shop", with Claude Code and
-# Codex configured. Everything here is made up. Usage: docs/demo/make-demo.sh <empty folder>
-# Then: HOME=<folder>/home USERPROFILE=<folder>/home rigswig ui --repo <folder>/acme-shop
+# Builds an invented setup for rigswig's screenshots: a home folder and three repos in ~/code, "acme-shop" (Claude Code
+# and Codex configured), "acme-admin" and "acme-docs", with what the audit finds (docs/AUDIT.md). Everything here is
+# made up. Usage: docs/demo/make-demo.sh <empty folder>
+# Then: HOME=<folder>/home USERPROFILE=<folder>/home rigswig ui --repo <folder>/home/code/acme-shop
+# (the audit's fleet box takes ~/code/*). docs/demo/shoot.mjs takes the screenshots.
 set -euo pipefail
 root="${1:?usage: make-demo.sh <empty folder>}"
 mkdir -p "$root"
 root="$(cd "$root" && pwd)"
 home="$root/home"
-repo="$root/acme-shop"
+repo="$home/code/acme-shop"
 market="$home/marketplaces/acme-tools"
 mkdir -p "$home/.claude/agents" "$home/.claude/skills" "$home/.claude/plugins" "$home/.codex" "$home/.agents/skills" \
   "$repo/.git" "$repo/.claude/agents" "$repo/.claude/rules" "$repo/.claude/commands" "$market/.claude-plugin"
@@ -18,6 +20,8 @@ w() { mkdir -p "$(dirname "$1")"; cat > "$1"; }
 w "$home/.claude/CLAUDE.md" <<'EOF'
 # How I work
 Prefer small commits with a clear message. Run the tests before saying something works. Ask before deleting data.
+Never push to main without a green build and a review from someone else.
+Keep secrets out of the repository and out of every log line you write.
 EOF
 
 agent() { # name, description, tools ("" for every tool)
@@ -69,7 +73,8 @@ w "$home/.claude/settings.json" <<'EOF'
   "enabledPlugins": {
     "deploy-kit@acme-tools": true,
     "design-system@acme-tools": true,
-    "observability@acme-tools": true
+    "observability@acme-tools": true,
+    "terraform-kit@acme-tools": true
   },
   "permissions": {
     "allow": ["Read", "Grep", "Bash(npm test:*)", "Bash(git status)"],
@@ -98,7 +103,8 @@ w "$market/.claude-plugin/marketplace.json" <<'EOF'
 { "name": "acme-tools", "plugins": [
   { "name": "deploy-kit", "source": "./deploy-kit" },
   { "name": "design-system", "source": "./design-system" },
-  { "name": "observability", "source": "./observability" }
+  { "name": "observability", "source": "./observability" },
+  { "name": "terraform-kit", "source": "./terraform-kit" }
 ] }
 EOF
 for s in preview-deploy rollback canary-release feature-flags env-check smoke-test; do
@@ -111,6 +117,9 @@ EOF
 for s in tokens components layout motion; do
   skill "$market/design-system/skills" "$s" "Design system: use the $s guidelines and components, with examples of correct and incorrect use."
 done
+for s in plan apply-safely drift-check state-surgery; do
+  skill "$market/terraform-kit/skills" "$s" "Terraform: $s for the cloud infrastructure, with the review and rollback steps it needs before anything is applied."
+done
 w "$market/observability/.mcp.json" <<'EOF'
 { "mcpServers": { "metrics": { "type": "http", "url": "https://metrics.example.com/mcp" } } }
 EOF
@@ -119,6 +128,22 @@ EOF
 w "$repo/CLAUDE.md" <<'EOF'
 # acme-shop
 The storefront and its admin. Read @AGENTS.md first; it is shared with other coding tools.
+Never push to main without a green build and a review from someone else.
+Keep secrets out of the repository and out of every log line you write.
+Runbooks for incidents are in `docs/runbooks/checkout.md`; run `npm run e2e` before a release.
+EOF
+w "$repo/docs/architecture.md" <<'EOF'
+# Architecture
+EOF
+w "$repo/package.json" <<'EOF'
+{ "name": "acme-shop", "private": true, "scripts": { "test": "vitest", "lint": "eslint .", "build": "vite build" } }
+EOF
+w "$repo/.claude/settings.local.json" <<'EOF'
+{ "permissions": { "allow": [
+  "Bash(node *)", "Bash(git push *)", "Bash(npm run:*)",
+  "Bash(curl -s 'https://api.acme.example/v1/orders?status=failed&limit=50' | jq '.items[].id')",
+  "Bash(psql staging -c 'select count(*) from orders where created_at > now() - interval 1 day')"
+] } }
 EOF
 {
   echo "# acme-shop: guidelines for coding agents"
@@ -160,5 +185,17 @@ url = "https://tracker.example.com/mcp"
 trust_level = "trusted"
 EOF
 skill "$home/.agents/skills" commit-message "Write a commit message from the staged diff: what changed and why."
+
+# ---- Two more repos, for the audit's fleet mode --------------------------------------------------------------------
+w "$home/code/acme-admin/CLAUDE.md" <<'EOF'
+# acme-admin
+Use the db-migrator agent for schema changes and the api-designer agent for new endpoints.
+EOF
+mkdir -p "$home/code/acme-admin/.git"
+w "$home/code/acme-docs/CLAUDE.md" <<'EOF'
+# acme-docs
+The docs-writer agent drafts new pages; the copy-editor agent reviews them before they go live.
+EOF
+mkdir -p "$home/code/acme-docs/.git"
 
 echo "demo setup in $root (repo: $repo)"
