@@ -26,11 +26,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { target: aarch64-apple-darwin, os: macos-latest }
-          - { target: x86_64-apple-darwin, os: macos-latest }
-          - { target: x86_64-unknown-linux-musl, os: ubuntu-latest, musl: true }
-          - { target: aarch64-unknown-linux-musl, os: ubuntu-24.04-arm, musl: true }
-          - { target: x86_64-pc-windows-msvc, os: windows-latest }
+          - { target: aarch64-apple-darwin, os: macos-latest, ext: "" }
+          - { target: x86_64-apple-darwin, os: macos-latest, ext: "" }
+          - { target: x86_64-unknown-linux-musl, os: ubuntu-latest, musl: true, ext: "" }
+          - { target: aarch64-unknown-linux-musl, os: ubuntu-24.04-arm, musl: true, ext: "" }
+          - { target: x86_64-pc-windows-msvc, os: windows-latest, ext: .exe }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -55,10 +55,17 @@ jobs:
             tar czf "$name.tar.gz" "$name"
             echo "ASSET=$name.tar.gz" >> "$GITHUB_ENV"
           fi
+      - name: Stage the npm package for this target (npm/build.mjs; the `npm` job publishes it)
+        shell: bash
+        run: node npm/build.mjs --version "$GITHUB_REF_NAME" --target ${{ matrix.target }} --binary "target/${{ matrix.target }}/release/rigswig${{ matrix.ext }}" --out npm-stage
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.target }}
+          name: binary-${{ matrix.target }}
           path: ${{ env.ASSET }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-${{ matrix.target }}
+          path: npm-stage
 
   release:
     needs: build
@@ -68,6 +75,8 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
+          # Only the release tarballs: the npm packages are the `npm` job's to publish.
+          pattern: binary-*
           path: dist
           merge-multiple: true
       - name: Checksums
@@ -97,3 +106,55 @@ jobs:
         run: cargo publish --workspace --locked
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+
+  # npm: five packages carrying the binary per platform, then the unscoped `rigswig` picker, published
+  # through npm's trusted publishing, like crates.io: GitHub's OIDC in the `npm` environment, so no
+  # token is stored, after a maintainer approves the run ("Review deployments"). npm cannot grant
+  # trusted publishing to a brand-new package: the first version of each of the six was bootstrapped
+  # by hand, and each package's Trusted Publisher settings on npmjs.com accept only this repo,
+  # release.yml and the `npm` environment (docs/RELEASING.md). The `npm-<target>` artifacts each
+  # upload with an `npm-stage/` root; after the merge-multiple download the packages sit under
+  # stage/npm-stage.
+  npm:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      # Trusted publishing needs npm >= 11.5.1; the runner's bundled npm can be older.
+      - run: npm install --global npm@latest
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: npm-*
+          path: stage
+          merge-multiple: true
+      - name: The six packages are here, at the tag's version
+        run: |
+          root=stage/npm-stage
+          want="${GITHUB_REF_NAME#v}"
+          for pkg in rigswig @kftcda/cli-darwin-arm64 @kftcda/cli-darwin-x64 @kftcda/cli-linux-arm64 @kftcda/cli-linux-x64 @kftcda/cli-win32-x64; do
+            test -f "$root/$pkg/package.json" || { echo "missing $pkg (have: $(find "$root" -mindepth 1 -maxdepth 2 -type d -printf '%P\n'))"; exit 1; }
+            ver="$(jq -r .version "$root/$pkg/package.json")"
+            test "$ver" = "$want" || { echo "$pkg is at $ver, want $want"; exit 1; }
+          done
+      # The artifact round-trip can drop the executable bit; restore it before anything is packed.
+      - name: Make the binaries executable again
+        run: find stage/npm-stage -path '*/bin/*' -type f -exec chmod a+x {} +
+      - name: Pack every package, dry run
+        run: |
+          shopt -s nullglob
+          for pkg in stage/npm-stage/@kftcda/*/ stage/npm-stage/rigswig; do
+            (cd "$pkg" && npm publish --dry-run --access public > /dev/null)
+          done
+      - name: Publish the platform packages, then the picker
+        run: |
+          shopt -s nullglob
+          for pkg in stage/npm-stage/@kftcda/*/; do
+            (cd "$pkg" && npm publish --access public)
+          done
+          (cd stage/npm-stage/rigswig && npm publish)

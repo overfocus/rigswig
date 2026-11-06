@@ -35,3 +35,13 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.85
       - run: cargo check --locked --all-targets
+
+  # The npm distribution: the package builder, the picker shim and their fit with release.yml.
+  npm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: node npm/test.mjs
