@@ -5,8 +5,13 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-publish.workspace = true
+homepage.workspace = true
+keywords.workspace = true
 description.workspace = true
+# The repo's README, copied into the package by cargo; crates.io resolves its relative links and images against
+# `repository`.
+readme = "../../README.md"
+categories = ["command-line-utilities", "development-tools"]
 
 [[bin]]
 name = "rigswig"
@@ -19,7 +24,7 @@ default = ["github"]
 github = ["dep:ureq"]
 
 [dependencies]
-rigswig-core = { path = "../rigswig-core" }
+rigswig-core = { path = "../rigswig-core", version = "0.1.0" }
 # Reading a repo archive into memory (`--archive`, `--github`): gzip in pure Rust, and tar without extended attributes.
 flate2 = { version = "1.1", default-features = false, features = ["rust_backend"] }
 tar = { version = "0.4", default-features = false }

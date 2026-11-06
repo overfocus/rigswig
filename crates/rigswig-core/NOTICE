@@ -1,0 +1,10 @@
+rigswig
+Copyright 2026 Kevin Ferron
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+The page served by `rigswig ui` includes two fonts, unmodified, under the SIL Open Font License 1.1:
+- Josefin Sans, Copyright 2010 The Josefin Sans Project Authors; Reserved Font Name "Josefin Sans"
+  (crates/rigswig/assets/fonts/OFL-JosefinSans.txt)
+- Pixelify Sans, Copyright 2021 The Pixelify Sans Project Authors
+  (crates/rigswig/assets/fonts/OFL-PixelifySans.txt)
