@@ -48,6 +48,14 @@ instead of overriding.
 - Rules: every `.md` under `.claude/rules/` and `<config>/rules/`. Without `paths` front matter a rule loads at launch;
   with it, when a matching file is read or edited (`load.when: on-match`).
 - `CLAUDE.md` files in subfolders load on demand: not modelled.
+- **Auto memory** ([memory](https://code.claude.com/docs/en/memory.md), "Auto memory"): the first 200 lines of
+  `MEMORY.md`, or its first 25 KB, whichever comes first, load at the start of every conversation; topic files beside
+  it are read on demand. The folder is `<config>/projects/<project>/memory/`, where `<project>` comes from the git
+  repository, so worktrees share the main checkout's folder; `CLAUDE_CODE_PROJECT_DIR_NAME` names it instead.
+  `autoMemoryDirectory` (any settings scope, absolute or `~/`) moves it; `autoMemoryEnabled: false` or
+  `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` turns it off. How the path becomes `<project>` is not documented: rigswig turns
+  every character that is not a letter or digit into `-`, as Claude Code's own folders show (**inferred**). The
+  workspace-trust rule for a repo's `autoMemoryDirectory` is not modelled.
 
 ## Agents, skills and commands
 
@@ -75,6 +83,8 @@ instead of overriding.
 - Handler types: `command`, `http`, `mcp_tool`, `prompt`, `agent`. rigswig shows a command's script by file name and an
   HTTP hook's scheme and host only.
 - Hooks in skill or agent front matter: not modelled.
+- A SessionStart hook's output joins the context before the first prompt; rigswig never runs hooks, so each effective
+  SessionStart hook is named in `context.notMeasured`.
 
 ## MCP servers
 
@@ -91,7 +101,8 @@ instead of overriding.
 - `deniedMcpServers` merge from every layer and win; `allowedMcpServers` merge too (unless managed
   `allowManagedMcpServersOnly`); unset allows all, an empty list allows none. Entries match `serverName`, `serverUrl`
   (with `*`) or `serverCommand` (the exact command and arguments).
-- Tool listings are not read: MCP context cost is `unknown`.
+- Tool listings are not read: MCP context cost is `unknown`, and each effective server is named in
+  `context.notMeasured` (a server with hundreds of tools adds a long listing even when its tools load on demand).
 
 ## Plugins
 

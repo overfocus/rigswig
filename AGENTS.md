@@ -31,7 +31,8 @@ Schema); every new crate needs a reason in its commit message.
   A new kind of change needs a plan test, a refusal test and a browser check, and never targets managed settings,
   `.claude.json` or a symlink.
 - **Nothing personal ships.** No maintainer's paths, repo names or vault in code, tests, fixtures or docs. Fixtures
-  are invented. Private folders are a user-configured deny list, empty by default.
+  are invented. Private folders are a user-configured deny list
+  (`~/.rigswig/private.json`), empty by default.
 - **The page wears kevinferron.com's brand, by the maintainer's choice (2026-11-05):** black, neon green and cyan,
   Josefin Sans and Pixelify Sans (OFL, inlined; `assets/fonts/README.md`), and the glowing kevinferron.com wordmark
   under rigswig's as "brought to you by". The CLI stays plain.

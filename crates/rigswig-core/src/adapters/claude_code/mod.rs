@@ -54,7 +54,7 @@ impl Adapter for ClaudeCode {
     }
 
     fn env_vars(&self) -> &'static [&'static str] {
-        &["CLAUDE_CONFIG_DIR", "ANTHROPIC_MODEL"]
+        &["CLAUDE_CONFIG_DIR", "ANTHROPIC_MODEL", "CLAUDE_CODE_DISABLE_AUTO_MEMORY", "CLAUDE_CODE_PROJECT_DIR_NAME"]
     }
 
     fn detect(&self, ctx: &Ctx) -> Detection {
@@ -93,6 +93,7 @@ impl Adapter for ClaudeCode {
         let plugins = plugins::discover(&mut b, &p, &scopes);
 
         files::instructions(&mut b, &p);
+        files::memory_index(&mut b, &p);
         files::agents_skills_commands(&mut b, &p, &plugins);
         hooks::all(&mut b, &scopes, &plugins);
         mcp::all(&mut b, &p, &scopes, &plugins);
@@ -102,13 +103,7 @@ impl Adapter for ClaudeCode {
             what: "the system prompt and built-in tool definitions".into(),
             why: "they come with Claude Code, not from any file".into(),
         });
-        let servers = b.items.iter().filter(|i| i.effective && i.detail.kind() == "mcp").count();
-        if servers > 0 {
-            b.not_measured.push(NotMeasured {
-                what: format!("tool listings of {servers} MCP server{}", if servers == 1 { "" } else { "s" }),
-                why: "rigswig reads server names, never connects to them".into(),
-            });
-        }
+        b.not_measured_common();
         for note in [
             "command-line flags (--model, --settings, --agents, --mcp-config, --add-dir, --plugin-dir)",
             "server-delivered and MDM managed settings (macOS profiles, Windows registry)",

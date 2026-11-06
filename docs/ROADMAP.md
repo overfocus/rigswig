@@ -41,6 +41,12 @@ Release builds (done, not yet run): a version tag builds five platform binaries 
 ([RELEASING.md](RELEASING.md)). Left for v0.1: the first tag, and crates.io, npm and Homebrew, which need the
 maintainer's accounts.
 
+Audit (done, [#2](https://github.com/overfocus/rigswig/issues/2); [AUDIT.md](AUDIT.md)): `rigswig audit` with
+ranked findings, savings and fixes, and fleet mode (`--repos`). The gaps it found are closed: the auto-memory index is
+measured, and SessionStart hooks and each MCP server are named among the unmeasured costs. Left from #2: the three
+write-mode actions (archive an agent or skill, move a plugin to project scope, drop permission rules). The page runs
+audits (one repo or a fleet) with a progress bar and shows the findings.
+
 ## Later
 
 - Write mode for Codex (`config.toml` with comments kept) and for more kinds (skills, hooks) where the tool

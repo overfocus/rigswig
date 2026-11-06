@@ -1,5 +1,6 @@
 //! rigswig: a harness-agnostic, read-only explorer for coding-agent setups (docs/ROADMAP.md).
 
+mod audits;
 mod os_fs;
 mod render;
 mod ui;
@@ -22,6 +23,12 @@ Usage:
                                             (--tool picks the harness; by default the one with the most evidence)
   rigswig check [--repo <path>] [--tool <id>] [--max-tokens <n>] [--max-item-tokens <n>] [--no-warnings] [--json]
                                             for CI: exits 1 when a limit is passed (n may be 40000, 40k or 1m)
+  rigswig audit [--repo <path>] [--tool <id>] [--json]
+                                            ranked findings: what costs context and nothing here references, plugins the
+                                            repo's files do not call for, instruction files over budget, repeated text,
+                                            dead references and piled-up permission rules; each with a saving and a fix
+  rigswig audit --repos <path|glob>... [--tool <id>] [--json]
+                                            fleet mode: each user-scope item against every repo (--repos '~/code/*')
   rigswig tools [--repo <path>]             the harnesses rigswig knows, and the evidence for each in this repo
   rigswig schema                            the JSON Schema of `status --json`
 
@@ -81,6 +88,38 @@ fn home() -> Option<PathBuf> {
     std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).map(PathBuf::from).filter(|p| p.is_absolute())
 }
 
+/// The user's private folders, `~/.rigswig/private.json` (`{ "private": ["~/notes", "/srv/secret"] }`): rigswig
+/// refuses them as a repo, and fleet mode skips them. Empty unless the user writes the file.
+fn private_folders(home: &std::path::Path) -> Vec<PathBuf> {
+    #[derive(serde::Deserialize)]
+    struct File {
+        private: Vec<String>,
+    }
+    let Ok(text) = std::fs::read_to_string(home.join(".rigswig/private.json")) else { return Vec::new() };
+    let Ok(f) = serde_json::from_str::<File>(&text) else {
+        eprintln!(
+            "rigswig: ~/.rigswig/private.json is not {{\"private\": [paths]}}; refusing every repo until it is fixed"
+        );
+        return vec![PathBuf::from("/")];
+    };
+    f.private
+        .iter()
+        .map(|p| match p.strip_prefix("~/") {
+            Some(rest) => home.join(rest),
+            None => PathBuf::from(p),
+        })
+        .map(|p| real_path(&p).unwrap_or(p))
+        .collect()
+}
+
+/// An error when `repo` (real) is inside a private folder.
+fn refuse_private(repo: &std::path::Path, home: &std::path::Path) -> Result<(), String> {
+    if private_folders(home).iter().any(|p| repo.starts_with(p)) {
+        return Err("that folder is listed in ~/.rigswig/private.json, so rigswig does not read it".into());
+    }
+    Ok(())
+}
+
 #[derive(PartialEq)]
 enum Mode {
     Status,
@@ -131,6 +170,9 @@ fn status(args: &[String], mode: Mode) -> ExitCode {
         Err(_) => return fail("that repo folder does not exist"),
     };
     let Some(home) = home() else { return fail("the home folder is not set") };
+    if let Err(e) = refuse_private(&repo, &home) {
+        return fail(&e);
+    }
 
     let adapters = rigswig_core::adapters::all();
     let ctx_for = |a: &dyn Adapter| {
@@ -241,7 +283,16 @@ fn status(args: &[String], mode: Mode) -> ExitCode {
         };
         let idle = std::time::Duration::from_secs(idle_minutes * 60);
         let act_ref: Option<&ui::Act> = if allow_writes { Some(&act) } else { None };
-        let started = ui::serve(port, idle, &render, act_ref, &|url| {
+        // Audits read only, so they run without write mode: one at a time, on their own thread, polled by the page.
+        let audit_jobs = audits::Jobs::default();
+        let jobs = |route: &str, t: Option<&str>, body: &str| -> Result<String, (u16, String)> {
+            let id = t.unwrap_or(&default);
+            if !scored.iter().any(|(a, _)| a.id() == id) {
+                return Err((404, "no such harness".into()));
+            }
+            audit_jobs.route(route, &repo, id, body)
+        };
+        let started = ui::serve(port, idle, &render, act_ref, Some(&jobs), &|url| {
             if allow_writes {
                 println!("rigswig ui (WRITE MODE, local only): {url}");
                 println!(
@@ -288,10 +339,16 @@ fn status(args: &[String], mode: Mode) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-/// Resolve `tool` (or the adapter with the most evidence) for `repo`.
-fn resolve(repo: &std::path::Path, tool: Option<&str>) -> Result<rigswig_core::model::Harness, String> {
+/// Run `f` with `tool` (or the adapter with the most evidence) and its context for `repo`. `f` also gets the
+/// adapter's detection score.
+fn with_harness<R>(
+    repo: &std::path::Path,
+    tool: Option<&str>,
+    f: impl FnOnce(&dyn Adapter, &Ctx, u8) -> R,
+) -> Result<R, String> {
     let repo = real_path(repo).map_err(|_| format!("no such folder: {}", repo.display()))?;
     let home = home().ok_or("the home folder is not set")?;
+    refuse_private(&repo, &home)?;
     let adapters = rigswig_core::adapters::all();
     let ctx_for = |a: &dyn Adapter| {
         let env = a.env_vars().iter().filter_map(|k| std::env::var(k).ok().map(|v| ((*k).to_string(), v))).collect();
@@ -303,7 +360,110 @@ fn resolve(repo: &std::path::Path, tool: Option<&str>) -> Result<rigswig_core::m
         }
         None => adapters.iter().max_by_key(|a| a.detect(&ctx_for(a.as_ref())).score).expect("an adapter"),
     };
-    Ok(a.resolve(&ctx_for(a.as_ref())))
+    let ctx = ctx_for(a.as_ref());
+    let score = a.detect(&ctx).score;
+    Ok(f(a.as_ref(), &ctx, score))
+}
+
+/// Resolve `tool` (or the adapter with the most evidence) for `repo`.
+fn resolve(repo: &std::path::Path, tool: Option<&str>) -> Result<rigswig_core::model::Harness, String> {
+    with_harness(repo, tool, |a, ctx, _| a.resolve(ctx))
+}
+
+/// `~/x` and `*` in the last part of a path: `~/code/*` is every folder in `~/code`.
+fn expand(pattern: &str) -> Result<Vec<PathBuf>, String> {
+    let p = match pattern.strip_prefix("~/") {
+        Some(rest) => home().ok_or("the home folder is not set")?.join(rest),
+        None => PathBuf::from(pattern),
+    };
+    let name = p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    if !name.contains('*') {
+        return Ok(vec![p]);
+    }
+    if p.parent().is_some_and(|d| d.to_string_lossy().contains('*')) {
+        return Err(format!("only the last part of a path may use *: {pattern}"));
+    }
+    let dir = p.parent().map(PathBuf::from).unwrap_or_default();
+    let mut out: Vec<PathBuf> = std::fs::read_dir(&dir)
+        .map_err(|_| format!("no such folder: {}", dir.display()))?
+        .filter_map(Result::ok)
+        .filter(|e| e.file_type().is_ok_and(|t| t.is_dir()))
+        .filter(|e| {
+            let n = e.file_name().to_string_lossy().into_owned();
+            !n.starts_with('.') && rigswig_core::whatif::glob(&name, &n)
+        })
+        .map(|e| e.path())
+        .collect();
+    out.sort();
+    Ok(out)
+}
+
+/// `rigswig audit`: findings for one repo, or fleet mode across many.
+fn audit(args: &[String]) -> ExitCode {
+    let mut repo: Option<PathBuf> = None;
+    let mut repos: Vec<String> = Vec::new();
+    let mut tool: Option<String> = None;
+    let mut json = false;
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        let mut value =
+            |name: &str| it.next().filter(|v| !v.starts_with("--")).cloned().ok_or(format!("{name} needs a value"));
+        match a.as_str() {
+            "--json" => json = true,
+            "--repo" => match value("--repo") {
+                Ok(v) => repo = Some(PathBuf::from(v)),
+                Err(e) => return fail(&e),
+            },
+            "--repos" => match value("--repos") {
+                Ok(v) => repos.push(v),
+                Err(e) => return fail(&e),
+            },
+            "--tool" => match value("--tool") {
+                Ok(v) => tool = Some(v),
+                Err(e) => return fail(&e),
+            },
+            // A shell that expands `--repos ~/code/*` passes the folders as separate words.
+            other if !other.starts_with("--") && !repos.is_empty() => repos.push(other.to_string()),
+            other => return fail(&format!("unknown option: {other}")),
+        }
+    }
+    if repo.is_some() && !repos.is_empty() {
+        return fail("use --repo for one repo or --repos for many, not both");
+    }
+    let quiet = &mut |_: rigswig_core::audit::Progress| {};
+    if repos.is_empty() {
+        let here = repo.unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+        let a = match audits::repo(&here, tool.as_deref(), quiet) {
+            Ok((a, _)) => a,
+            Err(e) => return fail(&e),
+        };
+        if json {
+            println!("{}", serde_json::to_string_pretty(&a).expect("serialises"));
+        } else {
+            print!("{}", render::audit_text(&a));
+        }
+        return ExitCode::SUCCESS;
+    }
+
+    let run = match audits::fleet(&repos, tool.as_deref(), quiet) {
+        Ok(r) => r,
+        Err(e) => return fail(&e),
+    };
+    for e in &run.errors {
+        eprintln!("rigswig: {}", printable(e));
+    }
+    if json {
+        println!("{}", serde_json::to_string_pretty(&run.fleet).expect("serialises"));
+    } else {
+        print!("{}", render::fleet_text(&run.fleet));
+        if !run.skipped.is_empty() {
+            println!("  Skipped (no harness found): {}", printable(&run.skipped.join(", ")));
+        }
+        if run.private_skipped > 0 {
+            println!("  Skipped {} private folder(s) (~/.rigswig/private.json)", run.private_skipped);
+        }
+    }
+    ExitCode::SUCCESS
 }
 
 /// `rigswig check`: limits for CI. Exit 0 when every limit holds, 1 when one does not, 2 on a usage error.
@@ -471,6 +631,7 @@ fn main() -> ExitCode {
         Some("ui") => status(&args[1..], Mode::Ui),
         Some("compare") => compare(&args[1..]),
         Some("check") => check(&args[1..]),
+        Some("audit") => audit(&args[1..]),
         Some(other) => fail(&format!("unknown or unimplemented command: {other}")),
     }
 }

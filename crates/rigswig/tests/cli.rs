@@ -256,3 +256,77 @@ fn write_mode_plans_applies_backs_up_and_undoes() {
     assert_eq!(http(port, "POST", "/api/undo", &hdr(port, &token), "{}").0, 409, "nothing left to undo");
     let _ = rw.kill();
 }
+
+impl Sandbox {
+    fn cmd(&self, args: &[&str]) -> std::process::Output {
+        Command::new(env!("CARGO_BIN_EXE_rigswig"))
+            .args(args)
+            .env("HOME", self.0.join("home"))
+            .env("USERPROFILE", self.0.join("home"))
+            .env_remove("CLAUDE_CONFIG_DIR")
+            .env_remove("ANTHROPIC_MODEL")
+            .env_remove("CLAUDE_CODE_DISABLE_AUTO_MEMORY")
+            .env_remove("CLAUDE_CODE_PROJECT_DIR_NAME")
+            .output()
+            .unwrap()
+    }
+    fn path(&self, rel: &str) -> String {
+        self.0.join(rel).to_string_lossy().into_owned()
+    }
+}
+
+#[test]
+fn audit_prints_ranked_findings_and_json() {
+    let s = Sandbox::new("audit");
+    s.write("repo/.claude/settings.local.json", r#"{"permissions":{"allow":["Bash(git push *)"]}}"#);
+    s.write("repo/CLAUDE.md", "See `docs/missing.md`.\n");
+    s.write("repo/docs/here.md", "x");
+    let repo = s.path("repo");
+    let out = s.cmd(&["audit", "--repo", &repo]);
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(text.contains("1. HIGH"), "{text}");
+    assert!(text.contains("git push"), "{text}");
+    assert!(text.contains("docs/missing.md"), "{text}");
+
+    let json = s.cmd(&["audit", "--repo", &repo, "--json"]);
+    let v: serde_json::Value = serde_json::from_slice(&json.stdout).unwrap();
+    assert_eq!(v["findings"][0]["code"], "permission-broad");
+    assert_eq!(v["findings"][0]["severity"], "high");
+}
+
+#[test]
+fn audit_fleet_takes_a_glob_and_skips_folders_without_a_harness() {
+    let s = Sandbox::new("fleet");
+    s.write("code/a/CLAUDE.md", "# a\n");
+    s.write("code/b/CLAUDE.md", "# b\nAsk the helper-bot agent.\n");
+    s.write("code/c/CLAUDE.md", "# c\n");
+    std::fs::create_dir_all(s.0.join("code/plain")).unwrap();
+    s.write("home/.claude/agents/helper-bot.md", "---\nname: helper-bot\ndescription: helps\ntools: Read\n---\n");
+    let glob = s.path("code/*");
+    let out = s.cmd(&["audit", "--repos", &glob]);
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(text.contains("3 repos"), "{text}");
+    assert!(text.contains("move to project scope in that one  -> b"), "{text}");
+    assert!(text.contains("Skipped (no harness found): plain"), "{text}");
+}
+
+#[test]
+fn private_folders_are_refused_and_skipped() {
+    let s = Sandbox::new("private");
+    s.write("code/open/CLAUDE.md", "# open\n");
+    s.write("code/secret/CLAUDE.md", "# secret\n");
+    s.write("home/.rigswig/private.json", &format!(r#"{{"private":[{}]}}"#, serde_json::json!(s.path("code/secret"))));
+    let secret = s.path("code/secret");
+    for cmd in ["status", "audit", "check"] {
+        let out = s.cmd(&[cmd, "--repo", &secret]);
+        assert_eq!(out.status.code(), Some(2), "{cmd} refuses a private folder");
+        assert!(String::from_utf8_lossy(&out.stderr).contains("private.json"));
+    }
+    let out = s.cmd(&["audit", "--repos", &s.path("code/*")]);
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(text.contains("1 repos") || text.contains("rigswig audit: 1 repo"), "{text}");
+    assert!(text.contains("Skipped 1 private folder"), "{text}");
+    assert!(!text.contains("secret"), "{text}");
+}

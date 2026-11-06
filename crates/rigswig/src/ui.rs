@@ -1,7 +1,8 @@
 //! `rigswig ui`: the same harness as a local, read-only page.
 //!
-//! One repo, chosen at start. Every request re-reads the setup and returns one HTML page with the harness JSON inside;
-//! there is no API and nothing the page can change. The server:
+//! One repo, chosen at start. Every request re-reads the setup and returns one HTML page with the harness JSON inside.
+//! The page can run an audit (`/api/audit/*`, read-only, always on) and, only with `--allow-writes`, change settings
+//! (`/api/plan`, `/api/apply`, `/api/undo`). The server:
 //! - listens on 127.0.0.1 only, on a random port unless one is given;
 //! - answers only requests that carry the random token (`?t=`) and a `Host` of exactly `127.0.0.1:<port>` or
 //!   `localhost:<port>` (which stops DNS rebinding), and refuses any cross-site `Origin` or `Sec-Fetch-Site`;
@@ -177,8 +178,8 @@ pub struct ToolChoice {
 /// How a request is turned into page data: `(tool, vs)` to embedded JSON, `None` for an unknown tool.
 pub type Render<'a> = dyn Fn(Option<&str>, Option<&str>) -> Option<String> + 'a;
 
-/// Write mode's actions: `(route, tool, body)` to a JSON answer, or a status and a message. Present only when the page
-/// was started with `--allow-writes`.
+/// An API's actions: `(route, tool, body)` to a JSON answer, or a status and a message. Write mode's are present only
+/// when the page was started with `--allow-writes`; the audit's always are.
 pub type Act<'a> = dyn Fn(&str, Option<&str>, &str) -> Result<String, (u16, String)> + 'a;
 
 fn json(status: u16, body: String) -> Response {
@@ -193,11 +194,19 @@ fn json(status: u16, body: String) -> Response {
     }
 }
 
-/// `/api/*`: write mode only, POST only, the token in a header (a cross-site form cannot set one), an exact Origin,
-/// a JSON body. The page's GET gate (Host, Sec-Fetch-Site) has already run.
-fn api(req: &Request, token: &str, port: u16, act: Option<&Act>) -> Response {
+/// `/api/*`: POST only, the token in a header (a cross-site form cannot set one), an exact Origin, a JSON body. The
+/// audit routes are read-only and always on; the others need write mode. The page's GET gate (Host, Sec-Fetch-Site)
+/// has already run.
+fn api(req: &Request, token: &str, port: u16, act: Option<&Act>, jobs: Option<&Act>) -> Response {
     let refuse = |status: u16, msg: &str| json(status, serde_json::json!({ "error": msg }).to_string());
-    let Some(act) = act else { return refuse(404, "write mode is off: start the page with rigswig ui --allow-writes") };
+    let target = if req.path.starts_with("/api/audit/") { jobs } else { act };
+    let Some(act) = target else {
+        return if req.path.starts_with("/api/audit/") {
+            refuse(404, "this page cannot run audits")
+        } else {
+            refuse(404, "write mode is off: start the page with rigswig ui --allow-writes")
+        };
+    };
     if req.method != "POST" {
         return refuse(405, "POST only");
     }
@@ -221,7 +230,14 @@ fn api(req: &Request, token: &str, port: u16, act: Option<&Act>) -> Response {
 
 /// Answer one request. `render(tool, vs)` resolves the harness for a tool id (or the default when `None`), and a
 /// second one to compare with when `vs` is given, and returns the page data as embedded JSON.
-pub fn handle(req: &Request, token: &str, port: u16, render: &Render, act: Option<&Act>) -> Response {
+pub fn handle(
+    req: &Request,
+    token: &str,
+    port: u16,
+    render: &Render,
+    act: Option<&Act>,
+    jobs: Option<&Act>,
+) -> Response {
     let host_ok =
         req.header("Host").is_some_and(|h| h == format!("127.0.0.1:{port}") || h == format!("localhost:{port}"));
     if !host_ok {
@@ -236,7 +252,7 @@ pub fn handle(req: &Request, token: &str, port: u16, render: &Render, act: Optio
         return plain(403, "cross-site request refused");
     }
     if req.path.starts_with("/api/") {
-        return api(req, token, port, act);
+        return api(req, token, port, act, jobs);
     }
     if req.method != "GET" {
         return plain(405, "GET only");
@@ -262,7 +278,7 @@ pub fn handle(req: &Request, token: &str, port: u16, render: &Render, act: Optio
                 format!(
                     "default-src 'none'; script-src 'nonce-{nonce}'; style-src 'nonce-{nonce}'; img-src data:; font-src data:;{connect} \
                      base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
-                    connect = if act.is_some() { " connect-src 'self';" } else { "" }
+                    connect = if act.is_some() || jobs.is_some() { " connect-src 'self';" } else { "" }
                 ),
             ),
             ("X-Content-Type-Options", "nosniff".into()),
@@ -345,6 +361,7 @@ pub fn serve(
     idle: Duration,
     render: &Render,
     act: Option<&Act>,
+    jobs: Option<&Act>,
     ready: &dyn Fn(&str),
 ) -> std::io::Result<()> {
     let listener = TcpListener::bind(("127.0.0.1", port))?;
@@ -363,7 +380,7 @@ pub fn serve(
                     Ok((head, body)) => match parse(&head.replace("\r\n", "\n").replace('\n', "\r\n")) {
                         Some(mut req) => {
                             req.body = body;
-                            handle(&req, &token, port, render, act)
+                            handle(&req, &token, port, render, act, jobs)
                         }
                         None => plain(400, "bad request"),
                     },
@@ -398,7 +415,14 @@ mod tests {
     }
 
     fn get(path: &str, extra: &str) -> Response {
-        handle(&req(&format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{PORT}\r\n{extra}\r\n")), TOKEN, PORT, &ok, None)
+        handle(
+            &req(&format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{PORT}\r\n{extra}\r\n")),
+            TOKEN,
+            PORT,
+            &ok,
+            None,
+            None,
+        )
     }
 
     #[test]
@@ -420,16 +444,24 @@ mod tests {
         assert_eq!(get("/?t=abc123", "Sec-Fetch-Site: cross-site\r\n").status, 403);
         assert_eq!(get("/?t=abc123", "Origin: http://127.0.0.1:4567\r\nSec-Fetch-Site: same-origin\r\n").status, 200);
         assert_eq!(get("/x?t=abc123", "").status, 404);
-        let rebind =
-            handle(&req("GET /?t=abc123 HTTP/1.1\r\nHost: attacker.example:4567\r\n\r\n"), TOKEN, PORT, &ok, None);
+        let rebind = handle(
+            &req("GET /?t=abc123 HTTP/1.1\r\nHost: attacker.example:4567\r\n\r\n"),
+            TOKEN,
+            PORT,
+            &ok,
+            None,
+            None,
+        );
         assert_eq!(rebind.status, 421);
-        let post = handle(&req("POST /?t=abc123 HTTP/1.1\r\nHost: 127.0.0.1:4567\r\n\r\n"), TOKEN, PORT, &ok, None);
+        let post =
+            handle(&req("POST /?t=abc123 HTTP/1.1\r\nHost: 127.0.0.1:4567\r\n\r\n"), TOKEN, PORT, &ok, None, None);
         assert_eq!(post.status, 405);
         let none = handle(
             &req("GET /?t=abc123&tool=nope HTTP/1.1\r\nHost: 127.0.0.1:4567\r\n\r\n"),
             TOKEN,
             PORT,
             &|_, _| None,
+            None,
             None,
         );
         assert_eq!(none.status, 404);
@@ -455,7 +487,44 @@ mod tests {
         let head = format!("POST {path} HTTP/1.1\r\nHost: 127.0.0.1:{PORT}\r\n{headers}\r\n");
         let mut r = req(&head);
         r.body = body.into();
-        handle(&r, TOKEN, PORT, &ok, act)
+        handle(&r, TOKEN, PORT, &ok, act, None)
+    }
+
+    fn post_jobs(path: &str, headers: &str, body: &str, act: Option<&Act>, jobs: Option<&Act>) -> Response {
+        let head = format!("POST {path} HTTP/1.1\r\nHost: 127.0.0.1:{PORT}\r\n{headers}\r\n");
+        let mut r = req(&head);
+        r.body = body.into();
+        handle(&r, TOKEN, PORT, &ok, act, jobs)
+    }
+
+    #[test]
+    fn audits_run_without_write_mode_behind_the_same_gate() {
+        let echo = |route: &str, tool: Option<&str>, body: &str| -> Result<String, (u16, String)> {
+            Ok(format!("{route}|{}|{body}", tool.unwrap_or("-")))
+        };
+        let jobs: Option<&Act> = Some(&echo);
+        let good = "Origin: http://127.0.0.1:4567\r\nX-Rigswig-Token: abc123\r\nContent-Type: application/json\r\n";
+        let r = post_jobs("/api/audit/start?tool=codex", good, "{}", None, jobs);
+        assert_eq!(r.status, 200, "no write mode needed");
+        assert_eq!(r.body, "/api/audit/start|codex|{}");
+        assert_eq!(post_jobs("/api/plan", good, "{}", None, jobs).status, 404, "the audit does not open write mode");
+        assert_eq!(post_jobs("/api/audit/start", good, "{}", None, None).status, 404);
+        let no_token = "Origin: http://127.0.0.1:4567\r\nContent-Type: application/json\r\n";
+        assert_eq!(post_jobs("/api/audit/start", no_token, "{}", None, jobs).status, 403);
+        let foreign = "Origin: http://evil.example\r\nX-Rigswig-Token: abc123\r\nContent-Type: application/json\r\n";
+        assert_eq!(post_jobs("/api/audit/poll", foreign, "{}", None, jobs).status, 403);
+        let form = "Origin: http://127.0.0.1:4567\r\nX-Rigswig-Token: abc123\r\nContent-Type: text/plain\r\n";
+        assert_eq!(post_jobs("/api/audit/start", form, "{}", None, jobs).status, 415);
+        let page = handle(
+            &req(&format!("GET /?t=abc123 HTTP/1.1\r\nHost: 127.0.0.1:{PORT}\r\n\r\n")),
+            TOKEN,
+            PORT,
+            &ok,
+            None,
+            jobs,
+        );
+        let csp = &page.headers.iter().find(|(k, _)| *k == "Content-Security-Policy").unwrap().1;
+        assert!(csp.contains("connect-src 'self'"), "the page may poll its own server: {csp}");
     }
 
     #[test]
@@ -476,6 +545,7 @@ mod tests {
             PORT,
             &ok,
             act,
+            None,
         );
         assert_eq!(get.status, 405);
         let no_origin = "X-Rigswig-Token: abc123\r\nContent-Type: application/json\r\n";

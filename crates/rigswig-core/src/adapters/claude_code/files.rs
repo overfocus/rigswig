@@ -380,3 +380,88 @@ fn plugin_files(b: &mut Build, pl: &Plugin, skills: &mut Vec<usize>, commands: &
         }
     }
 }
+
+/// Auto memory loads the first 200 lines of `MEMORY.md`, or its first 25 KB, whichever comes first.
+const MEMORY_LINES: usize = 200;
+const MEMORY_BYTES: usize = 25 * 1024;
+
+/// The repo's git root: the main checkout for a worktree (whose `.git` is a file pointing into the main `.git`), the
+/// folder holding `.git` otherwise, and the repo folder itself outside git.
+fn git_root(b: &Build, repo: &Path) -> PathBuf {
+    for d in repo.ancestors() {
+        let g = d.join(".git");
+        match b.fs().kind(&g) {
+            Ok(crate::fs::EntryKind::Dir) => return d.to_path_buf(),
+            Ok(_) => {
+                let text = b.fs().read_to_string(&g).unwrap_or_default();
+                let Some(target) = text.lines().find_map(|l| l.strip_prefix("gitdir:")).map(str::trim) else {
+                    return d.to_path_buf();
+                };
+                let target = if Path::new(target).has_root() { PathBuf::from(target) } else { d.join(target) };
+                // `<main>/.git/worktrees/<name>`: the main checkout is the folder above `.git`.
+                let mut cur = target.as_path();
+                while let Some(parent) = cur.parent() {
+                    if cur.file_name().is_some_and(|n| n == "worktrees")
+                        && parent.file_name().is_some_and(|n| n == ".git")
+                    {
+                        return parent.parent().map_or_else(|| d.to_path_buf(), Path::to_path_buf);
+                    }
+                    cur = parent;
+                }
+                return d.to_path_buf();
+            }
+            Err(_) => {}
+        }
+    }
+    repo.to_path_buf()
+}
+
+/// The folder name Claude Code gives a project under `<config>/projects/`: every character that is not a letter or a
+/// digit becomes `-` (inferred from the folders it writes; the docs do not state the rule).
+fn project_dir_name(root: &Path) -> String {
+    root.to_string_lossy().chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect()
+}
+
+/// The auto-memory index, `MEMORY.md`, which loads at startup (topic files beside it load only when read).
+pub(crate) fn memory_index(b: &mut Build, p: &Paths) {
+    b.note_not_modelled(
+        "auto memory: the project folder name is inferred (non-alphanumerics become -); trust rules for a repo's autoMemoryDirectory",
+    );
+    let off_env = b.ctx.var("CLAUDE_CODE_DISABLE_AUTO_MEMORY").is_some_and(|v| v != "0" && v != "false");
+    let off_setting = super::settings::resolved(b, "autoMemoryEnabled") == Some(&Value::Bool(false));
+    if off_env || off_setting {
+        return;
+    }
+    let dir = match super::settings::resolved(b, "autoMemoryDirectory").and_then(Value::as_str) {
+        Some(d) if d.starts_with("~/") => b.ctx.home.join(&d[2..]),
+        Some(d) if Path::new(d).has_root() => PathBuf::from(d),
+        _ => {
+            let name = match b.ctx.var("CLAUDE_CODE_PROJECT_DIR_NAME") {
+                Some(n) if !n.contains(['/', '\\']) && n != ".." => n.to_string(),
+                _ => project_dir_name(&git_root(b, &p.repo)),
+            };
+            p.cfg.join("projects").join(name).join("memory")
+        }
+    };
+    let file = dir.join("MEMORY.md");
+    let Ok(text) = b.fs().read_to_string(&file) else { return };
+    let mut loaded: String = text.split_inclusive('\n').take(MEMORY_LINES).collect();
+    if loaded.len() > MEMORY_BYTES {
+        let mut cut = MEMORY_BYTES;
+        while !loaded.is_char_boundary(cut) {
+            cut -= 1;
+        }
+        loaded.truncate(cut);
+    }
+    let name = b.display(&file);
+    let mut it = b.item(
+        "user",
+        &name,
+        ItemDetail::Instruction(InstructionAttrs::default()),
+        LoadWhen::Startup,
+        calc(char_len(&loaded)),
+    );
+    it.origin.file = Some(name);
+    it.load.content_hash = Some(sha256_hex(&loaded));
+    b.push(it);
+}

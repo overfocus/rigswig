@@ -253,6 +253,42 @@ impl<'a> Build<'a> {
         }
     }
 
+    /// The unmeasured costs every harness shares: the tool listings of each effective MCP server, named (a server with
+    /// hundreds of tools adds a long listing even when its tools load on demand), and the text SessionStart hooks print
+    /// into the context, which rigswig cannot know without running them.
+    pub fn not_measured_common(&mut self) {
+        let mut servers: Vec<&str> =
+            self.items.iter().filter(|i| i.effective && i.detail.kind() == "mcp").map(|i| i.name.as_str()).collect();
+        servers.sort_unstable();
+        servers.dedup();
+        if !servers.is_empty() {
+            const SHOWN: usize = 6;
+            let mut names = servers.iter().take(SHOWN).copied().collect::<Vec<_>>().join(", ");
+            if servers.len() > SHOWN {
+                names.push_str(&format!(" and {} more", servers.len() - SHOWN));
+            }
+            let n = servers.len();
+            self.not_measured.push(NotMeasured {
+                what: format!("tool listings of {n} MCP server{} ({names})", if n == 1 { "" } else { "s" }),
+                why: "rigswig reads server names, never connects to them".into(),
+            });
+        }
+        let starts = self
+            .items
+            .iter()
+            .filter(|i| i.effective && matches!(&i.detail, ItemDetail::Hook(h) if h.event == "session-start"))
+            .count();
+        if starts > 0 {
+            self.not_measured.push(NotMeasured {
+                what: format!(
+                    "text printed by {starts} SessionStart hook{}, which joins the context",
+                    if starts == 1 { "" } else { "s" }
+                ),
+                why: "rigswig never runs hooks, so their output is unknown".into(),
+            });
+        }
+    }
+
     /// Assemble the harness: the context total from the effective startup items, and the coverage list.
     pub fn finish(self, adapter_version: &str, tool_version_assumed: Option<&str>, repo_label: String) -> Harness {
         let chars: u64 = self

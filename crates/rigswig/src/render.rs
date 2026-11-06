@@ -188,3 +188,114 @@ pub fn compare_text(c: &rigswig_core::compare::Comparison) -> String {
     }
     o
 }
+
+/// The text form of an audit.
+pub fn audit_text(a: &rigswig_core::audit::Audit) -> String {
+    use rigswig_core::audit::Severity;
+    let mut o = String::new();
+    let p = |s: &str| printable(s);
+    let _ = writeln!(
+        o,
+        "rigswig audit: {} in {}  (~{} tokens before you type)",
+        p(&a.tool),
+        p(&a.repo),
+        thousands(a.tokens)
+    );
+    if a.findings.is_empty() {
+        let _ = writeln!(o, "\n  No findings.");
+    }
+    let total: u64 = a.findings.iter().filter_map(|f| f.saving.as_ref()).map(|s| s.tokens).sum();
+    for (n, f) in a.findings.iter().enumerate() {
+        let sev = match f.severity {
+            Severity::High => "HIGH",
+            Severity::Medium => "MED ",
+            Severity::Low => "LOW ",
+        };
+        let _ = writeln!(o, "\n  {:>2}. {sev}  {}", n + 1, p(&f.title));
+        let _ = writeln!(o, "            [{}]", p(&f.code));
+        for e in &f.evidence {
+            let _ = writeln!(o, "            - {}", p(e));
+        }
+        if let Some(s) = &f.saving {
+            let _ = writeln!(
+                o,
+                "            saves ~{} tokens a session (check with: rigswig status --without {})",
+                thousands(s.tokens),
+                p(&if s.without.len() <= 3 {
+                    s.without.join(",")
+                } else {
+                    format!("<{} items, see --json>", s.without.len())
+                })
+            );
+        }
+        let _ = writeln!(o, "            fix: {}", p(&f.proposal));
+    }
+    if total > 0 {
+        let _ = writeln!(
+            o,
+            "\n  Together the findings with a saving take ~{} tokens out of each session (estimates).",
+            thousands(total)
+        );
+    }
+    for note in &a.notes {
+        let _ = writeln!(o, "  note: {}", p(note));
+    }
+    let _ = writeln!(o, "  Findings come from files only: \"nothing references it\" never means \"unused\".");
+    o
+}
+
+/// The text form of fleet mode.
+pub fn fleet_text(f: &rigswig_core::audit::Fleet) -> String {
+    use rigswig_core::audit::Recommendation;
+    let mut o = String::new();
+    let p = |s: &str| printable(s);
+    let _ = writeln!(o, "rigswig audit: {} repos\n", f.repos.len());
+    for r in &f.repos {
+        let _ = writeln!(
+            o,
+            "  {:<28} {:<12} ~{:>6} tokens  {} findings",
+            p(&r.repo),
+            p(&r.tool),
+            thousands(r.tokens),
+            r.findings
+        );
+    }
+    for (title, which) in [
+        ("Archive (nothing in any repo references it)", Recommendation::Archive),
+        ("Move to project scope", Recommendation::MoveToProject),
+        ("No signal to judge by", Recommendation::Unknown),
+        ("Keep at user scope", Recommendation::Keep),
+    ] {
+        let rows: Vec<_> = f.items.iter().filter(|i| i.recommendation == which).collect();
+        if rows.is_empty() {
+            continue;
+        }
+        let sum: u64 = rows.iter().map(|i| i.tokens).sum();
+        let _ = writeln!(o, "\n  {title}: {} (~{} tokens a session)", rows.len(), thousands(sum));
+        let limit = if which == Recommendation::Keep { 8 } else { 25 };
+        for i in rows.iter().take(limit) {
+            let r#where = if which == Recommendation::MoveToProject {
+                format!("  -> {}", p(&i.needed_in.join(", ")))
+            } else {
+                String::new()
+            };
+            let _ = writeln!(
+                o,
+                "    {:<8} {:<40} ~{:>5}  {}{}",
+                p(&i.kind),
+                p(&i.name.chars().take(40).collect::<String>()),
+                thousands(i.tokens),
+                p(&i.recommendation.sentence(i)),
+                r#where
+            );
+        }
+        if rows.len() > limit {
+            let _ = writeln!(o, "    ... and {} more (--json for all)", rows.len() - limit);
+        }
+    }
+    let _ = writeln!(o);
+    for n in &f.notes {
+        let _ = writeln!(o, "  note: {}", p(n));
+    }
+    o
+}
