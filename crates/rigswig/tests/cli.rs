@@ -414,4 +414,7 @@ fn a_build_without_the_github_feature_cannot_fetch() {
     let out = s.cmd(&["audit", "--github", "o/r"]);
     assert_eq!(out.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&out.stderr).contains("built without the github feature"));
+    let page = s.cmd(&["ui", "--allow-github", "--idle", "1"]);
+    assert_eq!(page.status.code(), Some(2), "the page cannot be started with downloads on");
+    assert!(String::from_utf8_lossy(&page.stderr).contains("built without the github feature"));
 }

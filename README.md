@@ -64,8 +64,9 @@ diff, the budget before and after), a backup and undo: see [docs/WRITE-MODE.md](
 These are the point of the tool, and they will be enforced by tests:
 
 - **No network unless you ask.** rigswig sends no telemetry and makes no request, except one: `--github owner/repo`
-  downloads that public repo's archive from `codeload.github.com`, and only in the run you give it to
-  ([GitHub repos](docs/GITHUB.md)). Build with `--no-default-features` for a rigswig with no network code at all.
+  downloads that public repo's archive from `codeload.github.com`, only in the run you give it to, or for each
+  GitHub audit you start on a page launched with `ui --allow-github` ([GitHub repos](docs/GITHUB.md)). Build with
+  `--no-default-features` for a rigswig with no network code at all.
 - **No model calls.** Everything it shows is read from files on your machine.
 - **Read-only by default.** Nothing is ever written unless you start the page with `rigswig ui --allow-writes`
   ([write mode](docs/WRITE-MODE.md)).

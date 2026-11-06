@@ -6,6 +6,7 @@ rigswig audit --github owner/repo@v1.2.0       # a branch, tag or commit
 rigswig audit --github https://github.com/owner/repo/tree/main
 rigswig status --github owner/repo --json      # what a session there loads
 rigswig audit --archive repo.tar.gz            # an archive you downloaded yourself: no network
+rigswig ui --allow-github                      # the page, with a GitHub box in its Audit section
 ```
 
 This is the only network request rigswig can make. Everything else rigswig does stays offline, so the rules here are
@@ -13,8 +14,10 @@ strict.
 
 ## The rules
 
-1. **Opt-in, per run.** A request happens only in a run given `--github`. No setting, config file or environment
-   variable turns it on, and `status`, `audit --repo`, `check`, `compare` and `ui` never fetch anything.
+1. **Opt-in, per run.** A request happens only in a run given `--github`, or from a page started with
+   `rigswig ui --allow-github`, once per audit you start there. No setting, config file or environment variable turns
+   it on, and `status`, `audit --repo`, `check`, `compare` and a page started without the flag never fetch anything:
+   the page shows the GitHub box switched off, and its server refuses a GitHub audit (403).
 2. **One host.** The input must be `owner/repo` with an optional `@ref`, or a `github.com` address, checked against
    GitHub's own name rules before anything is sent. It cannot name another host, a `file://` path or a query. The
    request goes to `https://codeload.github.com/<owner>/<repo>/tar.gz/<ref>`, and redirects are not followed.
@@ -42,8 +45,16 @@ strict.
 `ureq` with `rustls` and the Mozilla root store (HTTPS, only in the `github` feature); `flate2` with its pure-Rust
 backend and `tar` without extended attributes (reading archives, in every build).
 
+## On the page
+
+With `--allow-github`, the page's Audit section has a GitHub box: type `owner/repo` (or `owner/repo@ref`, or a
+github.com address) and press **Audit on GitHub**. The page's own server makes the download; the browser still talks
+only to `127.0.0.1`. The progress bar shows the megabytes received (GitHub sends no total, so the bar fills towards
+40% while downloading), then unpacking and each check. The findings appear as for a local repo, without the buttons
+that open items in the inventory (that inventory is your repo's, not this one's), and each "check it" command uses
+`--github`. The same input rules apply: the server checks the name before anything is sent.
+
 ## Not yet
 
-- On the page: auditing a GitHub repo from `rigswig ui`.
 - Private repos, with a token read from an environment variable and sent to GitHub only.
-- Several repos in one run.
+- Several repos in one run, and fleet mode across GitHub repos.

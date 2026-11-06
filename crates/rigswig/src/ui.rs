@@ -166,6 +166,8 @@ pub struct PageData<'a> {
     pub version: &'static str,
     /// Started with `--allow-writes`: the page may offer changes.
     pub writes: bool,
+    /// Started with `--allow-github`: the page may audit public GitHub repos.
+    pub github: bool,
 }
 
 #[derive(serde::Serialize)]

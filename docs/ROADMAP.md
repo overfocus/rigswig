@@ -48,8 +48,8 @@ write-mode actions (archive an agent or skill, move a plugin to project scope, d
 audits (one repo or a fleet) with a progress bar and shows the findings.
 
 GitHub repos (done; [GITHUB.md](GITHUB.md)): `audit` and `status` take `--github owner/repo[@ref]` (opt-in per run,
-one host, the archive unpacked into memory, an empty home) or `--archive <file>` (offline). Left: the page, private
-repos (a token from the environment), and a counts-only output for sharing.
+one host, the archive unpacked into memory, an empty home) or `--archive <file>` (offline). On the page with
+`ui --allow-github`. Left: private repos (a token from the environment), and a counts-only output for sharing.
 
 ## Later
 

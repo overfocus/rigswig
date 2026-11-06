@@ -67,8 +67,9 @@ user-scope item the same item in each repo.
 ## On the page
 
 `rigswig ui` has an Audit box under the budget. **Audit this repo** runs the audit for the page's repo and harness;
-**Audit many repos** runs fleet mode on the folders typed beside it (space-separated, `*` in the last part). Audits
-only read, so they work without `--allow-writes`.
+**Audit many repos** runs fleet mode on the folders typed beside it (space-separated, `*` in the last part).
+**Audit on GitHub** runs a public GitHub repo, when the page was started with `--allow-github`
+([GITHUB.md](GITHUB.md)). Audits only read, so they work without `--allow-writes`.
 
 The server runs one audit at a time on its own thread (`POST /api/audit/start`, then `POST /api/audit/poll` with the
 job's id, both behind the same gate as write mode: the page's Origin, the token in a header, a JSON body). The page

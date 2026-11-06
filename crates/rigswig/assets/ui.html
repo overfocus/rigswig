@@ -275,6 +275,11 @@ pre.diff .del { color: #ff7a7a; }
 .audit input[type="text"] { font-family: var(--mono); font-size: 14px; }
 .audit input::placeholder { color: #7d7d86; }
 .audit button:disabled { opacity: 0.5; cursor: progress; }
+.audit input:disabled, .audit button:disabled.act.off { opacity: 0.5; cursor: not-allowed; }
+.audit .controls.gh { margin-top: 8px; }
+.ghlabel { font: 500 13px var(--pixel); text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); min-width: 132px; }
+.ghhint { margin: 6px 0 0; font-size: 14px; color: var(--muted); }
+.ghhint code { font: 13px var(--mono); color: var(--fg); }
 .prog { margin-top: 14px; }
 .prog[hidden] { display: none; }
 .prog .track { position: relative; height: 16px; border-radius: 8px; background: var(--soft); border: 1px solid var(--line); overflow: hidden; }
@@ -285,7 +290,7 @@ pre.diff .del { color: #ff7a7a; }
 .prog .lbl b { color: var(--fg); font-weight: 600; overflow-wrap: anywhere; }
 .prog .lbl span { font-variant-numeric: tabular-nums; }
 .aresult { margin-top: 14px; }
-.astats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin-bottom: 12px; }
+.astats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin-bottom: 12px; }
 .astats .stat b { font-size: 24px; }
 .astats:focus, .aresult h3:focus { outline: none; }
 .astats .stat.good b { color: var(--green); }
@@ -320,6 +325,7 @@ button.link.small { min-height: 36px; font-size: 14px; padding: 0 10px; }
 .empty { color: var(--muted); padding: 10px 2px; margin: 0; }
 .fleetrepos button.link { margin-left: 10px; }
 ul.rows > li[hidden] { display: none; }
+@media (min-width: 760px) { .astats { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 ul.rows > li.drillrow { display: block; padding: 0; border-top: 0; min-height: 0; }
 .fleetrepos li.current { background: rgba(57, 255, 0, 0.05); }
 .fleetitems .rec { display: block; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
@@ -692,6 +698,16 @@ ul.rows > li.flash { outline: 2px solid var(--green); outline-offset: -2px; bord
   fleetIn.value = store("rigswig.fleet") || "";
   var fleetBtn = el("button", { type: "button", cls: "act off", text: "Audit many repos" });
   auditBox.appendChild(el("div", { cls: "controls" }, [runBtn, el("div", { cls: "fleetform" }, [fleetIn, fleetBtn])]));
+  // GitHub: only when the page was started with --allow-github; the server downloads, the page never leaves 127.0.0.1.
+  var ghIn = el("input", { type: "text", id: "gh-in", placeholder: "owner/repo or a github.com link", "aria-label": "A public GitHub repo to audit: owner/repo, owner/repo@branch, or its github.com address", "aria-describedby": "gh-hint", autocomplete: "off", spellcheck: "false" });
+  ghIn.value = store("rigswig.github") || "";
+  var ghBtn = el("button", { type: "button", cls: "act off", text: "Audit on GitHub" });
+  var ghHint = el("p", { cls: "ghhint", id: "gh-hint" }, data.github
+    ? ["Downloads the repo's archive from codeload.github.com into memory: nothing is written, nothing from it runs, and your own setup is not part of the result."]
+    : ["GitHub audits are off. Start the page with ", el("code", { text: "rigswig ui --allow-github" }), " to audit public repos; each audit downloads one archive from codeload.github.com."]);
+  if (!data.github) { ghIn.disabled = true; ghBtn.disabled = true; }
+  auditBox.appendChild(el("div", { cls: "controls gh" }, [el("span", { cls: "ghlabel", text: "GitHub" }), el("div", { cls: "fleetform" }, [ghIn, ghBtn])]));
+  auditBox.appendChild(ghHint);
   var fill = el("div", { cls: "fillbar" });
   var track = el("div", { cls: "track", role: "progressbar", "aria-labelledby": "audit-h", "aria-valuemin": "0", "aria-valuemax": "100", "aria-valuenow": "0" }, [fill]);
   var stageEl = el("b", { text: "" }), pctEl = el("span", { text: "" });
@@ -705,7 +721,7 @@ ul.rows > li.flash { outline: 2px solid var(--green); outline-offset: -2px; bord
   app.appendChild(auditBox);
 
   var auditing = false;
-  function busy(on) { auditing = on; runBtn.disabled = on; fleetBtn.disabled = on; }
+  function busy(on) { auditing = on; runBtn.disabled = on; fleetBtn.disabled = on; ghBtn.disabled = on || !data.github; }
   function showProg(fraction, stage, ms, state) {
     prog.removeAttribute("hidden");
     prog.className = "prog " + (state || "running");
@@ -735,6 +751,7 @@ ul.rows > li.flash { outline: 2px solid var(--green); outline-offset: -2px; bord
       showProg(1, "Done", j.elapsedMs, "done");
       busy(false);
       if (j.mode === "fleet") drawFleet(j.result, results);
+      else if (j.mode === "github") drawAudit(j.result, results, false, " --github " + j.result.repo);
       else drawAudit(j.result, results, true);
       var n = j.mode === "fleet" ? j.result.fleet.items.length + " user-scope items across " + j.result.fleet.repos.length + " repos" : j.result.findings.length + " findings";
       said.textContent = "Audit done: " + n + ".";
@@ -756,6 +773,14 @@ ul.rows > li.flash { outline: 2px solid var(--green); outline-offset: -2px; bord
   }
   fleetBtn.addEventListener("click", runFleet);
   fleetIn.addEventListener("keydown", function (e) { if (e.key === "Enter") runFleet(); });
+  function runGithub() {
+    var v = ghIn.value.trim();
+    if (!v) { ghIn.focus(); said.textContent = "Type a GitHub repo first, like owner/repo"; return; }
+    store("rigswig.github", v);
+    startAudit({ mode: "github", repo: v }, v + " from GitHub");
+  }
+  ghBtn.addEventListener("click", runGithub);
+  ghIn.addEventListener("keydown", function (e) { if (e.key === "Enter" && data.github) runGithub(); });
 
   // Show an item the audit names in the inventory above: open its tile's panel and outline its row.
   function reveal(id) {
@@ -820,7 +845,7 @@ ul.rows > li.flash { outline: 2px solid var(--green); outline-offset: -2px; bord
     d.appendChild(body);
     return d;
   }
-  function drawAudit(a, into, here) {
+  function drawAudit(a, into, here, repoArgGiven) {
     into.textContent = "";
     var bySev = { high: 0, medium: 0, low: 0 };
     a.findings.forEach(function (f) { bySev[f.severity] = (bySev[f.severity] || 0) + 1; });
@@ -862,7 +887,7 @@ ul.rows > li.flash { outline: 2px solid var(--green); outline-offset: -2px; bord
       var count = el("p", { cls: "muted sr", role: "status", "aria-live": "polite" });
       into.appendChild(count);
       into.appendChild(box);
-      var repoArg = here ? "" : " --repo " + a.repo;
+      var repoArg = repoArgGiven !== undefined ? repoArgGiven : here ? "" : " --repo " + a.repo;
       var list = function () {
         box.textContent = "";
         var shown = a.findings.filter(function (f) {

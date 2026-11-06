@@ -9,7 +9,7 @@ use std::time::Instant;
 
 use rigswig_core::audit::{self, Audit, Fleet, Progress};
 
-use crate::{expand, home, private_folders, real_path, with_harness};
+use crate::{Remote, expand, home, load_remote, private_folders, real_path, this_os, with_harness};
 
 /// Audit one repo; `progress` hears every stage, from reading the harness to ranking.
 pub fn repo(path: &Path, tool: Option<&str>, progress: &mut dyn FnMut(Progress)) -> Result<(Audit, u8), String> {
@@ -23,6 +23,46 @@ pub fn repo(path: &Path, tool: Option<&str>, progress: &mut dyn FnMut(Progress))
         out.notes.extend(note);
         (out, score)
     })
+}
+
+/// Audit a repo that is not here (GitHub or an archive file): in memory, with an empty home and no environment. The
+/// download is most of the wait, so it has the first 40% of the bar, by bytes received (GitHub sends no total).
+pub fn remote(r: &Remote, tool: Option<&str>, progress: &mut dyn FnMut(Progress)) -> Result<Audit, String> {
+    let what = match r {
+        Remote::Github(spec) => format!("Downloading {} from codeload.github.com", spec.label()),
+        Remote::Archive(p) => {
+            format!("Reading {}", p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default())
+        }
+    };
+    progress(Progress { stage: what.clone(), fraction: 0.0 });
+    let (fs, root, label, summary) = load_remote(r, &mut |bytes| {
+        let mb = bytes as f64 / (1024.0 * 1024.0);
+        progress(Progress { stage: format!("{what} ({mb:.1} MB)"), fraction: 0.4 * (1.0 - (-mb / 8.0).exp()) })
+    })?;
+    progress(Progress { stage: "Unpacked in memory; reading the harness".into(), fraction: 0.45 });
+    let adapters = rigswig_core::adapters::all();
+    // Nothing from this machine: no environment variables, an invented home, the archive's own files only.
+    let ctx = rigswig_core::adapter::Ctx {
+        fs: &fs,
+        env: std::collections::BTreeMap::new(),
+        home: PathBuf::from(crate::github::HOME),
+        repo: root,
+        os: this_os(),
+    };
+    let a = match tool {
+        Some(t) => {
+            adapters.iter().find(|a| a.id() == t).ok_or(format!("no harness called {t} (see `rigswig tools`)"))?
+        }
+        None => adapters.iter().max_by_key(|a| a.detect(&ctx).score).expect("an adapter"),
+    };
+    let h = a.resolve(&ctx);
+    // The built-in signals only: ~/.rigswig/signals.json belongs to this machine.
+    let mut out = audit::audit_with(&ctx, &h, &audit::Options::default(), &mut |p| {
+        progress(Progress { stage: p.stage, fraction: 0.5 + 0.5 * p.fraction })
+    });
+    out.repo = rigswig_core::read::redact::printable(&label);
+    out.notes.insert(0, summary);
+    Ok(out)
 }
 
 /// Fleet mode: every repo's audit and the fleet built from them.
@@ -105,6 +145,15 @@ pub struct Job {
 pub struct Jobs {
     current: Arc<Mutex<Option<Job>>>,
     next: Arc<Mutex<u64>>,
+    /// The page was started with `--allow-github`: a job may download a public repo from GitHub.
+    allow_github: bool,
+}
+
+/// What a job audits.
+enum Work {
+    Repo,
+    Fleet(Vec<String>),
+    Github(crate::github::Spec),
 }
 
 #[derive(serde::Deserialize)]
@@ -113,6 +162,9 @@ struct Start {
     mode: String,
     #[serde(default)]
     repos: Vec<String>,
+    /// For `github`: `owner/repo[@ref]` or a github.com address.
+    #[serde(default)]
+    repo: Option<String>,
 }
 
 #[derive(serde::Deserialize)]
@@ -135,21 +187,37 @@ impl Jobs {
         match route {
             "/api/audit/start" => {
                 let req: Start = serde_json::from_str(body).map_err(bad)?;
-                let mode: &'static str = match req.mode.as_str() {
-                    "repo" if req.repos.is_empty() => "repo",
+                let (mode, work): (&'static str, Work) = match req.mode.as_str() {
+                    "repo" if req.repos.is_empty() && req.repo.is_none() => ("repo", Work::Repo),
                     "repo" => return Err((400, "a repo audit takes no repos".into())),
                     "fleet" => {
-                        let ok = !req.repos.is_empty()
+                        let ok = req.repo.is_none()
+                            && !req.repos.is_empty()
                             && req.repos.len() <= MAX_PATTERNS
                             && req.repos.iter().all(|r| !r.trim().is_empty() && r.len() <= 1024);
                         if !ok {
                             return Err((400, format!("a fleet audit needs 1 to {MAX_PATTERNS} folders or patterns")));
                         }
-                        "fleet"
+                        ("fleet", Work::Fleet(req.repos))
                     }
-                    _ => return Err((400, "mode is repo or fleet".into())),
+                    "github" => {
+                        if !self.allow_github {
+                            return Err((
+                                403,
+                                "this page does not download: start it with rigswig ui --allow-github to audit GitHub repos"
+                                    .into(),
+                            ));
+                        }
+                        let input = req
+                            .repo
+                            .filter(|_| req.repos.is_empty())
+                            .ok_or((400, "a GitHub audit needs one repo".to_string()))?;
+                        let spec = crate::github::Spec::parse(&input).map_err(|e| (400, e))?;
+                        ("github", Work::Github(spec))
+                    }
+                    _ => return Err((400, "mode is repo, fleet or github".into())),
                 };
-                Ok(serde_json::to_string(&self.start(mode, repo.to_path_buf(), tool.to_string(), req.repos)?)
+                Ok(serde_json::to_string(&self.start(mode, work, repo.to_path_buf(), tool.to_string())?)
                     .expect("serialises"))
             }
             "/api/audit/poll" => {
@@ -171,7 +239,11 @@ impl Jobs {
         }
     }
 
-    fn start(&self, mode: &'static str, repo: PathBuf, tool: String, repos: Vec<String>) -> Result<Job, (u16, String)> {
+    pub fn new(allow_github: bool) -> Self {
+        Self { allow_github, ..Self::default() }
+    }
+
+    fn start(&self, mode: &'static str, work: Work, repo: PathBuf, tool: String) -> Result<Job, (u16, String)> {
         let id = {
             let mut n = self.next.lock().unwrap_or_else(|e| e.into_inner());
             *n += 1;
@@ -208,9 +280,14 @@ impl Jobs {
                     j.fraction = j.fraction.max(p.fraction.clamp(0.0, 1.0));
                 })
             };
-            let run = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| match mode {
-                "repo" => repo_json(&repo, &tool, &mut progress),
-                _ => fleet(&repos, Some(&tool), &mut progress).map(|f| serde_json::to_value(&f).expect("serialises")),
+            let run = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| match &work {
+                Work::Repo => repo_json(&repo, &tool, &mut progress),
+                Work::Fleet(repos) => {
+                    fleet(repos, Some(&tool), &mut progress).map(|f| serde_json::to_value(&f).expect("serialises"))
+                }
+                // The harness the repo itself shows the most evidence of, not the page's.
+                Work::Github(spec) => remote(&Remote::Github(spec.clone()), None, &mut progress)
+                    .map(|a| serde_json::to_value(&a).expect("serialises")),
             }));
             let outcome = run.unwrap_or_else(|_| Err("the audit stopped on an internal error".into()));
             update(&mut |j| match &outcome {
@@ -263,7 +340,22 @@ mod tests {
         assert_eq!(code(j.route("/api/audit/start", repo, "claude-code", r#"{"mode":"repo","extra":1}"#)), Some(400));
         assert_eq!(code(j.route("/api/audit/poll", repo, "claude-code", r#"{"id":7}"#)), Some(404), "no such job");
         assert_eq!(code(j.route("/api/audit/other", repo, "claude-code", "{}")), Some(404));
-        assert!(j.lock().is_none(), "nothing was started");
+        assert_eq!(
+            code(j.route("/api/audit/start", repo, "claude-code", r#"{"mode":"github","repo":"o/r"}"#)),
+            Some(403),
+            "a page started without --allow-github never downloads"
+        );
+        let gh = Jobs::new(true);
+        for bad in [
+            r#"{"mode":"github"}"#,
+            r#"{"mode":"github","repo":"https://evil.example/o/r"}"#,
+            r#"{"mode":"github","repo":"o/r@../x"}"#,
+            r#"{"mode":"github","repo":"o/r","repos":["~/x"]}"#,
+            r#"{"mode":"repo","repo":"o/r"}"#,
+        ] {
+            assert_eq!(code(gh.route("/api/audit/start", repo, "claude-code", bad)), Some(400), "{bad}");
+        }
+        assert!(j.lock().is_none() && gh.lock().is_none(), "nothing was started");
     }
 
     #[test]

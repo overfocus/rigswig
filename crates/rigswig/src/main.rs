@@ -39,10 +39,11 @@ Usage:
   rigswig tools [--repo <path>]             the harnesses rigswig knows, and the evidence for each in this repo
   rigswig schema                            the JSON Schema of `status --json`
 
-  rigswig ui [--repo <path>] [--tool <id>] [--port <n>] [--idle <minutes>] [--allow-writes]
+  rigswig ui [--repo <path>] [--tool <id>] [--port <n>] [--idle <minutes>] [--allow-writes] [--allow-github]
                                             the same as a local page (stops after --idle minutes, default 30); read-only
                                             unless --allow-writes, which lets it turn plugins and project MCP servers on
-                                            and off, with a preview, a backup and undo
+                                            and off, with a preview, a backup and undo; --allow-github lets the
+                                            page audit public GitHub repos (a download for each one you start)
 
   rigswig compare <repo-a> <repo-b> [--tool <id>] [--json]
   rigswig compare <repo> --tools <id-a>,<id-b> [--json]
@@ -136,7 +137,7 @@ enum Mode {
 }
 
 /// A repo that is not on this machine: GitHub (a network request, only when asked) or an archive file (offline).
-enum Remote {
+pub enum Remote {
     Github(github::Spec),
     Archive(PathBuf),
 }
@@ -151,15 +152,12 @@ impl Remote {
 }
 
 /// The remote repo as an in-memory tree: the tree, the repo's folder in it, a label, and what unpacking did.
-fn load_remote(r: &Remote) -> Result<(rigswig_core::fs::MemFs, PathBuf, String, String), String> {
+fn load_remote(
+    r: &Remote,
+    downloaded: &mut dyn FnMut(u64),
+) -> Result<(rigswig_core::fs::MemFs, PathBuf, String, String), String> {
     let (bytes, label, name) = match r {
-        Remote::Github(spec) => {
-            eprintln!(
-                "rigswig: downloading {} from codeload.github.com (the only request rigswig makes)",
-                spec.label()
-            );
-            (github::download(spec, github::LIMITS)?, spec.label(), spec.repo.clone())
-        }
+        Remote::Github(spec) => (github::download(spec, github::LIMITS, downloaded)?, spec.label(), spec.repo.clone()),
         Remote::Archive(p) => {
             let real = real_path(p).map_err(|_| format!("no such archive: {}", p.display()))?;
             if let Some(h) = home() {
@@ -186,6 +184,13 @@ fn load_remote(r: &Remote) -> Result<(rigswig_core::fs::MemFs, PathBuf, String, 
     Ok((fs, root, label, summary))
 }
 
+/// On stderr, before the one request rigswig makes.
+fn say_download(r: &Remote) {
+    if let Remote::Github(spec) = r {
+        eprintln!("rigswig: downloading {} from codeload.github.com (the only request rigswig makes)", spec.label());
+    }
+}
+
 /// Run `f` with the harness for a remote repo: `tool`, or the one with the most evidence in it. Returns its result,
 /// the label and the unpacking summary.
 fn with_remote<R>(
@@ -193,7 +198,8 @@ fn with_remote<R>(
     tool: Option<&str>,
     f: impl FnOnce(&dyn Adapter, &Ctx) -> R,
 ) -> Result<(R, String, String), String> {
-    let (fs, root, label, summary) = load_remote(r)?;
+    say_download(r);
+    let (fs, root, label, summary) = load_remote(r, &mut |_| {})?;
     let adapters = rigswig_core::adapters::all();
     // Nothing from this machine: no environment variables, an invented home, the archive's own files only.
     let ctx = Ctx {
@@ -220,6 +226,7 @@ fn status(args: &[String], mode: Mode) -> ExitCode {
     let mut idle_minutes: u64 = 30;
     let mut removals: Vec<String> = Vec::new();
     let mut allow_writes = false;
+    let mut allow_github = false;
     let mut remote: Option<Remote> = None;
     let mut it = args.iter();
     while let Some(a) = it.next() {
@@ -247,6 +254,12 @@ fn status(args: &[String], mode: Mode) -> ExitCode {
                 _ => return fail("--without needs what to take out"),
             },
             "--allow-writes" if mode == Mode::Ui => allow_writes = true,
+            "--allow-github" if mode == Mode::Ui => {
+                if !cfg!(feature = "github") {
+                    return fail("this rigswig was built without the github feature, so the page cannot download");
+                }
+                allow_github = true
+            }
             "--port" if mode == Mode::Ui => match it.next().and_then(|p| p.parse().ok()) {
                 Some(p) => port = p,
                 None => return fail("--port needs a number"),
@@ -340,6 +353,7 @@ fn status(args: &[String], mode: Mode) -> ExitCode {
                 tools,
                 version: rigswig_core::VERSION,
                 writes: allow_writes,
+                github: allow_github,
             };
             Some(ui::embed_json(&page))
         };
@@ -397,7 +411,7 @@ fn status(args: &[String], mode: Mode) -> ExitCode {
         let idle = std::time::Duration::from_secs(idle_minutes * 60);
         let act_ref: Option<&ui::Act> = if allow_writes { Some(&act) } else { None };
         // Audits read only, so they run without write mode: one at a time, on their own thread, polled by the page.
-        let audit_jobs = audits::Jobs::default();
+        let audit_jobs = audits::Jobs::new(allow_github);
         let jobs = |route: &str, t: Option<&str>, body: &str| -> Result<String, (u16, String)> {
             let id = t.unwrap_or(&default);
             if !scored.iter().any(|(a, _)| a.id() == id) {
@@ -413,6 +427,11 @@ fn status(args: &[String], mode: Mode) -> ExitCode {
                 );
             } else {
                 println!("rigswig ui (read-only, local only): {url}");
+            }
+            if allow_github {
+                println!(
+                    "GitHub audits are on: each one the page starts downloads that public repo from codeload.github.com."
+                );
             }
             println!("Stops after {idle_minutes} minutes without a request, or with Ctrl-C.");
         });
@@ -553,17 +572,11 @@ fn audit(args: &[String]) -> ExitCode {
         if repo.is_some() || !repos.is_empty() {
             return fail("--github and --archive audit one repo that is not here: not with --repo or --repos");
         }
-        let run = with_remote(r, tool.as_deref(), |a, ctx| {
-            let h = a.resolve(ctx);
-            // The built-in signals only: ~/.rigswig/signals.json belongs to this machine, and the empty home has none.
-            rigswig_core::audit::audit(ctx, &h, &rigswig_core::audit::Options::default())
-        });
-        let (mut a, label, summary) = match run {
-            Ok(x) => x,
+        say_download(r);
+        let a = match audits::remote(r, tool.as_deref(), &mut |_| {}) {
+            Ok(a) => a,
             Err(e) => return fail(&e),
         };
-        a.repo = printable(&label);
-        a.notes.insert(0, summary);
         if json {
             println!("{}", serde_json::to_string_pretty(&a).expect("serialises"));
         } else {

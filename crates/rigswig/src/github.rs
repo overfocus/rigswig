@@ -241,8 +241,9 @@ impl<R: Read> Read for UnpackLimit<R> {
 }
 
 /// Download `spec`'s archive. Only in a build with the `github` feature, and only called for `--github`.
+/// `progress` hears the bytes received so far.
 #[cfg(feature = "github")]
-pub fn download(spec: &Spec, limits: Limits) -> Result<Vec<u8>, String> {
+pub fn download(spec: &Spec, limits: Limits, progress: &mut dyn FnMut(u64)) -> Result<Vec<u8>, String> {
     let agent = ureq::AgentBuilder::new()
         .https_only(true)
         .redirects(0)
@@ -267,10 +268,16 @@ pub fn download(spec: &Spec, limits: Limits) -> Result<Vec<u8>, String> {
         return Err(format!("GitHub answered {} for {}", resp.status(), spec.label()));
     }
     let mut body = Vec::new();
-    resp.into_reader()
-        .take(limits.max_compressed + 1)
-        .read_to_end(&mut body)
-        .map_err(|e| format!("the download stopped: {e}"))?;
+    let mut reader = resp.into_reader().take(limits.max_compressed + 1);
+    let mut chunk = vec![0u8; 64 * 1024];
+    loop {
+        let n = reader.read(&mut chunk).map_err(|e| format!("the download stopped: {e}"))?;
+        if n == 0 {
+            break;
+        }
+        body.extend_from_slice(&chunk[..n]);
+        progress(body.len() as u64);
+    }
     if body.len() as u64 > limits.max_compressed {
         return Err(format!("the archive is larger than {} MB", limits.max_compressed / (1024 * 1024)));
     }
@@ -278,7 +285,7 @@ pub fn download(spec: &Spec, limits: Limits) -> Result<Vec<u8>, String> {
 }
 
 #[cfg(not(feature = "github"))]
-pub fn download(_: &Spec, _: Limits) -> Result<Vec<u8>, String> {
+pub fn download(_: &Spec, _: Limits, _: &mut dyn FnMut(u64)) -> Result<Vec<u8>, String> {
     Err("this rigswig was built without the github feature, so it makes no network requests; download the archive yourself and use --archive".into())
 }
 
