@@ -112,9 +112,9 @@ jobs:
   # token is stored, after a maintainer approves the run ("Review deployments"). npm cannot grant
   # trusted publishing to a brand-new package: the first version of each of the six was bootstrapped
   # by hand, and each package's Trusted Publisher settings on npmjs.com accept only this repo,
-  # release.yml and the `npm` environment (docs/RELEASING.md). The `npm-<target>` artifacts each
-  # upload with an `npm-stage/` root; after the merge-multiple download the packages sit under
-  # stage/npm-stage.
+  # release.yml and the `npm` environment (docs/RELEASING.md). Each `npm-<target>` artifact roots at
+  # its package directories (the upload path is the common ancestor, so the `npm-stage/` prefix it was
+  # staged under does not travel), hence `stage/` directly after the merge-multiple download.
   npm:
     needs: build
     runs-on: ubuntu-latest
@@ -135,7 +135,7 @@ jobs:
           merge-multiple: true
       - name: The six packages are here, at the tag's version
         run: |
-          root=stage/npm-stage
+          root=stage
           want="${GITHUB_REF_NAME#v}"
           for pkg in rigswig @kftcda/cli-darwin-arm64 @kftcda/cli-darwin-x64 @kftcda/cli-linux-arm64 @kftcda/cli-linux-x64 @kftcda/cli-win32-x64; do
             test -f "$root/$pkg/package.json" || { echo "missing $pkg (have: $(find "$root" -mindepth 1 -maxdepth 2 -type d -printf '%P\n'))"; exit 1; }
@@ -144,17 +144,17 @@ jobs:
           done
       # The artifact round-trip can drop the executable bit; restore it before anything is packed.
       - name: Make the binaries executable again
-        run: find stage/npm-stage -path '*/bin/*' -type f -exec chmod a+x {} +
+        run: find stage -path '*/bin/*' -type f -exec chmod a+x {} +
       - name: Pack every package, dry run
         run: |
           shopt -s nullglob
-          for pkg in stage/npm-stage/@kftcda/*/ stage/npm-stage/rigswig; do
+          for pkg in stage/@kftcda/*/ stage/rigswig; do
             (cd "$pkg" && npm publish --dry-run --access public > /dev/null)
           done
       - name: Publish the platform packages, then the picker
         run: |
           shopt -s nullglob
-          for pkg in stage/npm-stage/@kftcda/*/; do
+          for pkg in stage/@kftcda/*/; do
             (cd "$pkg" && npm publish --access public)
           done
-          (cd stage/npm-stage/rigswig && npm publish)
+          (cd stage/rigswig && npm publish)
