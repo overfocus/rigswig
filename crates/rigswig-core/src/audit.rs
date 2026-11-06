@@ -938,12 +938,32 @@ fn local_text(ctx: &Ctx, text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     for (i, line) in lines.iter().enumerate() {
         let window = format!("{} {}", if i > 0 { lines[i - 1] } else { "" }, line).to_lowercase();
-        let elsewhere = window.contains("../") || siblings.iter().any(|s| mentions(&window, s));
-        // "Create `src/parsers/my_parser.rs`": a file to make, not one that should exist.
+        let elsewhere = window.contains("../")
+            || ["that repo", "other repo", "another repo", "sibling repo"].iter().any(|p| window.contains(p))
+            || siblings.iter().any(|s| mentions(&window, s));
+        // "Create `src/parsers/my_parser.rs`", "probably a small script `x.mjs`": a file to make, not one that should
+        // already exist.
         let lower = line.to_lowercase();
-        let to_make = ["create", "creates", "creating", "generate", "generates", "scaffold", "new file"]
-            .iter()
-            .any(|w| mentions(&lower, w));
+        let to_make = [
+            "create",
+            "creates",
+            "creating",
+            "generate",
+            "generates",
+            "scaffold",
+            "new file",
+            "add",
+            "adds",
+            "adding",
+            "new",
+            "would",
+            "probably",
+            "proposed",
+            "planned",
+            "todo",
+        ]
+        .iter()
+        .any(|w| mentions(&lower, w));
         if !(elsewhere || to_make) || line.trim_start().starts_with("```") {
             out.push_str(line);
         }

@@ -177,6 +177,8 @@ make gone
 Make sure you run `make lint` too.
 1. Create the parser in `docs/parsers/my_parser.md`, then wire it up.
 2. Add its spec in `docs/specs/my_parser_spec.md` and an `docs/example.md`.
+The simplest way is probably a small script `docs/neurons/model.mjs` the runner spawns.
+The credit is copied from the site; see that repo's `docs/CREDIT.md`.
 Shared files are listed in the website repo's
 `docs/shared-files.json`; run `npm run check:siblings` there, or `npm run vendor -- ../shop` in another.
 ";
@@ -209,6 +211,8 @@ Shared files are listed in the website repo's
         "check:siblings",
         "vendor",
         "my_parser",
+        "model.mjs",
+        "CREDIT.md",
     ] {
         assert!(!ev.contains(fine), "{fine} is not dead: {ev}");
     }
