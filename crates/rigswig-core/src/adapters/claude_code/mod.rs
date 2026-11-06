@@ -92,9 +92,10 @@ impl Adapter for ClaudeCode {
 
         let plugins = plugins::discover(&mut b, &p, &scopes);
 
-        files::instructions(&mut b, &p);
+        let subs = files::subfolders(&mut b, &p.repo);
+        files::instructions(&mut b, &p, &subs);
         files::memory_index(&mut b, &p);
-        files::agents_skills_commands(&mut b, &p, &plugins);
+        files::agents_skills_commands(&mut b, &p, &plugins, &subs);
         hooks::all(&mut b, &scopes, &plugins);
         mcp::all(&mut b, &p, &scopes, &plugins);
         plugins::link_contributions(&mut b, &plugins);
@@ -109,7 +110,6 @@ impl Adapter for ClaudeCode {
             "server-delivered and MDM managed settings (macOS profiles, Windows registry)",
             "folder trust: an untrusted folder ignores the project's own MCP approvals",
             "claude.ai connectors and bundled skills",
-            "CLAUDE.md files in subfolders, which load when files there are used",
             "hooks, MCP servers and skills declared in agent or skill front matter",
             "output styles, LSP servers, monitors, workflows and themes",
             "settings files with comments (JSONC)",

@@ -26,9 +26,11 @@ strict.
    Public repos only.
 4. **Nothing is written to disk.** The archive is unpacked into memory, the same in-memory file system the tests
    use, and is gone when the run ends.
-5. **Links go nowhere.** Only regular files and folders are kept. Symbolic links, hard links and special files are
-   dropped and counted, so a repo cannot point the audit at a file on your machine. A path that climbs out of
-   the archive (`..`, or one starting at the root) fails the whole run.
+5. **Links go nowhere.** The in-memory tree holds the archive and nothing else, so no link can reach a file on
+   your machine. A symbolic link is kept only when its target is relative and, resolved from the link's folder,
+   stays inside the repo (a common one: `.claude/skills -> ../.agents/skills`); it then points within the tree.
+   Absolute links, links that climb out, hard links and special files are dropped and counted. A path that climbs
+   out of the archive (`..`, or one starting at the root) fails the whole run.
 6. **Limits.** A download of at most 64 MB, at most 512 MB unpacked (every entry counted, kept or not, which stops
    an archive that expands without end), at most 50,000 entries, and files over 1 MB or not UTF-8 kept by name
    only.

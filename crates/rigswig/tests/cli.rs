@@ -377,7 +377,7 @@ fn an_archive_is_audited_in_memory_without_the_readers_setup_or_files() {
     assert!(codes.contains(&"permission-broad"), "{codes:?}");
     assert!(codes.contains(&"dead-reference"), "{codes:?}");
     assert!(!codes.contains(&"heavy-user-scope"), "the reader's agents are not read");
-    assert!(v["notes"][0].as_str().unwrap().contains("1 links and special files dropped"), "{}", v["notes"]);
+    assert!(v["notes"][0].as_str().unwrap().contains("1 other links and special files dropped"), "{}", v["notes"]);
 
     let status = s.cmd(&["status", "--archive", archive, "--json"]);
     let h: serde_json::Value = serde_json::from_slice(&status.stdout).unwrap();
@@ -417,4 +417,18 @@ fn a_build_without_the_github_feature_cannot_fetch() {
     let page = s.cmd(&["ui", "--allow-github", "--idle", "1"]);
     assert_eq!(page.status.code(), Some(2), "the page cannot be started with downloads on");
     assert!(String::from_utf8_lossy(&page.stderr).contains("built without the github feature"));
+}
+
+#[test]
+fn a_tie_between_harnesses_picks_the_first_in_rigswigs_list() {
+    // Both harnesses have their own folder in the repo: evidence 100 each.
+    let s = Sandbox::new("tie");
+    std::fs::create_dir_all(s.0.join("repo/.codex")).unwrap();
+    let repo = s.path("repo");
+    let out = s.cmd(&["status", "--repo", &repo]);
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(text.starts_with("claude-code in repo"), "{text}");
+    assert!(text.contains("Also configured here: codex"), "{text}");
+    let audit = s.cmd(&["audit", "--repo", &repo]);
+    assert!(String::from_utf8_lossy(&audit.stdout).starts_with("rigswig audit: claude-code"));
 }

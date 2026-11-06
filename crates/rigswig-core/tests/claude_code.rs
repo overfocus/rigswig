@@ -469,3 +469,100 @@ fn session_start_hooks_and_mcp_servers_are_named_as_unmeasured() {
     assert!(what.iter().any(|w| w.contains("1 SessionStart hook")), "{what:?}");
     assert!(what.iter().any(|w| w.contains("MCP server (docs)")), "{what:?}");
 }
+
+fn agent_md(name: &str) -> String {
+    format!("---\nname: {name}\ndescription: does {name} things\ntools: Read\n---\n")
+}
+
+#[test]
+fn agent_folders_are_scanned_recursively_and_a_subfolder_does_not_change_the_name() {
+    let fs = base()
+        .file(format!("{REPO}/.claude/agents/review/security.md"), agent_md("security"))
+        .file(format!("{REPO}/.claude/agents/deep/a/b/c/tester.md"), agent_md("tester"))
+        .file(format!("{HOME}/.claude/agents/team/writer.md"), agent_md("writer"))
+        // Two files in one tree with one name: one loads, which one is not documented.
+        .file(format!("{REPO}/.claude/agents/twin.md"), agent_md("twin"))
+        .file(format!("{REPO}/.claude/agents/more/twin.md"), agent_md("twin"));
+    let h = run(&fs);
+    for id in
+        ["claude-code:agent:project:security", "claude-code:agent:project:tester", "claude-code:agent:user:writer"]
+    {
+        assert!(item(&h, id).effective, "{id}");
+    }
+    assert_eq!(
+        item(&h, "claude-code:agent:project:twin#2").shadowed_by.as_deref(),
+        Some("claude-code:agent:project:twin")
+    );
+    assert!(h.warnings.iter().any(|w| w.code == "duplicate-name"));
+}
+
+#[test]
+fn project_agents_come_from_every_folder_up_to_the_git_root_and_the_closest_wins() {
+    // The session starts in /home/dev/work/shop; the git root is /home/dev/work.
+    let fs = base()
+        .dir("/home/dev/work/.git")
+        .file("/home/dev/work/.claude/agents/shared.md", agent_md("shared"))
+        .file("/home/dev/work/.claude/agents/reviewer.md", agent_md("reviewer"))
+        .file(format!("{REPO}/.claude/agents/reviewer.md"), agent_md("reviewer"))
+        // Above the git root: not a project folder.
+        .file("/home/.claude/agents/stray.md", agent_md("stray"));
+    let h = run(&fs);
+    assert!(item(&h, "claude-code:agent:project:shared").effective);
+    let near = item(&h, "claude-code:agent:project:reviewer");
+    assert_eq!(near.origin.file.as_deref(), Some(".claude/agents/reviewer.md"));
+    assert!(near.effective);
+    assert_eq!(
+        item(&h, "claude-code:agent:project:reviewer#2").shadowed_by.as_deref(),
+        Some("claude-code:agent:project:reviewer")
+    );
+    assert!(!h.warnings.iter().any(|w| w.code == "duplicate-name"), "an override is not a duplicate: {:?}", h.warnings);
+    assert!(h.items.iter().all(|i| i.name != "stray"));
+}
+
+#[test]
+fn skills_in_subfolders_load_when_claude_works_there_and_never_clash_with_the_roots() {
+    let skill = |d: &str| format!("---\ndescription: {d}\n---\nbody\n");
+    let fs = base()
+        .file(format!("{REPO}/.claude/skills/deploy/SKILL.md"), skill("deploys the shop"))
+        .file(format!("{REPO}/apps/web/.claude/skills/deploy/SKILL.md"), skill("deploys the web app"))
+        .file(format!("{REPO}/node_modules/pkg/.claude/skills/evil/SKILL.md"), skill("never read"))
+        .file(format!("{REPO}/.cache/x/.claude/skills/hidden/SKILL.md"), skill("never read"));
+    let h = run(&fs);
+    let root = item(&h, "claude-code:skill:project:deploy");
+    assert_eq!(root.load.when, LoadWhen::Startup);
+    let nested = item(&h, "claude-code:skill:project:apps/web:deploy");
+    assert!(nested.effective);
+    assert_eq!(nested.load.when, LoadWhen::OnMatch);
+    assert!(h.items.iter().all(|i| !i.name.contains("evil") && !i.name.contains("hidden")));
+    let startup: u64 =
+        h.items.iter().filter(|i| i.effective && i.load.when == LoadWhen::Startup).map(|i| i.load.chars.value).sum();
+    assert_eq!(h.context.chars.value, startup, "a nested skill is not counted before you type");
+}
+
+#[test]
+fn claude_md_in_subfolders_loads_on_demand_and_links_are_not_followed() {
+    let fs = base()
+        .file(format!("{REPO}/CLAUDE.md"), "# Shop\n")
+        .file(format!("{REPO}/packages/api/CLAUDE.md"), "# API rules\n@notes.md\n")
+        .file(format!("{REPO}/packages/api/notes.md"), "more\n")
+        .file(format!("{REPO}/packages/api/CLAUDE.local.md"), "mine\n")
+        .file(format!("{REPO}/vendor/lib/CLAUDE.md"), "never read\n")
+        .file("/home/dev/elsewhere/CLAUDE.md", "never read\n")
+        .symlink(format!("{REPO}/linked"), "/home/dev/elsewhere");
+    let h = run(&fs);
+    let api = item(&h, "claude-code:instruction:project:packages/api/CLAUDE.md");
+    assert_eq!(api.load.when, LoadWhen::OnMatch);
+    assert!(matches!(&api.detail, ItemDetail::Instruction(a) if a.applies_to == ["packages/api/**"]));
+    assert_eq!(
+        item(&h, "claude-code:instruction:project:packages/api/notes.md").load.when,
+        LoadWhen::OnMatch,
+        "its import too"
+    );
+    assert_eq!(item(&h, "claude-code:instruction:local:packages/api/CLAUDE.local.md").load.when, LoadWhen::OnMatch);
+    assert_eq!(item(&h, "claude-code:instruction:project:CLAUDE.md").load.when, LoadWhen::Startup);
+    assert!(
+        h.items.iter().all(|i| !i.name.contains("vendor") && !i.name.contains("linked")),
+        "{:?}",
+        ids(&h, "instruction")
+    );
+}

@@ -1,8 +1,8 @@
 # The Claude Code adapter: the rules it models
 
-Every rule below is from Claude Code's documentation, read on 2026-11-05. Where the docs are silent and the adapter has
-to choose, the rule is marked **inferred** and listed in the output's `coverage.notModelled`. When the docs change,
-change this file and the adapter together.
+Every rule below is from Claude Code's documentation, read on 2026-11-05 (the subfolder rules on 2026-11-06). Where
+the docs are silent and the adapter has to choose, the rule is marked **inferred** and listed in the output's
+`coverage.notModelled`. When the docs change, change this file and the adapter together.
 
 ## Layers
 
@@ -47,7 +47,14 @@ instead of overriding.
   directory or above it (Claude Code 2.1.277 or later).
 - Rules: every `.md` under `.claude/rules/` and `<config>/rules/`. Without `paths` front matter a rule loads at launch;
   with it, when a matching file is read or edited (`load.when: on-match`).
-- `CLAUDE.md` files in subfolders load on demand: not modelled.
+- `CLAUDE.md` and `CLAUDE.local.md` in subfolders below the working directory load on demand, "once Claude reads,
+  writes, or edits another file in that subdirectory" ([memory](https://code.claude.com/docs/en/memory.md)):
+  `load.when: on-match`, `appliesTo: ["<subfolder>/**"]`, and what they `@import` loads with them. `AGENTS.md` and
+  `.claude/rules` in subfolders: not modelled (the docs do not say when they load).
+- **Subfolder search.** One walk of the repo's folders finds the subfolder files and skills. It skips dot folders,
+  dependencies and build output (`node_modules`, `target`, `dist`, `build`, `out`, `vendor`, `coverage`,
+  `__pycache__`, `venv`, `Pods`, `DerivedData`), never follows a link, goes 12 folders deep, and stops after 20,000
+  folders with a note in `coverage.notModelled`.
 - **Auto memory** ([memory](https://code.claude.com/docs/en/memory.md), "Auto memory"): the first 200 lines of
   `MEMORY.md`, or its first 25 KB, whichever comes first, load at the start of every conversation; topic files beside
   it are read on demand. The folder is `<config>/projects/<project>/memory/`, where `<project>` comes from the git
@@ -59,13 +66,23 @@ instead of overriding.
 
 ## Agents, skills and commands
 
-- **Agents** ([subagents](https://code.claude.com/docs/en/sub-agents.md)): managed, then `--agents`, then
-  `.claude/agents/`, then `<config>/agents/`, then plugins. On a name clash the higher one wins. An omitted `tools`
-  means every tool. Plugin agents are namespaced `plugin:agent`, and a plugin's subfolders add to the name
-  (`agents/review/security.md` is `plugin:review:security`).
+- **Agents** ([subagents](https://code.claude.com/docs/en/sub-agents.md)): managed, then `--agents`, then project,
+  then `<config>/agents/`, then plugins. On a name clash the higher one wins. An omitted `tools` means every tool.
+  - `.claude/agents/` and `<config>/agents/` are scanned recursively, and a subfolder does not change the name, which
+    comes only from the `name` field (the file name when there is none). Two files with one name in one tree: one
+    loads, "chosen by filesystem read order"; rigswig keeps the first it reads and warns.
+  - Project agents come from every `.claude/agents/` between the working directory and the git root; "the definition
+    closest to the working directory" wins, and the farther one is marked overridden. `.claude/agents` folders below
+    the working directory: not modelled (the docs do not say).
+  - Plugin agents are namespaced `plugin:agent`, and a plugin's subfolders add to the name
+    (`agents/review/security.md` is `plugin:review:security`).
 - **Skills** ([skills](https://code.claude.com/docs/en/skills.md)): enterprise over personal (`<config>/skills/`) over
   project (`.claude/skills/`); plugin skills are namespaced and never clash. At startup only the listing loads: the name
   and the description plus `when_to_use`, cut at 1,536 characters. The body loads when the skill is invoked.
+  Skills in a subfolder's `.claude/skills/` (`<subdir>/.claude/skills/<name>/SKILL.md`) "don't load at startup": they
+  load "the first time Claude reads or edits a file in that subdirectory" (`load.when: on-match`), named after the
+  folder (`apps/web:deploy`), and both they and a root skill of the same name load. Skills nested deeper than
+  `skills/<name>/SKILL.md`, and command subfolders: not modelled (the docs do not say).
 - **Commands** are skills now: `.claude/commands/x.md` and `.claude/skills/x/SKILL.md` both make `/x`, and on a clash
   the skill wins. Between a user and a project command of the same name, the skills order is used (**inferred**).
 - The enterprise skills and agents folders are taken to be `.claude/skills` and `.claude/agents` inside the system
