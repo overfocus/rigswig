@@ -93,8 +93,10 @@ impl Adapter for Ollama {
     fn detect(&self, ctx: &Ctx) -> Detection {
         let p = Paths::new(ctx);
         let checks = [
-            (ctx.fs.exists(&p.models), "model store", 100),
-            (ctx.fs.exists(&p.ollama_home), "Ollama home", 50),
+            // Everything Ollama has is in the home folder (or the server's environment), so it caps at 50 (see
+            // `Detection`): installed, it never wins over a harness the repo is set up for; `--tool ollama` reads it.
+            (ctx.fs.exists(&p.models), "model store", 50),
+            (ctx.fs.exists(&p.ollama_home), "Ollama home", 45),
             (ctx.fs.exists(&p.ollama_home.join("server.json")), "server.json", 30),
             (ctx.fs.exists(&p.ollama_home.join("launch")), "launch integrations", 20),
             (ctx.fs.exists(&p.ollama_home.join("config.json")), "config.json", 10),

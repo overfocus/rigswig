@@ -324,7 +324,9 @@ fn detection_sees_the_home_and_the_project_side() {
     let empty = MemFs::new();
     assert_eq!(score_of(&empty), 0);
     let with_cfg = user_config("");
-    assert_eq!(score_of(&with_cfg), 80);
+    assert_eq!(score_of(&with_cfg), 50, "the home folder alone stays at 50");
+    let in_repo = user_config("").file(format!("{REPO}/.hermes.md"), "# repo context");
+    assert_eq!(score_of(&in_repo), 100, "the repo's own Hermes file");
     assert!(
         Hermes
             .detect(&Ctx {

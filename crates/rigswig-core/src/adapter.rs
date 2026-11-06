@@ -25,7 +25,11 @@ impl Ctx<'_> {
 /// How sure an adapter is that its tool is configured for this repo or user, and why.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Detection {
-    /// 0 (no sign of the tool) to 100 (its own config files are present).
+    /// 0 (no sign of the tool) to 100 (its own config files are in the repo). Evidence from the home folder alone
+    /// (a config folder, a model store, environment variables) scores at most 50: above 50 means the repo itself has
+    /// the harness's files. The harness picked by default is the highest score, the first in `adapters::all()` on a
+    /// tie, so a harness that is only installed never wins over one the repo is set up for.
+    /// `tests/detect.rs` holds every adapter to this.
     pub score: u8,
     /// The files or settings that were found, as short labels.
     pub evidence: Vec<String>,

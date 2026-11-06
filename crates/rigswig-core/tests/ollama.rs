@@ -139,9 +139,9 @@ fn ollama_models_moves_the_store_and_detect_follows() {
     let none = MemFs::new();
     assert_eq!(mk(&none), 0);
     let home_only = MemFs::new().dir(REPO).dir("/home/dev/.ollama");
-    assert_eq!(mk(&home_only), 50, "the tool's home alone, without a model store");
+    assert_eq!(mk(&home_only), 45, "the tool's home alone, without a model store");
     let with_models = base().file(manifest("registry.ollama.ai", "library", "m", "latest"), "{\"layers\":[]}");
-    assert_eq!(mk(&with_models), 100);
+    assert_eq!(mk(&with_models), 50, "a model store is home-folder evidence: never over 50");
 }
 
 fn ids(h: &Harness, kind: &str) -> Vec<String> {

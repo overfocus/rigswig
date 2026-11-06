@@ -250,12 +250,15 @@ impl Adapter for Hermes {
         let repo = &ctx.repo;
         let in_repo = |name: &str| ctx.fs.exists(&repo.join(name));
         let checks = [
-            (ctx.fs.exists(&p.active.join("config.yaml")), "config.yaml", 80),
-            (ctx.fs.exists(&p.active.join("skills")), "skills/", 60),
+            // The home folder alone scores at most 50 (see `Detection`); the repo's own Hermes files score above it.
+            (ctx.fs.exists(&p.active.join("config.yaml")), "config.yaml", 50),
+            (ctx.fs.exists(&p.active.join("skills")), "skills/", 45),
             (ctx.fs.exists(&p.active.join("SOUL.md")), "SOUL.md", 40),
-            (ctx.fs.exists(&p.active), "Hermes home", 50),
-            (in_repo(".hermes.md") || in_repo("HERMES.md"), ".hermes.md", 30),
-            (in_repo(".hermes/skills") || in_repo(".agents/skills"), ".hermes/skills/", 25),
+            (ctx.fs.exists(&p.active), "Hermes home", 45),
+            (in_repo(".hermes.md") || in_repo("HERMES.md"), ".hermes.md", 100),
+            (in_repo(".hermes/skills"), ".hermes/skills/", 60),
+            // `.agents/skills` is shared with Codex, so it is a hint, not a claim.
+            (in_repo(".agents/skills"), ".agents/skills/", 25),
             (in_repo("AGENTS.md"), "AGENTS.md", 15),
             (p.profile.is_some(), "profile selected", 20),
         ];
