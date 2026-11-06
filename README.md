@@ -39,9 +39,10 @@ before you type a word.
 **Status: 0.1, pre-1.0.** `rigswig status`, `rigswig audit` and the local page, `rigswig ui`, work for Claude Code,
 Codex, Hermes Agent and Ollama. See [docs/ROADMAP.md](docs/ROADMAP.md).
 
-rigswig is a single binary written in Rust. Download it for macOS, Linux or Windows from
-[the releases](https://github.com/overfocus/rigswig/releases) (each with a `SHA256SUMS` line to check it against), or
-build it from source. `cargo install rigswig`, Homebrew and `npx rigswig` are not set up yet. From source:
+rigswig is a single binary written in Rust. Install it with `cargo install rigswig`
+([crates.io](https://crates.io/crates/rigswig); add `--no-default-features` for a build with no network code), or
+download it for macOS, Linux or Windows from [the releases](https://github.com/overfocus/rigswig/releases), each with
+a `SHA256SUMS` line to check it against. Homebrew and `npx rigswig` are not set up yet. From a checkout:
 
 ```sh
 cargo run -- status --repo path/to/repo          # a summary

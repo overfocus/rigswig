@@ -38,8 +38,8 @@ Also in v0.1 (done): `rigswig check` for CI (`--max-tokens`, `--max-item-tokens`
 failed limit), and `--without` what-ifs on `status` and `check`.
 
 Release builds (done): a version tag builds five platform binaries into a draft GitHub release
-([RELEASING.md](RELEASING.md)); v0.1.0 is the first. Left: crates.io, npm and Homebrew, which need the maintainer's
-accounts.
+([RELEASING.md](RELEASING.md)); v0.1.0 is the first, also on crates.io (`rigswig`, `rigswig-core`). Left: npm and
+Homebrew, and trusted publishing to crates.io from the release workflow.
 
 Audit (done, [#2](https://github.com/overfocus/rigswig/issues/2); [AUDIT.md](AUDIT.md)): `rigswig audit` with
 ranked findings, savings and fixes, and fleet mode (`--repos`). The gaps it found are closed: the auto-memory index is
