@@ -256,3 +256,165 @@ fn write_mode_plans_applies_backs_up_and_undoes() {
     assert_eq!(http(port, "POST", "/api/undo", &hdr(port, &token), "{}").0, 409, "nothing left to undo");
     let _ = rw.kill();
 }
+
+impl Sandbox {
+    fn cmd(&self, args: &[&str]) -> std::process::Output {
+        Command::new(env!("CARGO_BIN_EXE_rigswig"))
+            .args(args)
+            .env("HOME", self.0.join("home"))
+            .env("USERPROFILE", self.0.join("home"))
+            .env_remove("CLAUDE_CONFIG_DIR")
+            .env_remove("ANTHROPIC_MODEL")
+            .env_remove("CLAUDE_CODE_DISABLE_AUTO_MEMORY")
+            .env_remove("CLAUDE_CODE_PROJECT_DIR_NAME")
+            .output()
+            .unwrap()
+    }
+    fn path(&self, rel: &str) -> String {
+        self.0.join(rel).to_string_lossy().into_owned()
+    }
+}
+
+#[test]
+fn audit_prints_ranked_findings_and_json() {
+    let s = Sandbox::new("audit");
+    s.write("repo/.claude/settings.local.json", r#"{"permissions":{"allow":["Bash(git push *)"]}}"#);
+    s.write("repo/CLAUDE.md", "See `docs/missing.md`.\n");
+    s.write("repo/docs/here.md", "x");
+    let repo = s.path("repo");
+    let out = s.cmd(&["audit", "--repo", &repo]);
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(text.contains("1. HIGH"), "{text}");
+    assert!(text.contains("git push"), "{text}");
+    assert!(text.contains("docs/missing.md"), "{text}");
+
+    let json = s.cmd(&["audit", "--repo", &repo, "--json"]);
+    let v: serde_json::Value = serde_json::from_slice(&json.stdout).unwrap();
+    assert_eq!(v["findings"][0]["code"], "permission-broad");
+    assert_eq!(v["findings"][0]["severity"], "high");
+}
+
+#[test]
+fn audit_fleet_takes_a_glob_and_skips_folders_without_a_harness() {
+    let s = Sandbox::new("fleet");
+    s.write("code/a/CLAUDE.md", "# a\n");
+    s.write("code/b/CLAUDE.md", "# b\nAsk the helper-bot agent.\n");
+    s.write("code/c/CLAUDE.md", "# c\n");
+    std::fs::create_dir_all(s.0.join("code/plain")).unwrap();
+    s.write("home/.claude/agents/helper-bot.md", "---\nname: helper-bot\ndescription: helps\ntools: Read\n---\n");
+    let glob = s.path("code/*");
+    let out = s.cmd(&["audit", "--repos", &glob]);
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(text.contains("3 repos"), "{text}");
+    assert!(text.contains("move to project scope in that one  -> b"), "{text}");
+    assert!(text.contains("Skipped (no harness found): plain"), "{text}");
+}
+
+#[test]
+fn private_folders_are_refused_and_skipped() {
+    let s = Sandbox::new("private");
+    s.write("code/open/CLAUDE.md", "# open\n");
+    s.write("code/secret/CLAUDE.md", "# secret\n");
+    s.write("home/.rigswig/private.json", &format!(r#"{{"private":[{}]}}"#, serde_json::json!(s.path("code/secret"))));
+    let secret = s.path("code/secret");
+    for cmd in ["status", "audit", "check"] {
+        let out = s.cmd(&[cmd, "--repo", &secret]);
+        assert_eq!(out.status.code(), Some(2), "{cmd} refuses a private folder");
+        assert!(String::from_utf8_lossy(&out.stderr).contains("private.json"));
+    }
+    let out = s.cmd(&["audit", "--repos", &s.path("code/*")]);
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(text.contains("1 repos") || text.contains("rigswig audit: 1 repo"), "{text}");
+    assert!(text.contains("Skipped 1 private folder"), "{text}");
+    assert!(!text.contains("secret"), "{text}");
+}
+
+/// A repo archive as GitHub serves it (`<repo>-<sha>/...`), with a symlinked CLAUDE.md pointing at `outside`.
+fn archive_with_link(dir: &std::path::Path, outside: &std::path::Path) -> std::path::PathBuf {
+    let mut b = tar::Builder::new(Vec::new());
+    let mut add = |name: &str, data: &[u8]| {
+        let mut h = tar::Header::new_gnu();
+        h.set_size(data.len() as u64);
+        h.set_mode(0o644);
+        h.set_cksum();
+        b.append_data(&mut h, name, data).unwrap();
+    };
+    add("shop-abc123/AGENTS.md", b"# Shop\nSee `docs/gone.md`.\n");
+    add("shop-abc123/docs/here.md", b"x");
+    add("shop-abc123/.claude/settings.json", br#"{"permissions":{"allow":["Bash(git push *)"]},"model":"m"}"#);
+    let mut h = tar::Header::new_gnu();
+    h.set_entry_type(tar::EntryType::Symlink);
+    h.set_size(0);
+    h.set_mode(0o777);
+    b.append_link(&mut h, "shop-abc123/CLAUDE.md", outside).unwrap();
+    let tar = b.into_inner().unwrap();
+    let mut gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
+    std::io::Write::write_all(&mut gz, &tar).unwrap();
+    let path = dir.join("shop.tar.gz");
+    std::fs::write(&path, gz.finish().unwrap()).unwrap();
+    path
+}
+
+#[test]
+fn an_archive_is_audited_in_memory_without_the_readers_setup_or_files() {
+    let s = Sandbox::new("archive");
+    // The reader's own setup and a private file the archive's link points at: neither may appear.
+    s.write("home/.claude/agents/mine.md", "---\nname: CANARY-MY-AGENT\ndescription: mine\n---\n");
+    s.write("home/.claude/CLAUDE.md", "CANARY-MY-INSTRUCTIONS\n");
+    s.write("secret.md", "CANARY-SECRET see `docs/CANARY-path.md`\n");
+    let archive = archive_with_link(&s.0, &s.0.join("secret.md"));
+    let archive = archive.to_str().unwrap();
+
+    let out = s.cmd(&["audit", "--archive", archive, "--json"]);
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(!text.contains("CANARY"), "{text}");
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(v["repo"], "shop.tar.gz");
+    let codes: Vec<&str> = v["findings"].as_array().unwrap().iter().map(|f| f["code"].as_str().unwrap()).collect();
+    assert!(codes.contains(&"permission-broad"), "{codes:?}");
+    assert!(codes.contains(&"dead-reference"), "{codes:?}");
+    assert!(!codes.contains(&"heavy-user-scope"), "the reader's agents are not read");
+    assert!(v["notes"][0].as_str().unwrap().contains("1 links and special files dropped"), "{}", v["notes"]);
+
+    let status = s.cmd(&["status", "--archive", archive, "--json"]);
+    let h: serde_json::Value = serde_json::from_slice(&status.stdout).unwrap();
+    let names: Vec<&str> = h["items"].as_array().unwrap().iter().map(|i| i["name"].as_str().unwrap()).collect();
+    assert!(names.contains(&"AGENTS.md"), "{names:?}");
+    assert!(!names.contains(&"CLAUDE.md"), "the link was dropped, so AGENTS.md is read instead: {names:?}");
+    assert!(!String::from_utf8_lossy(&status.stdout).contains("CANARY"));
+}
+
+#[test]
+fn github_input_is_checked_before_any_request_and_never_mixes_with_a_local_repo() {
+    let s = Sandbox::new("github-input");
+    for bad in ["https://evil.example/o/r", "file:///etc/passwd", "o/r@../x", "o"] {
+        let out = s.cmd(&["audit", "--github", bad]);
+        assert_eq!(out.status.code(), Some(2), "{bad}");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(!err.contains("downloading"), "refused before any request: {err}");
+    }
+    let repo = s.path("repo");
+    let both = s.cmd(&["audit", "--github", "o/r", "--repo", &repo]);
+    assert_eq!(both.status.code(), Some(2));
+    assert!(!String::from_utf8_lossy(&both.stderr).contains("downloading"));
+    // The commands people run every day never reach the downloader.
+    for args in [vec!["status", "--repo", &repo], vec!["audit", "--repo", &repo], vec!["check", "--repo", &repo]] {
+        let out = s.cmd(&args);
+        assert!(!String::from_utf8_lossy(&out.stderr).contains("downloading"), "{args:?}");
+    }
+}
+
+#[cfg(not(feature = "github"))]
+#[test]
+fn a_build_without_the_github_feature_cannot_fetch() {
+    let s = Sandbox::new("no-network");
+    let out = s.cmd(&["audit", "--github", "o/r"]);
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("built without the github feature"));
+    let page = s.cmd(&["ui", "--allow-github", "--idle", "1"]);
+    assert_eq!(page.status.code(), Some(2), "the page cannot be started with downloads on");
+    assert!(String::from_utf8_lossy(&page.stderr).contains("built without the github feature"));
+}

@@ -262,6 +262,87 @@ pre.diff .add { color: var(--green); }
 pre.diff .del { color: #ff7a7a; }
 .banner { position: sticky; top: 0; z-index: 15; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; background: #1d1a0d; border: 1px solid var(--warn); border-radius: 10px; padding: 8px 14px; margin-bottom: 14px; }
 .banner[hidden] { display: none; }
+/* Audit: run it here, watch it go, read and filter the findings. */
+.audit { --sev-high: #ff6b6b; --sev-medium: var(--warn); --sev-low: #9fb3c8; }
+.audit .intro { margin: 0 0 10px; color: var(--muted); font-size: 15px; }
+.audit .controls { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.audit .controls button.act { margin-left: 0; }
+.audit .fleetform { display: flex; flex-wrap: wrap; gap: 8px; flex: 1 1 360px; min-width: 0; }
+.audit input[type="text"], .audit input[type="search"] {
+  font: 15px var(--body); color: var(--fg); background: var(--soft); border: 1px solid var(--line); border-radius: 8px;
+  min-height: 44px; padding: 0 12px; min-width: 0; flex: 1 1 200px;
+}
+.audit input[type="text"] { font-family: var(--mono); font-size: 14px; }
+.audit input::placeholder { color: #7d7d86; }
+.audit button:disabled { opacity: 0.5; cursor: progress; }
+.audit input:disabled, .audit button:disabled.act.off { opacity: 0.5; cursor: not-allowed; }
+.audit .controls.gh { margin-top: 8px; }
+.ghlabel { font: 500 13px var(--pixel); text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); min-width: 132px; }
+.ghhint { margin: 6px 0 0; font-size: 14px; color: var(--muted); }
+.ghhint code { font: 13px var(--mono); color: var(--fg); }
+.prog { margin-top: 14px; }
+.prog[hidden] { display: none; }
+.prog .track { position: relative; height: 16px; border-radius: 8px; background: var(--soft); border: 1px solid var(--line); overflow: hidden; }
+.prog .fillbar { height: 100%; width: 0; border-radius: 8px; background: linear-gradient(90deg, var(--green), var(--cyan)); box-shadow: 0 0 12px rgba(57, 255, 0, 0.45); }
+.prog.running .fillbar { background-image: repeating-linear-gradient(120deg, rgba(0, 0, 0, 0.22) 0 8px, transparent 8px 16px), linear-gradient(90deg, var(--green), var(--cyan)); background-size: 32px 100%, 100% 100%; }
+.prog.failed .fillbar { background: var(--sev-high); box-shadow: none; }
+.prog .lbl { display: flex; justify-content: space-between; gap: 4px 12px; flex-wrap: wrap; font-size: 14px; color: var(--muted); margin-top: 6px; }
+.prog .lbl b { color: var(--fg); font-weight: 600; overflow-wrap: anywhere; }
+.prog .lbl span { font-variant-numeric: tabular-nums; }
+.aresult { margin-top: 14px; }
+.astats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin-bottom: 12px; }
+.astats .stat b { font-size: 24px; }
+.astats:focus, .aresult h3:focus { outline: none; }
+.astats .stat.good b { color: var(--green); }
+.afilters { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 10px; }
+.afilters select { flex: 0 1 auto; max-width: 100%; }
+.chip.sev::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--sc); }
+.chip.sev[aria-pressed="true"] { border-color: var(--sc); color: var(--fg); background: rgba(255, 255, 255, 0.06); }
+.chip.sev[aria-pressed="false"] { opacity: 0.55; }
+.sev-high { --sc: var(--sev-high); }
+.sev-medium { --sc: var(--sev-medium); }
+.sev-low { --sc: var(--sev-low); }
+.findings { display: grid; gap: 8px; }
+details.finding { background: var(--soft); border: 1px solid var(--line); border-left: 3px solid var(--sc); border-radius: 10px; min-width: 0; }
+details.finding[open] { background: #181818; }
+details.finding > summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 4px 10px; align-items: center; padding: 10px 12px; min-height: 44px; }
+details.finding > summary::-webkit-details-marker { display: none; }
+details.finding > summary:hover .ftitle { color: #fff; }
+.sevbadge { font: 500 12px var(--pixel); text-transform: uppercase; letter-spacing: 0.08em; padding: 3px 8px; border-radius: 999px; border: 1px solid var(--sc); color: var(--sc); white-space: nowrap; }
+.ftitle { overflow-wrap: anywhere; }
+.fsave { font: 500 14px var(--pixel); color: var(--green); white-space: nowrap; }
+.fbody { padding: 0 12px 12px 14px; border-top: 1px solid rgba(255, 255, 255, 0.07); }
+.fbody .fcode { margin: 8px 0 6px; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+.fbody ul.evid { margin: 6px 0; padding-left: 18px; font-size: 15px; }
+.fbody ul.evid li { margin: 2px 0; overflow-wrap: anywhere; }
+.fbody .fix { margin: 8px 0 0; padding: 8px 10px; border-radius: 8px; background: rgba(57, 255, 0, 0.06); border: 1px solid rgba(57, 255, 0, 0.25); }
+.fbody .fix b { color: var(--green); font-weight: 600; }
+.fbody .cmd { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin-top: 8px; font-size: 14px; color: var(--muted); }
+.fbody .cmd code { font: 13px var(--mono); color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; overflow-wrap: anywhere; min-width: 0; }
+.fbody .refs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.fbody .refs button.link { min-height: 36px; font-size: 14px; padding: 0 10px; max-width: 100%; overflow-wrap: anywhere; text-align: left; }
+button.link.small { min-height: 36px; font-size: 14px; padding: 0 10px; }
+.empty { color: var(--muted); padding: 10px 2px; margin: 0; }
+.fleetrepos button.link { margin-left: 10px; }
+ul.rows > li[hidden] { display: none; }
+@media (min-width: 760px) { .astats { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+ul.rows > li.drillrow { display: block; padding: 0; border-top: 0; min-height: 0; }
+.fleetrepos li.current { background: rgba(57, 255, 0, 0.05); }
+.fleetitems .rec { display: block; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+.drill { margin: 6px 0 4px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: #141414; }
+.drill h3 { margin: 0 0 8px; font-family: var(--pixel); font-weight: 500; font-size: 14px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--cyan); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+ul.rows > li.flash { outline: 2px solid var(--green); outline-offset: -2px; border-radius: 6px; }
+@media (prefers-reduced-motion: no-preference) {
+  .prog .fillbar { transition: width 220ms ease; }
+  .prog.running .fillbar { animation: stripes 900ms linear infinite; }
+  @keyframes stripes { from { background-position: 0 0, 0 0; } to { background-position: 32px 0, 0 0; } }
+  details.finding[open] .fbody { animation: open 160ms ease-out; }
+}
+@media (max-width: 559px) {
+  details.finding > summary { grid-template-columns: auto minmax(0, 1fr); }
+  details.finding > summary .fsave { grid-column: 2; }
+}
 </style>
 </head>
 <body>
@@ -540,7 +621,7 @@ pre.diff .del { color: #ff7a7a; }
       count = list.length;
       (panelShowAll ? list : list.slice(0, LIMIT)).forEach(function (r) {
         var p = r.p;
-        rows.appendChild(el("li", null, [
+        rows.appendChild(el("li", { "data-id": p.id }, [
           el("i", { cls: "fill", style: "width:" + Math.max(0.5, r.chars / pmax * 100) + "%", "aria-hidden": "true" }),
           el("span", { cls: "rowname" }, [el("span", { cls: "mono", text: p.id }), el("span", { cls: "meta" }, [el("span", { cls: "status " + (p.enabled ? "on" : "off"), text: p.enabled ? "● on" : "○ off" }), p.decidedBy ? " · decided by " + p.decidedBy : "", " · " + p.contributes.length + " items"])]),
           el("span", { cls: "rownum" }, [r.chars ? "~" + k(tok(r.chars)) : "–", el("small", { text: r.chars ? pct(r.chars / total * 100) : "at startup" })]),
@@ -558,7 +639,7 @@ pre.diff .del { color: #ff7a7a; }
         var extra = extraOf(i);
         var c = i.load.chars;
         var live = i.effective && i.load.when === "startup";
-        rows.appendChild(el("li", null, [
+        rows.appendChild(el("li", { "data-id": i.id }, [
           live && c.value ? el("i", { cls: "fill", style: "width:" + Math.max(0.5, c.value / kmax * 100) + "%", "aria-hidden": "true" }) : null,
           el("span", { cls: "rowname" }, [
             i.name,
@@ -591,6 +672,344 @@ pre.diff .del { color: #ff7a7a; }
 
   app.appendChild(el("div", { cls: "grid" }, [budget]));
   drawBudget();
+
+  // ---- Audit: run from the page, a progress bar while it reads, then the findings to explore -------------------
+  // Audits only read files, so the page runs them in every mode. The server runs one at a time on its own thread;
+  // the page polls it for the stage and the fraction done, then draws the result.
+  var SEV = { high: "High", medium: "Medium", low: "Low" };
+  var CODE = {
+    "heavy-user-scope": "User scope nothing here references",
+    "plugin-fit": "Plugin this repo doesn't call for",
+    "instruction-budget": "Instruction file over budget",
+    "repeated-text": "Repeated text",
+    "dead-reference": "Dead reference",
+    "permission-broad": "Risky permission",
+    "permission-one-off": "One-off permission",
+    "permission-covered": "Covered permission"
+  };
+  function codeLabel(c) { return CODE[c] || (c.indexOf("warning:") === 0 ? "Warning: " + c.slice(8) : c); }
+  var REC = { archive: "Archive", "move-to-project": "Move to project scope", unknown: "No signal", keep: "Keep at user scope" };
+
+  var auditBox = el("section", { cls: "box audit", style: "--edge:linear-gradient(90deg,var(--green),var(--cyan));--edge-text:var(--green)", "aria-labelledby": "audit-h" });
+  auditBox.appendChild(el("div", { cls: "head" }, [el("h2", { id: "audit-h", text: "Audit" }), el("span", { cls: "aside", text: "from files only · usage is never read" })]));
+  auditBox.appendChild(el("p", { cls: "intro", text: "Finds what costs context and nothing here references, plugins this repo doesn't need, instruction files over budget, repeated text, dead references and risky permission rules, each with a saving and a fix." }));
+  var runBtn = el("button", { type: "button", cls: "act", text: "Audit this repo" });
+  var fleetIn = el("input", { type: "text", id: "fleet-in", placeholder: "~/code/*  ~/work/app", "aria-label": "Folders to audit together, separated by spaces; * matches any folder name", autocomplete: "off", spellcheck: "false" });
+  fleetIn.value = store("rigswig.fleet") || "";
+  var fleetBtn = el("button", { type: "button", cls: "act off", text: "Audit many repos" });
+  auditBox.appendChild(el("div", { cls: "controls" }, [runBtn, el("div", { cls: "fleetform" }, [fleetIn, fleetBtn])]));
+  // GitHub: only when the page was started with --allow-github; the server downloads, the page never leaves 127.0.0.1.
+  var ghIn = el("input", { type: "text", id: "gh-in", placeholder: "owner/repo or a github.com link", "aria-label": "A public GitHub repo to audit: owner/repo, owner/repo@branch, or its github.com address", "aria-describedby": "gh-hint", autocomplete: "off", spellcheck: "false" });
+  ghIn.value = store("rigswig.github") || "";
+  var ghBtn = el("button", { type: "button", cls: "act off", text: "Audit on GitHub" });
+  var ghHint = el("p", { cls: "ghhint", id: "gh-hint" }, data.github
+    ? ["Downloads the repo's archive from codeload.github.com into memory: nothing is written, nothing from it runs, and your own setup is not part of the result."]
+    : ["GitHub audits are off. Start the page with ", el("code", { text: "rigswig ui --allow-github" }), " to audit public repos; each audit downloads one archive from codeload.github.com."]);
+  if (!data.github) { ghIn.disabled = true; ghBtn.disabled = true; }
+  auditBox.appendChild(el("div", { cls: "controls gh" }, [el("span", { cls: "ghlabel", text: "GitHub" }), el("div", { cls: "fleetform" }, [ghIn, ghBtn])]));
+  auditBox.appendChild(ghHint);
+  var fill = el("div", { cls: "fillbar" });
+  var track = el("div", { cls: "track", role: "progressbar", "aria-labelledby": "audit-h", "aria-valuemin": "0", "aria-valuemax": "100", "aria-valuenow": "0" }, [fill]);
+  var stageEl = el("b", { text: "" }), pctEl = el("span", { text: "" });
+  var prog = el("div", { cls: "prog", hidden: "" }, [track, el("div", { cls: "lbl" }, [stageEl, pctEl])]);
+  var said = el("p", { cls: "sr", role: "status", "aria-live": "polite" });
+  var results = el("div", { cls: "aresult" });
+  auditBox.appendChild(prog);
+  auditBox.appendChild(said);
+  auditBox.appendChild(results);
+  app.appendChild(el("div", { style: "height:12px" }));
+  app.appendChild(auditBox);
+
+  var auditing = false;
+  function busy(on) { auditing = on; runBtn.disabled = on; fleetBtn.disabled = on; ghBtn.disabled = on || !data.github; }
+  function showProg(fraction, stage, ms, state) {
+    prog.removeAttribute("hidden");
+    prog.className = "prog " + (state || "running");
+    var p = Math.round(Math.max(0, Math.min(1, fraction)) * 100);
+    fill.style.width = Math.max(p, 2) + "%";
+    track.setAttribute("aria-valuenow", String(p));
+    track.setAttribute("aria-valuetext", p + "%: " + stage);
+    stageEl.textContent = stage;
+    pctEl.textContent = p + "%" + (ms ? " · " + (ms / 1000).toFixed(1) + " s" : "");
+  }
+  function startAudit(body, label) {
+    if (auditing) return;
+    busy(true);
+    results.textContent = "";
+    showProg(0, "Starting " + label, 0);
+    said.textContent = "Audit started: " + label + ".";
+    call("/api/audit/start", body).then(function (job) { poll(job.id); }).catch(failed);
+  }
+  function poll(id) {
+    call("/api/audit/poll", { id: id }).then(function (j) {
+      if (j.state === "running") {
+        showProg(j.fraction, j.stage, j.elapsedMs);
+        setTimeout(function () { poll(id); }, 150);
+        return;
+      }
+      if (j.state === "failed") return failed(new Error(j.error || "the audit failed"));
+      showProg(1, "Done", j.elapsedMs, "done");
+      busy(false);
+      if (j.mode === "fleet") drawFleet(j.result, results);
+      else if (j.mode === "github") drawAudit(j.result, results, false, " --github " + j.result.repo);
+      else drawAudit(j.result, results, true);
+      var n = j.mode === "fleet" ? j.result.fleet.items.length + " user-scope items across " + j.result.fleet.repos.length + " repos" : j.result.findings.length + " findings";
+      said.textContent = "Audit done: " + n + ".";
+      var first = results.querySelector("h3, .astats");
+      if (first) { first.setAttribute("tabindex", "-1"); first.focus({ preventScroll: true }); }
+    }).catch(failed);
+  }
+  function failed(e) {
+    busy(false);
+    showProg(1, "Failed: " + e.message, 0, "failed");
+    said.textContent = "Audit failed: " + e.message;
+  }
+  runBtn.addEventListener("click", function () { startAudit({ mode: "repo" }, h.target.repo); });
+  function runFleet() {
+    var repos = fleetIn.value.trim().split(/\s+/).filter(Boolean);
+    if (!repos.length) { fleetIn.focus(); said.textContent = "Type the folders to audit first, like ~/code/*"; return; }
+    store("rigswig.fleet", fleetIn.value.trim());
+    startAudit({ mode: "fleet", repos: repos }, repos.join(" "));
+  }
+  fleetBtn.addEventListener("click", runFleet);
+  fleetIn.addEventListener("keydown", function (e) { if (e.key === "Enter") runFleet(); });
+  function runGithub() {
+    var v = ghIn.value.trim();
+    if (!v) { ghIn.focus(); said.textContent = "Type a GitHub repo first, like owner/repo"; return; }
+    store("rigswig.github", v);
+    startAudit({ mode: "github", repo: v }, v + " from GitHub");
+  }
+  ghBtn.addEventListener("click", runGithub);
+  ghIn.addEventListener("keydown", function (e) { if (e.key === "Enter" && data.github) runGithub(); });
+
+  // Show an item the audit names in the inventory above: open its tile's panel and outline its row.
+  function reveal(id) {
+    var i = byId[id];
+    var kind = i ? i.kind : (h.packages.some(function (p) { return p.id === id; }) ? "plugins" : null);
+    if (!kind || !tileBtns[kind]) return;
+    openKind = kind; panelShowAll = true; drawPanel();
+    var rows = panel.querySelectorAll("ul.rows > li");
+    for (var n = 0; n < rows.length; n++) {
+      if (rows[n].getAttribute("data-id") === id) {
+        var r = rows[n];
+        r.classList.add("flash");
+        r.setAttribute("tabindex", "-1");
+        r.scrollIntoView({ block: "center", behavior: "instant" });
+        r.focus({ preventScroll: true });
+        setTimeout(function () { r.classList.remove("flash"); }, 2400);
+        return;
+      }
+    }
+  }
+  function copyButton(text) {
+    var b = el("button", { type: "button", cls: "link small", text: "Copy" });
+    b.addEventListener("click", function () {
+      var done = function () { b.textContent = "Copied"; setTimeout(function () { b.textContent = "Copy"; }, 1500); };
+      if (navigator.clipboard) navigator.clipboard.writeText(text).then(done, function () { b.textContent = "Select and copy"; });
+    });
+    return b;
+  }
+  function card(f, here, repoArg) {
+    var d = el("details", { cls: "finding sev-" + f.severity });
+    d.appendChild(el("summary", null, [
+      el("span", { cls: "sevbadge", text: SEV[f.severity] || f.severity }),
+      el("span", { cls: "ftitle", text: f.title }),
+      f.saving ? el("span", { cls: "fsave", text: "saves ~" + k(f.saving.tokens) }) : null
+    ]));
+    var body = el("div", { cls: "fbody" });
+    body.appendChild(el("p", { cls: "fcode", text: codeLabel(f.code) + " · " + f.code + (f.file ? " · " + f.file : "") }));
+    if (f.evidence.length) body.appendChild(el("ul", { cls: "evid" }, f.evidence.map(function (e) { return el("li", { text: e }); })));
+    if (f.saving) {
+      var est = "Saves ~" + fmt(f.saving.tokens) + " tokens a session (an estimate).";
+      if (f.saving.without.length <= 3) {
+        var cmd = "rigswig status" + repoArg + " --without " + f.saving.without.map(function (w) { return /[\s'"]/.test(w) ? "'" + w.replace(/'/g, "'\\''") + "'" : w; }).join(",");
+        body.appendChild(el("div", { cls: "cmd" }, [est + " Check it:", el("code", { text: cmd }), copyButton(cmd)]));
+      } else {
+        body.appendChild(el("div", { cls: "cmd", text: est + " rigswig audit --json lists the " + f.saving.without.length + " items behind it, to check with rigswig status --without." }));
+      }
+    }
+    body.appendChild(el("p", { cls: "fix" }, [el("b", { text: "Fix: " }), f.proposal]));
+    if (here && f.items.length) {
+      var shown = f.items.filter(function (id) { return byId[id] || h.packages.some(function (p) { return p.id === id; }); });
+      if (shown.length) {
+        var refs = el("div", { cls: "refs", "aria-label": "Show in the inventory" });
+        shown.slice(0, 30).forEach(function (id) {
+          var b = el("button", { type: "button", cls: "link", text: "Show " + (byId[id] ? byId[id].name : id) });
+          b.addEventListener("click", function () { reveal(id); });
+          refs.appendChild(b);
+        });
+        if (shown.length > 30) refs.appendChild(el("span", { cls: "muted", text: "and " + (shown.length - 30) + " more" }));
+        body.appendChild(refs);
+      }
+    }
+    d.appendChild(body);
+    return d;
+  }
+  function drawAudit(a, into, here, repoArgGiven) {
+    into.textContent = "";
+    var bySev = { high: 0, medium: 0, low: 0 };
+    a.findings.forEach(function (f) { bySev[f.severity] = (bySev[f.severity] || 0) + 1; });
+    var saving = a.findings.reduce(function (s, f) { return s + (f.saving ? f.saving.tokens : 0); }, 0);
+    into.appendChild(el("div", { cls: "astats" }, [
+      el("div", { cls: "stat" }, [el("b", { text: String(a.findings.length) }), el("span", { text: "findings in " + a.repo })]),
+      el("div", { cls: "stat" + (bySev.high ? " warn" : "") }, [el("b", { text: String(bySev.high) }), el("span", { text: "high severity" })]),
+      el("div", { cls: "stat good" }, [el("b", null, ap(Math.max(0, saving))), el("span", { text: "tokens a session they could save" })]),
+      el("div", { cls: "stat" }, [el("b", null, ap(a.tokens)), el("span", { text: "tokens before you type now" })])
+    ]));
+    if (!a.findings.length) {
+      into.appendChild(el("p", { cls: "empty", text: "No findings: nothing here to fix." }));
+    } else {
+      var state = { sev: { high: true, medium: true, low: true }, code: "", q: "" };
+      var filters = el("div", { cls: "afilters", role: "group", "aria-label": "Filter findings" });
+      ["high", "medium", "low"].forEach(function (s) {
+        if (!bySev[s]) return;
+        var b = el("button", { type: "button", cls: "chip sev sev-" + s, "aria-pressed": "true", text: SEV[s] + " " + bySev[s] });
+        b.addEventListener("click", function () { state.sev[s] = !state.sev[s]; b.setAttribute("aria-pressed", String(state.sev[s])); list(); });
+        filters.appendChild(b);
+      });
+      var codes = [];
+      a.findings.forEach(function (f) { if (codes.indexOf(f.code) < 0) codes.push(f.code); });
+      if (codes.length > 1) {
+        var sel = el("select", { "aria-label": "Kind of finding" }, [el("option", { value: "", text: "Every kind (" + a.findings.length + ")" })].concat(codes.map(function (c) {
+          var n = a.findings.filter(function (f) { return f.code === c; }).length;
+          return el("option", { value: c, text: codeLabel(c) + " (" + n + ")" });
+        })));
+        sel.addEventListener("change", function () { state.code = sel.value; list(); });
+        filters.appendChild(sel);
+      }
+      var q = el("input", { type: "search", placeholder: "Search findings", "aria-label": "Search findings" });
+      q.addEventListener("input", function () { state.q = q.value.trim().toLowerCase(); list(); });
+      filters.appendChild(q);
+      var expand = el("button", { type: "button", cls: "link small", text: "Open all" });
+      filters.appendChild(expand);
+      into.appendChild(filters);
+      var box = el("div", { cls: "findings" });
+      var count = el("p", { cls: "muted sr", role: "status", "aria-live": "polite" });
+      into.appendChild(count);
+      into.appendChild(box);
+      var repoArg = repoArgGiven !== undefined ? repoArgGiven : here ? "" : " --repo " + a.repo;
+      var list = function () {
+        box.textContent = "";
+        var shown = a.findings.filter(function (f) {
+          if (!state.sev[f.severity]) return false;
+          if (state.code && f.code !== state.code) return false;
+          if (state.q) {
+            var hay = (f.title + " " + f.evidence.join(" ") + " " + f.proposal + " " + f.code + " " + (f.file || "")).toLowerCase();
+            if (hay.indexOf(state.q) < 0) return false;
+          }
+          return true;
+        });
+        shown.forEach(function (f) { box.appendChild(card(f, here, repoArg)); });
+        if (!shown.length) box.appendChild(el("p", { cls: "empty", text: "No findings match these filters." }));
+        count.textContent = shown.length + " of " + a.findings.length + " findings shown";
+        expand.textContent = "Open all";
+      };
+      expand.addEventListener("click", function () {
+        var ds = box.querySelectorAll("details.finding");
+        var open = expand.textContent === "Open all";
+        for (var n = 0; n < ds.length; n++) ds[n].open = open;
+        expand.textContent = open ? "Close all" : "Open all";
+      });
+      list();
+      var firstHigh = box.querySelector("details.finding.sev-high");
+      if (firstHigh) firstHigh.open = true;
+    }
+    if (a.notes.length) into.appendChild(el("ul", { cls: "plain muted", style: "margin-top:10px" }, a.notes.map(function (n) { return el("li", { text: n }); })));
+  }
+  function drawFleet(run, into) {
+    into.textContent = "";
+    var f = run.fleet;
+    var movable = f.items.filter(function (i) { return i.recommendation === "archive" || i.recommendation === "move-to-project"; });
+    var save = movable.reduce(function (s, i) { return s + i.tokens; }, 0);
+    into.appendChild(el("div", { cls: "astats" }, [
+      el("div", { cls: "stat" }, [el("b", { text: String(f.repos.length) }), el("span", { text: "repos audited" })]),
+      el("div", { cls: "stat" }, [el("b", { text: String(f.items.length) }), el("span", { text: "user-scope items" })]),
+      el("div", { cls: "stat" + (movable.length ? " warn" : "") }, [el("b", { text: String(movable.length) }), el("span", { text: "to archive or move" })]),
+      el("div", { cls: "stat good" }, [el("b", null, ap(save)), el("span", { text: "tokens a session, where none is needed" })])
+    ]));
+    var extra = [];
+    if (run.skipped.length) extra.push("Skipped, no harness found: " + run.skipped.join(", "));
+    if (run.privateSkipped) extra.push("Skipped " + run.privateSkipped + " private folder(s) (~/.rigswig/private.json)");
+    run.errors.forEach(function (e) { extra.push("Could not read " + e); });
+
+    // Each repo, with its own findings a click away.
+    into.appendChild(el("h3", { cls: "h2", style: "margin:4px 0 8px", text: "Repos" }));
+    var reposUl = el("ul", { cls: "rows fleetrepos" });
+    var tmax = Math.max.apply(null, f.repos.map(function (r) { return r.tokens; }).concat([1]));
+    f.repos.forEach(function (r, n) {
+      var a = run.audits[n];
+      var here = a && a.repo === h.target.repo && a.tool === h.tool.id;
+      var drill = el("li", { cls: "drillrow", hidden: "" });
+      var btn = el("button", { type: "button", cls: "link small", "aria-expanded": "false", text: r.findings + " findings" });
+      btn.addEventListener("click", function () {
+        var open = btn.getAttribute("aria-expanded") !== "true";
+        btn.setAttribute("aria-expanded", String(open));
+        if (open) {
+          drill.removeAttribute("hidden");
+          drill.textContent = "";
+          var inner = el("div", { cls: "drill" }, [el("h3", { text: r.repo + " · " + r.tool })]);
+          var res = el("div");
+          inner.appendChild(res);
+          drill.appendChild(inner);
+          drawAudit(a, res, here);
+        } else drill.setAttribute("hidden", "");
+      });
+      reposUl.appendChild(el("li", { cls: here ? "current" : null, style: "--kc:var(--cyan)" }, [
+        el("i", { cls: "fill", style: "width:" + Math.max(0.5, r.tokens / tmax * 100) + "%", "aria-hidden": "true" }),
+        el("span", { cls: "rowname" }, [r.repo, el("span", { cls: "meta", text: r.tool + (here ? " · this page" : "") })]),
+        el("span", { cls: "rownum" }, ["~" + k(r.tokens), btn])
+      ]));
+      reposUl.appendChild(drill);
+    });
+    into.appendChild(reposUl);
+    // Each user-scope item and what the fleet says about it.
+    var counts = {};
+    f.items.forEach(function (i) { counts[i.recommendation] = (counts[i.recommendation] || 0) + 1; });
+    var on = { archive: true, "move-to-project": true, unknown: true, keep: false };
+    into.appendChild(el("h3", { cls: "h2", style: "margin:16px 0 8px", text: "User-scope items across the repos" }));
+    var chips = el("div", { cls: "afilters", role: "group", "aria-label": "Filter by recommendation" });
+    var itemsUl = el("ul", { cls: "rows fleetitems" });
+    var allItems = false;
+    var moreBox = el("div", { cls: "more" });
+    var drawItems = function () {
+      itemsUl.textContent = "";
+      moreBox.textContent = "";
+      var matching = f.items.filter(function (i) { return on[i.recommendation]; });
+      var shown = allItems ? matching : matching.slice(0, 12);
+      if (matching.length > shown.length) {
+        var more = el("button", { type: "button", cls: "link", text: "Show all " + matching.length });
+        more.addEventListener("click", function () { allItems = true; drawItems(); var r = itemsUl.children[12]; if (r) { r.setAttribute("tabindex", "-1"); r.focus(); } });
+        moreBox.appendChild(more);
+      }
+      var max = Math.max.apply(null, shown.map(function (i) { return i.tokens; }).concat([1]));
+      shown.forEach(function (i) {
+        var colour = i.kind === "plugin" ? "--kc:#e8e8e8" : kc(i.kind);
+        var sentence = i.recommendation === "keep" ? "needed in " + i.neededIn.length + " of " + i.judged
+          : i.recommendation === "archive" ? "nothing in " + i.judged + " repos references it"
+          : i.recommendation === "unknown" ? "no signal to judge it by"
+          : "needed in " + i.neededIn.length + " of " + i.judged + ": " + i.neededIn.join(", ");
+        itemsUl.appendChild(el("li", { style: colour }, [
+          el("i", { cls: "fill", style: "width:" + Math.max(0.5, i.tokens / max * 100) + "%", "aria-hidden": "true" }),
+          el("span", { cls: "rowname" }, [i.name, el("span", { cls: "meta", text: i.kind + " · " + REC[i.recommendation] }), el("span", { cls: "rec", text: sentence })]),
+          el("span", { cls: "rownum", text: "~" + k(i.tokens) })
+        ]));
+      });
+      if (!shown.length) itemsUl.appendChild(el("li", null, [el("span", { cls: "empty", text: "Nothing to show with these filters." })]));
+    };
+    ["archive", "move-to-project", "unknown", "keep"].forEach(function (r) {
+      if (!counts[r]) return;
+      var b = el("button", { type: "button", cls: "chip", "aria-pressed": String(on[r]), text: REC[r] + " " + counts[r] });
+      b.addEventListener("click", function () { on[r] = !on[r]; b.setAttribute("aria-pressed", String(on[r])); drawItems(); });
+      chips.appendChild(b);
+    });
+    into.appendChild(chips);
+    into.appendChild(itemsUl);
+    into.appendChild(moreBox);
+    drawItems();
+
+    var notes = f.notes.concat(extra);
+    if (notes.length) into.appendChild(el("ul", { cls: "plain muted", style: "margin-top:10px" }, notes.map(function (n) { return el("li", { text: n }); })));
+  }
 
   // ---- Differences, when comparing ----------------------------------------------------------------------------
   var main = el("div", { cls: "grid two" });

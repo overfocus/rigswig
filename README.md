@@ -25,7 +25,8 @@ spread across user, project, local and managed scopes. rigswig reads all of it f
 there actually gets, which scope decided each setting, what is overridden, and roughly how much context it costs
 before you type a word.
 
-**Status: pre-alpha.** `rigswig status` and the local page, `rigswig ui`, work for Claude Code and Codex. See
+**Status: pre-alpha.** `rigswig status`, `rigswig audit` and the local page, `rigswig ui`, work for Claude Code and
+Codex. See
 [docs/ROADMAP.md](docs/ROADMAP.md).
 
 rigswig is a single binary written in Rust. Once released it will install with `cargo install rigswig`, Homebrew or
@@ -39,7 +40,19 @@ cargo run -- compare repo-a repo-b               # what differs between two repo
 cargo run -- compare path/to/repo --tools claude-code,codex   # or between two harnesses on one repo
 cargo run -- check --repo path/to/repo --max-tokens 40k        # for CI: exit 1 when the budget is passed
 cargo run -- status --repo path/to/repo --without layer:user   # what-if: the totals without some items
+cargo run -- audit --repo path/to/repo                          # ranked findings, each with a saving and a fix
+cargo run -- audit --repos '~/code/*'                           # fleet: each user-scope item against every repo
+cargo run -- audit --github owner/repo                          # a public GitHub repo, in memory, without your setup
+cargo run -- audit --archive repo.tar.gz                        # the same for an archive you downloaded, offline
 ```
+
+`rigswig audit` turns the numbers into a to-do list: user-scope agents and skills that nothing in the repo references,
+plugins switched on everywhere that the repo's files don't call for, instruction files over budget, sentences repeated
+across layers, paths and scripts the instructions name that don't exist, and permission rules that have piled up or
+allow too much. Each finding carries its evidence, the tokens it would save (computed like `--without`) and a proposed
+change. Fleet mode answers the question a single repo can't: which repos need each user-scope item, so it can move to
+those repos' project scope. The page runs both too, with a progress bar, and lets you filter the findings and jump
+from one to the items it names. See [docs/AUDIT.md](docs/AUDIT.md).
 
 The page is local: it listens on 127.0.0.1 only, answers only requests that carry its token and the right `Host`,
 loads nothing from anywhere else, and stops after 30 minutes without a request. It is read-only unless started with
@@ -50,12 +63,18 @@ diff, the budget before and after), a backup and undo: see [docs/WRITE-MODE.md](
 
 These are the point of the tool, and they will be enforced by tests:
 
-- **No network.** rigswig never makes a request, and sends no telemetry.
+- **No network unless you ask.** rigswig sends no telemetry and makes no request, except one: `--github owner/repo`
+  downloads that public repo's archive from `codeload.github.com`, only in the run you give it to, or for each
+  GitHub audit you start on a page launched with `ui --allow-github` ([GitHub repos](docs/GITHUB.md)). Build with
+  `--no-default-features` for a rigswig with no network code at all.
 - **No model calls.** Everything it shows is read from files on your machine.
 - **Read-only by default.** Nothing is ever written unless you start the page with `rigswig ui --allow-writes`
   ([write mode](docs/WRITE-MODE.md)).
 - **No secrets.** MCP server `env`, `headers` and `args`, URL paths and inline hook code are never printed or served.
-- **No transcripts.** It never reads session history.
+- **No transcripts.** It never reads session history. (Claude Code's auto-memory index, `MEMORY.md`, is read and
+  counted because it loads into every session; nothing else in that folder is.)
+- **Private folders stay private.** List them in `~/.rigswig/private.json` (`{"private": ["~/notes"]}`): rigswig
+  refuses them as a repo, and `audit --repos` skips them.
 
 ## Harnesses
 

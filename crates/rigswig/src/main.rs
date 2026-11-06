@@ -1,5 +1,7 @@
 //! rigswig: a harness-agnostic, read-only explorer for coding-agent setups (docs/ROADMAP.md).
 
+mod audits;
+mod github;
 mod os_fs;
 mod render;
 mod ui;
@@ -22,13 +24,26 @@ Usage:
                                             (--tool picks the harness; by default the one with the most evidence)
   rigswig check [--repo <path>] [--tool <id>] [--max-tokens <n>] [--max-item-tokens <n>] [--no-warnings] [--json]
                                             for CI: exits 1 when a limit is passed (n may be 40000, 40k or 1m)
+  rigswig audit [--repo <path>] [--tool <id>] [--json]
+                                            ranked findings: what costs context and nothing here references, plugins the
+                                            repo's files do not call for, instruction files over budget, repeated text,
+                                            dead references and piled-up permission rules; each with a saving and a fix
+  rigswig audit --repos <path|glob>... [--tool <id>] [--json]
+                                            fleet mode: each user-scope item against every repo (--repos '~/code/*')
+  rigswig audit|status --github <owner/repo[@ref]> [--tool <id>] [--json]
+                                            a public GitHub repo, downloaded as an archive into memory (never onto
+                                            disk) and read with an empty home: the one network request rigswig makes,
+                                            only when this flag is given
+  rigswig audit|status --archive <repo.tar.gz> [--tool <id>] [--json]
+                                            the same for an archive you downloaded yourself, with no network
   rigswig tools [--repo <path>]             the harnesses rigswig knows, and the evidence for each in this repo
   rigswig schema                            the JSON Schema of `status --json`
 
-  rigswig ui [--repo <path>] [--tool <id>] [--port <n>] [--idle <minutes>] [--allow-writes]
+  rigswig ui [--repo <path>] [--tool <id>] [--port <n>] [--idle <minutes>] [--allow-writes] [--allow-github]
                                             the same as a local page (stops after --idle minutes, default 30); read-only
                                             unless --allow-writes, which lets it turn plugins and project MCP servers on
-                                            and off, with a preview, a backup and undo
+                                            and off, with a preview, a backup and undo; --allow-github lets the
+                                            page audit public GitHub repos (a download for each one you start)
 
   rigswig compare <repo-a> <repo-b> [--tool <id>] [--json]
   rigswig compare <repo> --tools <id-a>,<id-b> [--json]
@@ -37,7 +52,8 @@ Usage:
 `status` and `check` take --without <what> (repeatable, or comma-separated): a plugin (name@marketplace), a
 layer (layer:user), a kind and name (agent:*, skill:deploy) or an item id. The totals are recomputed without them.
 
-rigswig never makes a network request or calls a model, and writes nothing unless `ui --allow-writes` is used.
+rigswig never calls a model, makes no network request unless a run is given --github, and writes nothing unless
+`ui --allow-writes` is used.
 ",
         rigswig_core::VERSION
     )
@@ -81,11 +97,125 @@ fn home() -> Option<PathBuf> {
     std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).map(PathBuf::from).filter(|p| p.is_absolute())
 }
 
+/// The user's private folders, `~/.rigswig/private.json` (`{ "private": ["~/notes", "/srv/secret"] }`): rigswig
+/// refuses them as a repo, and fleet mode skips them. Empty unless the user writes the file.
+fn private_folders(home: &std::path::Path) -> Vec<PathBuf> {
+    #[derive(serde::Deserialize)]
+    struct File {
+        private: Vec<String>,
+    }
+    let Ok(text) = std::fs::read_to_string(home.join(".rigswig/private.json")) else { return Vec::new() };
+    let Ok(f) = serde_json::from_str::<File>(&text) else {
+        eprintln!(
+            "rigswig: ~/.rigswig/private.json is not {{\"private\": [paths]}}; refusing every repo until it is fixed"
+        );
+        return vec![PathBuf::from("/")];
+    };
+    f.private
+        .iter()
+        .map(|p| match p.strip_prefix("~/") {
+            Some(rest) => home.join(rest),
+            None => PathBuf::from(p),
+        })
+        .map(|p| real_path(&p).unwrap_or(p))
+        .collect()
+}
+
+/// An error when `repo` (real) is inside a private folder.
+fn refuse_private(repo: &std::path::Path, home: &std::path::Path) -> Result<(), String> {
+    if private_folders(home).iter().any(|p| repo.starts_with(p)) {
+        return Err("that folder is listed in ~/.rigswig/private.json, so rigswig does not read it".into());
+    }
+    Ok(())
+}
+
 #[derive(PartialEq)]
 enum Mode {
     Status,
     Tools,
     Ui,
+}
+
+/// A repo that is not on this machine: GitHub (a network request, only when asked) or an archive file (offline).
+pub enum Remote {
+    Github(github::Spec),
+    Archive(PathBuf),
+}
+
+impl Remote {
+    fn from_flag(flag: &str, value: &str) -> Result<Self, String> {
+        match flag {
+            "--github" => github::Spec::parse(value).map(Remote::Github),
+            _ => Ok(Remote::Archive(PathBuf::from(value))),
+        }
+    }
+}
+
+/// The remote repo as an in-memory tree: the tree, the repo's folder in it, a label, and what unpacking did.
+fn load_remote(
+    r: &Remote,
+    downloaded: &mut dyn FnMut(u64),
+) -> Result<(rigswig_core::fs::MemFs, PathBuf, String, String), String> {
+    let (bytes, label, name) = match r {
+        Remote::Github(spec) => (github::download(spec, github::LIMITS, downloaded)?, spec.label(), spec.repo.clone()),
+        Remote::Archive(p) => {
+            let real = real_path(p).map_err(|_| format!("no such archive: {}", p.display()))?;
+            if let Some(h) = home() {
+                refuse_private(&real, &h)?;
+            }
+            let file = std::fs::File::open(&real).map_err(|e| format!("cannot read {}: {e}", p.display()))?;
+            let mut bytes = Vec::new();
+            std::io::Read::read_to_end(&mut std::io::Read::take(file, github::LIMITS.max_compressed + 1), &mut bytes)
+                .map_err(|e| format!("cannot read {}: {e}", p.display()))?;
+            let file_name = real.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+            let stem = file_name.trim_end_matches(".tar.gz").trim_end_matches(".tgz").to_string();
+            let name: String =
+                stem.chars().map(|c| if c.is_ascii_alphanumeric() || "._-".contains(c) { c } else { '-' }).collect();
+            let name = if name.is_empty() || name.chars().all(|c| c == '.') { "archive".to_string() } else { name };
+            (bytes, file_name, name)
+        }
+    };
+    let root = PathBuf::from(github::ROOT).join(&name);
+    let (fs, rep) = github::unpack(&bytes[..], &root, github::LIMITS)?;
+    let summary = format!(
+        "{label} was read in memory with an empty home folder, so your own setup is not part of it: {} files, {} links and special files dropped, {} kept by name only (binary or over 1 MB)",
+        rep.files, rep.links_dropped, rep.kept_empty
+    );
+    Ok((fs, root, label, summary))
+}
+
+/// On stderr, before the one request rigswig makes.
+fn say_download(r: &Remote) {
+    if let Remote::Github(spec) = r {
+        eprintln!("rigswig: downloading {} from codeload.github.com (the only request rigswig makes)", spec.label());
+    }
+}
+
+/// Run `f` with the harness for a remote repo: `tool`, or the one with the most evidence in it. Returns its result,
+/// the label and the unpacking summary.
+fn with_remote<R>(
+    r: &Remote,
+    tool: Option<&str>,
+    f: impl FnOnce(&dyn Adapter, &Ctx) -> R,
+) -> Result<(R, String, String), String> {
+    say_download(r);
+    let (fs, root, label, summary) = load_remote(r, &mut |_| {})?;
+    let adapters = rigswig_core::adapters::all();
+    // Nothing from this machine: no environment variables, an invented home, the archive's own files only.
+    let ctx = Ctx {
+        fs: &fs,
+        env: std::collections::BTreeMap::new(),
+        home: PathBuf::from(github::HOME),
+        repo: root,
+        os: this_os(),
+    };
+    let a = match tool {
+        Some(t) => {
+            adapters.iter().find(|a| a.id() == t).ok_or(format!("no harness called {t} (see `rigswig tools`)"))?
+        }
+        None => adapters.iter().max_by_key(|a| a.detect(&ctx).score).expect("an adapter"),
+    };
+    Ok((f(a.as_ref(), &ctx), label, summary))
 }
 
 fn status(args: &[String], mode: Mode) -> ExitCode {
@@ -96,6 +226,8 @@ fn status(args: &[String], mode: Mode) -> ExitCode {
     let mut idle_minutes: u64 = 30;
     let mut removals: Vec<String> = Vec::new();
     let mut allow_writes = false;
+    let mut allow_github = false;
+    let mut remote: Option<Remote> = None;
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -103,6 +235,13 @@ fn status(args: &[String], mode: Mode) -> ExitCode {
             "--repo" => match it.next() {
                 Some(p) if !p.starts_with("--") => repo = Some(PathBuf::from(p)),
                 _ => return fail("--repo needs a path"),
+            },
+            flag @ ("--github" | "--archive") if mode == Mode::Status => match it.next() {
+                Some(v) if !v.starts_with("--") => match Remote::from_flag(flag, v) {
+                    Ok(r) => remote = Some(r),
+                    Err(e) => return fail(&e),
+                },
+                _ => return fail(&format!("{flag} needs a value")),
             },
             "--tool" => match it.next() {
                 Some(t) if !t.starts_with("--") => tool = Some(t.clone()),
@@ -115,6 +254,12 @@ fn status(args: &[String], mode: Mode) -> ExitCode {
                 _ => return fail("--without needs what to take out"),
             },
             "--allow-writes" if mode == Mode::Ui => allow_writes = true,
+            "--allow-github" if mode == Mode::Ui => {
+                if !cfg!(feature = "github") {
+                    return fail("this rigswig was built without the github feature, so the page cannot download");
+                }
+                allow_github = true
+            }
             "--port" if mode == Mode::Ui => match it.next().and_then(|p| p.parse().ok()) {
                 Some(p) => port = p,
                 None => return fail("--port needs a number"),
@@ -126,11 +271,34 @@ fn status(args: &[String], mode: Mode) -> ExitCode {
             other => return fail(&format!("unknown option: {other}")),
         }
     }
+    if let Some(r) = &remote {
+        if repo.is_some() {
+            return fail("use --repo for a folder here, or --github / --archive for one that is not, not both");
+        }
+        let (mut h, label, summary) = match with_remote(r, tool.as_deref(), |a, ctx| a.resolve(ctx)) {
+            Ok(x) => x,
+            Err(e) => return fail(&e),
+        };
+        h.target.repo = printable(&label);
+        if !removals.is_empty() {
+            h = rigswig_core::whatif::without(&h, &removals).0;
+        }
+        eprintln!("rigswig: {}", printable(&summary));
+        if json {
+            println!("{}", serde_json::to_string_pretty(&h).expect("the model serialises"));
+        } else {
+            print!("{}", render::text(&h));
+        }
+        return ExitCode::SUCCESS;
+    }
     let repo = match repo.map_or_else(std::env::current_dir, Ok).and_then(|p| real_path(&p)) {
         Ok(r) => r,
         Err(_) => return fail("that repo folder does not exist"),
     };
     let Some(home) = home() else { return fail("the home folder is not set") };
+    if let Err(e) = refuse_private(&repo, &home) {
+        return fail(&e);
+    }
 
     let adapters = rigswig_core::adapters::all();
     let ctx_for = |a: &dyn Adapter| {
@@ -185,6 +353,7 @@ fn status(args: &[String], mode: Mode) -> ExitCode {
                 tools,
                 version: rigswig_core::VERSION,
                 writes: allow_writes,
+                github: allow_github,
             };
             Some(ui::embed_json(&page))
         };
@@ -241,7 +410,16 @@ fn status(args: &[String], mode: Mode) -> ExitCode {
         };
         let idle = std::time::Duration::from_secs(idle_minutes * 60);
         let act_ref: Option<&ui::Act> = if allow_writes { Some(&act) } else { None };
-        let started = ui::serve(port, idle, &render, act_ref, &|url| {
+        // Audits read only, so they run without write mode: one at a time, on their own thread, polled by the page.
+        let audit_jobs = audits::Jobs::new(allow_github);
+        let jobs = |route: &str, t: Option<&str>, body: &str| -> Result<String, (u16, String)> {
+            let id = t.unwrap_or(&default);
+            if !scored.iter().any(|(a, _)| a.id() == id) {
+                return Err((404, "no such harness".into()));
+            }
+            audit_jobs.route(route, &repo, id, body)
+        };
+        let started = ui::serve(port, idle, &render, act_ref, Some(&jobs), &|url| {
             if allow_writes {
                 println!("rigswig ui (WRITE MODE, local only): {url}");
                 println!(
@@ -249,6 +427,11 @@ fn status(args: &[String], mode: Mode) -> ExitCode {
                 );
             } else {
                 println!("rigswig ui (read-only, local only): {url}");
+            }
+            if allow_github {
+                println!(
+                    "GitHub audits are on: each one the page starts downloads that public repo from codeload.github.com."
+                );
             }
             println!("Stops after {idle_minutes} minutes without a request, or with Ctrl-C.");
         });
@@ -288,10 +471,16 @@ fn status(args: &[String], mode: Mode) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-/// Resolve `tool` (or the adapter with the most evidence) for `repo`.
-fn resolve(repo: &std::path::Path, tool: Option<&str>) -> Result<rigswig_core::model::Harness, String> {
+/// Run `f` with `tool` (or the adapter with the most evidence) and its context for `repo`. `f` also gets the
+/// adapter's detection score.
+fn with_harness<R>(
+    repo: &std::path::Path,
+    tool: Option<&str>,
+    f: impl FnOnce(&dyn Adapter, &Ctx, u8) -> R,
+) -> Result<R, String> {
     let repo = real_path(repo).map_err(|_| format!("no such folder: {}", repo.display()))?;
     let home = home().ok_or("the home folder is not set")?;
+    refuse_private(&repo, &home)?;
     let adapters = rigswig_core::adapters::all();
     let ctx_for = |a: &dyn Adapter| {
         let env = a.env_vars().iter().filter_map(|k| std::env::var(k).ok().map(|v| ((*k).to_string(), v))).collect();
@@ -303,7 +492,132 @@ fn resolve(repo: &std::path::Path, tool: Option<&str>) -> Result<rigswig_core::m
         }
         None => adapters.iter().max_by_key(|a| a.detect(&ctx_for(a.as_ref())).score).expect("an adapter"),
     };
-    Ok(a.resolve(&ctx_for(a.as_ref())))
+    let ctx = ctx_for(a.as_ref());
+    let score = a.detect(&ctx).score;
+    Ok(f(a.as_ref(), &ctx, score))
+}
+
+/// Resolve `tool` (or the adapter with the most evidence) for `repo`.
+fn resolve(repo: &std::path::Path, tool: Option<&str>) -> Result<rigswig_core::model::Harness, String> {
+    with_harness(repo, tool, |a, ctx, _| a.resolve(ctx))
+}
+
+/// `~/x` and `*` in the last part of a path: `~/code/*` is every folder in `~/code`.
+fn expand(pattern: &str) -> Result<Vec<PathBuf>, String> {
+    let p = match pattern.strip_prefix("~/") {
+        Some(rest) => home().ok_or("the home folder is not set")?.join(rest),
+        None => PathBuf::from(pattern),
+    };
+    let name = p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    if !name.contains('*') {
+        return Ok(vec![p]);
+    }
+    if p.parent().is_some_and(|d| d.to_string_lossy().contains('*')) {
+        return Err(format!("only the last part of a path may use *: {pattern}"));
+    }
+    let dir = p.parent().map(PathBuf::from).unwrap_or_default();
+    let mut out: Vec<PathBuf> = std::fs::read_dir(&dir)
+        .map_err(|_| format!("no such folder: {}", dir.display()))?
+        .filter_map(Result::ok)
+        .filter(|e| e.file_type().is_ok_and(|t| t.is_dir()))
+        .filter(|e| {
+            let n = e.file_name().to_string_lossy().into_owned();
+            !n.starts_with('.') && rigswig_core::whatif::glob(&name, &n)
+        })
+        .map(|e| e.path())
+        .collect();
+    out.sort();
+    Ok(out)
+}
+
+/// `rigswig audit`: findings for one repo, or fleet mode across many.
+fn audit(args: &[String]) -> ExitCode {
+    let mut repo: Option<PathBuf> = None;
+    let mut repos: Vec<String> = Vec::new();
+    let mut tool: Option<String> = None;
+    let mut json = false;
+    let mut remote: Option<Remote> = None;
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        let mut value =
+            |name: &str| it.next().filter(|v| !v.starts_with("--")).cloned().ok_or(format!("{name} needs a value"));
+        match a.as_str() {
+            "--json" => json = true,
+            "--repo" => match value("--repo") {
+                Ok(v) => repo = Some(PathBuf::from(v)),
+                Err(e) => return fail(&e),
+            },
+            flag @ ("--github" | "--archive") => match value(flag).and_then(|v| Remote::from_flag(flag, &v)) {
+                Ok(r) if remote.is_none() => remote = Some(r),
+                Ok(_) => return fail("one --github or --archive per run"),
+                Err(e) => return fail(&e),
+            },
+            "--repos" => match value("--repos") {
+                Ok(v) => repos.push(v),
+                Err(e) => return fail(&e),
+            },
+            "--tool" => match value("--tool") {
+                Ok(v) => tool = Some(v),
+                Err(e) => return fail(&e),
+            },
+            // A shell that expands `--repos ~/code/*` passes the folders as separate words.
+            other if !other.starts_with("--") && !repos.is_empty() => repos.push(other.to_string()),
+            other => return fail(&format!("unknown option: {other}")),
+        }
+    }
+    if repo.is_some() && !repos.is_empty() {
+        return fail("use --repo for one repo or --repos for many, not both");
+    }
+    if let Some(r) = &remote {
+        if repo.is_some() || !repos.is_empty() {
+            return fail("--github and --archive audit one repo that is not here: not with --repo or --repos");
+        }
+        say_download(r);
+        let a = match audits::remote(r, tool.as_deref(), &mut |_| {}) {
+            Ok(a) => a,
+            Err(e) => return fail(&e),
+        };
+        if json {
+            println!("{}", serde_json::to_string_pretty(&a).expect("serialises"));
+        } else {
+            print!("{}", render::audit_text(&a));
+        }
+        return ExitCode::SUCCESS;
+    }
+    let quiet = &mut |_: rigswig_core::audit::Progress| {};
+    if repos.is_empty() {
+        let here = repo.unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+        let a = match audits::repo(&here, tool.as_deref(), quiet) {
+            Ok((a, _)) => a,
+            Err(e) => return fail(&e),
+        };
+        if json {
+            println!("{}", serde_json::to_string_pretty(&a).expect("serialises"));
+        } else {
+            print!("{}", render::audit_text(&a));
+        }
+        return ExitCode::SUCCESS;
+    }
+
+    let run = match audits::fleet(&repos, tool.as_deref(), quiet) {
+        Ok(r) => r,
+        Err(e) => return fail(&e),
+    };
+    for e in &run.errors {
+        eprintln!("rigswig: {}", printable(e));
+    }
+    if json {
+        println!("{}", serde_json::to_string_pretty(&run.fleet).expect("serialises"));
+    } else {
+        print!("{}", render::fleet_text(&run.fleet));
+        if !run.skipped.is_empty() {
+            println!("  Skipped (no harness found): {}", printable(&run.skipped.join(", ")));
+        }
+        if run.private_skipped > 0 {
+            println!("  Skipped {} private folder(s) (~/.rigswig/private.json)", run.private_skipped);
+        }
+    }
+    ExitCode::SUCCESS
 }
 
 /// `rigswig check`: limits for CI. Exit 0 when every limit holds, 1 when one does not, 2 on a usage error.
@@ -471,6 +785,7 @@ fn main() -> ExitCode {
         Some("ui") => status(&args[1..], Mode::Ui),
         Some("compare") => compare(&args[1..]),
         Some("check") => check(&args[1..]),
+        Some("audit") => audit(&args[1..]),
         Some(other) => fail(&format!("unknown or unimplemented command: {other}")),
     }
 }

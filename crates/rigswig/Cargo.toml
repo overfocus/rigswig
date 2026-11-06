@@ -12,11 +12,24 @@ description.workspace = true
 name = "rigswig"
 path = "src/main.rs"
 
+[features]
+# `--github` downloads a public repo's archive: the only network code in rigswig. Build with --no-default-features for
+# a rigswig that cannot make a network request at all (`--archive` still works).
+default = ["github"]
+github = ["dep:ureq"]
+
 [dependencies]
 rigswig-core = { path = "../rigswig-core" }
+# Reading a repo archive into memory (`--archive`, `--github`): gzip in pure Rust, and tar without extended attributes.
+flate2 = { version = "1.1", default-features = false, features = ["rust_backend"] }
+tar = { version = "0.4", default-features = false }
+# HTTPS with rustls and the Mozilla root store, nothing else (no cookies, no proxy from the environment, no gzip).
+ureq = { version = "2.12", default-features = false, features = ["tls"], optional = true }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 
 [dev-dependencies]
 rigswig-core = { path = "../rigswig-core" }
+flate2 = { version = "1.1", default-features = false, features = ["rust_backend"] }
+tar = { version = "0.4", default-features = false }
 serde_json = "1.0.154"

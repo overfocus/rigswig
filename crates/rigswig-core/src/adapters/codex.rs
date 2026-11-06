@@ -183,13 +183,7 @@ impl Adapter for Codex {
             what: "the system prompt, built-in tools and bundled system skills".into(),
             why: "they come with Codex, not from any file".into(),
         });
-        let servers = b.items.iter().filter(|i| i.effective && i.detail.kind() == "mcp").count();
-        if servers > 0 {
-            b.not_measured.push(NotMeasured {
-                what: format!("tool listings of {servers} MCP server{}", if servers == 1 { "" } else { "s" }),
-                why: "rigswig reads server names, never connects to them".into(),
-            });
-        }
+        b.not_measured_common();
         for note in [
             "command-line flags and overrides (-c, --model, --profile) and profile files (~/.codex/<name>.config.toml)",
             "cloud-delivered config and requirements, and macOS MDM preferences (com.openai.codex)",

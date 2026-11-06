@@ -25,6 +25,9 @@ jobs:
       - run: cargo fmt --check
       - run: cargo clippy --all-targets --locked -- -D warnings
       - run: cargo test --locked
+      # The build with no network code at all: --github refuses, --archive still works.
+      - run: cargo test --locked -p rigswig --no-default-features
+      - run: cargo clippy --locked --all-targets -p rigswig --no-default-features -- -D warnings
 
   msrv:
     runs-on: ubuntu-latest

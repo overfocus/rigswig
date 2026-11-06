@@ -414,3 +414,58 @@ fn detection_and_config_dir() {
     assert!(h.tool.detected_by.contains(&"user config folder".to_string()));
     assert!(!h.coverage.not_modelled.is_empty());
 }
+
+/// `/home/dev/work/shop` as Claude Code names its project folder.
+const MEMORY_DIR: &str = "/home/dev/.claude/projects/-home-dev-work-shop/memory";
+
+#[test]
+fn the_auto_memory_index_loads_its_first_200_lines() {
+    let long: String = (0..250).map(|n| format!("- note {n}\n")).collect();
+    let fs = base()
+        .dir(format!("{REPO}/.git"))
+        .file(format!("{MEMORY_DIR}/MEMORY.md"), long.clone())
+        .file(format!("{MEMORY_DIR}/topic.md"), "loaded only when read");
+    let h = run(&fs);
+    let id = "claude-code:instruction:user:~/.claude/projects/-home-dev-work-shop/memory/MEMORY.md";
+    let m = item(&h, id);
+    assert_eq!(m.load.when, LoadWhen::Startup);
+    let first: String = long.split_inclusive('\n').take(200).collect();
+    assert_eq!(m.load.chars.value, first.chars().count() as u64);
+    assert!(h.items.iter().all(|i| !i.name.ends_with("topic.md")), "topic files are not startup items");
+
+    // Off by setting or by environment variable.
+    let off = fs.clone().file(format!("{REPO}/.claude/settings.json"), r#"{"autoMemoryEnabled":false}"#);
+    assert!(run(&off).items.iter().all(|i| !i.name.ends_with("MEMORY.md")));
+    let env_off = run_env(&fs, &[("CLAUDE_CODE_DISABLE_AUTO_MEMORY", "1")]);
+    assert!(env_off.items.iter().all(|i| !i.name.ends_with("MEMORY.md")));
+}
+
+#[test]
+fn a_worktree_shares_the_main_checkouts_memory_and_the_folder_can_move() {
+    // The repo is a worktree of /home/dev/work/main.
+    let fs = base()
+        .file(format!("{REPO}/.git"), "gitdir: /home/dev/work/main/.git/worktrees/shop\n")
+        .file("/home/dev/.claude/projects/-home-dev-work-main/memory/MEMORY.md", "- shared\n");
+    let h = run(&fs);
+    assert!(h.items.iter().any(|i| i.name == "~/.claude/projects/-home-dev-work-main/memory/MEMORY.md"));
+
+    let moved = base()
+        .file(format!("{HOME}/.claude/settings.json"), r#"{"autoMemoryDirectory":"~/notes/mem"}"#)
+        .file(format!("{HOME}/notes/mem/MEMORY.md"), "- moved\n");
+    assert!(run(&moved).items.iter().any(|i| i.name == "~/notes/mem/MEMORY.md" && i.effective));
+}
+
+#[test]
+fn session_start_hooks_and_mcp_servers_are_named_as_unmeasured() {
+    let fs = base()
+        .file(
+            format!("{HOME}/.claude/settings.json"),
+            r#"{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"brief.sh"}]}]}}"#,
+        )
+        .file(format!("{REPO}/.mcp.json"), r#"{"mcpServers":{"docs":{"command":"docs-server"}}}"#)
+        .file(format!("{REPO}/.claude/settings.json"), r#"{"enableAllProjectMcpServers":true}"#);
+    let h = run(&fs);
+    let what: Vec<&str> = h.context.not_measured.iter().map(|n| n.what.as_str()).collect();
+    assert!(what.iter().any(|w| w.contains("1 SessionStart hook")), "{what:?}");
+    assert!(what.iter().any(|w| w.contains("MCP server (docs)")), "{what:?}");
+}

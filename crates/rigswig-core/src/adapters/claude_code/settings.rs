@@ -135,6 +135,8 @@ pub(crate) fn scalars(b: &mut Build, scopes: &[Scope]) {
         ("disableAllHooks", &["disableAllHooks"]),
         ("allowManagedHooksOnly", &["allowManagedHooksOnly"]),
         ("enableAllProjectMcpServers", &["enableAllProjectMcpServers"]),
+        ("autoMemoryEnabled", &["autoMemoryEnabled"]),
+        ("autoMemoryDirectory", &["autoMemoryDirectory"]),
     ];
     for (name, path) in keys {
         let trail: Vec<TrailStep> = scopes
