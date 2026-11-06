@@ -88,6 +88,19 @@ impl<'a> Build<'a> {
         j
     }
 
+    /// Warn per YAML feature a [`crate::read::yaml::YamlFile`] dropped, and say when the file itself is broken.
+    pub fn warn_yaml(&mut self, f: &crate::read::yaml::YamlFile, what: &str) {
+        if f.value.is_none() && f.notes.is_empty() {
+            return;
+        }
+        for n in &f.notes {
+            self.warn("yaml-feature-skipped", format!("{what}: {n}; that entry is skipped"), None);
+        }
+        if f.value.is_none() {
+            self.warn("malformed-yaml", format!("{what} is not valid config YAML, skipped"), None);
+        }
+    }
+
     pub fn add_layer(
         &mut self,
         id: &str,

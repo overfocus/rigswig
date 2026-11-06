@@ -95,6 +95,8 @@ Harness-agnostic: each harness is an adapter that reads its own files into one s
 |---|---|
 | Claude Code | `rigswig status` ([the rules it models](docs/adapters/claude-code.md)) |
 | OpenAI Codex CLI | `rigswig status --tool codex` ([the rules it models](docs/adapters/codex.md)) |
+| Hermes Agent | `rigswig status --tool hermes` ([the rules it models](docs/adapters/hermes.md)) |
+| Ollama | `rigswig status --tool ollama` ([the rules it models](docs/adapters/ollama.md)) |
 | Gemini CLI | planned |
 | GitHub Copilot (repo files) | planned |
 | Cursor, OpenCode, others | adapters welcome |

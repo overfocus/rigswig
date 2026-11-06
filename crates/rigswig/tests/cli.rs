@@ -27,6 +27,33 @@ fn unknown_command_exits_2_without_control_characters() {
     assert!(!err.contains('\u{1b}'));
 }
 
+/// The environment variables every adapter reads, removed so a test child sees only the sandbox.
+fn hermetic(mut cmd: std::process::Command) -> std::process::Command {
+    for v in [
+        "CLAUDE_CONFIG_DIR",
+        "ANTHROPIC_MODEL",
+        "CLAUDE_CODE_DISABLE_AUTO_MEMORY",
+        "CLAUDE_CODE_PROJECT_DIR_NAME",
+        "CODEX_HOME",
+        "HERMES_HOME",
+        "HERMES_PROFILE",
+        "HERMES_MANAGED_DIR",
+        "HERMES_INFERENCE_MODEL",
+        "HERMES_MODEL",
+        "LOCALAPPDATA",
+        "OLLAMA_MODELS",
+        "OLLAMA_HOST",
+        "OLLAMA_CONTEXT_LENGTH",
+        "OLLAMA_KEEP_ALIVE",
+        "OLLAMA_MAX_LOADED_MODELS",
+        "OLLAMA_NUM_PARALLEL",
+        "OLLAMA_NO_CLOUD",
+    ] {
+        cmd.env_remove(v);
+    }
+    cmd
+}
+
 /// A throwaway home and repo on the real file system, removed when dropped.
 struct Sandbox(std::path::PathBuf);
 
@@ -47,12 +74,10 @@ impl Sandbox {
         let repo = self.0.join("repo");
         let mut args = vec!["status", "--repo", repo.to_str().unwrap()];
         args.extend(extra);
-        Command::new(env!("CARGO_BIN_EXE_rigswig"))
+        hermetic(Command::new(env!("CARGO_BIN_EXE_rigswig")))
             .args(&args)
             .env("HOME", self.0.join("home"))
             .env("USERPROFILE", self.0.join("home"))
-            .env_remove("CLAUDE_CONFIG_DIR")
-            .env_remove("ANTHROPIC_MODEL")
             .output()
             .unwrap()
     }
@@ -111,11 +136,10 @@ fn compare_two_repos_and_two_tools() {
     s.write("repo/AGENTS.md", "shared");
     s.write("other/CLAUDE.md", "two, longer");
     let run = |args: &[&str]| {
-        Command::new(env!("CARGO_BIN_EXE_rigswig"))
+        hermetic(Command::new(env!("CARGO_BIN_EXE_rigswig")))
             .args(args)
             .env("HOME", s.0.join("home"))
             .env("USERPROFILE", s.0.join("home"))
-            .env_remove("CLAUDE_CONFIG_DIR")
             .output()
             .unwrap()
     };
@@ -142,11 +166,10 @@ fn check_exit_codes_and_without() {
     let run = |args: &[&str]| {
         let mut all = vec!["check", "--repo", repo.to_str().unwrap(), "--tool", "claude-code"];
         all.extend(args);
-        Command::new(env!("CARGO_BIN_EXE_rigswig"))
+        hermetic(Command::new(env!("CARGO_BIN_EXE_rigswig")))
             .args(&all)
             .env("HOME", s.0.join("home"))
             .env("USERPROFILE", s.0.join("home"))
-            .env_remove("CLAUDE_CONFIG_DIR")
             .output()
             .unwrap()
     };
@@ -188,11 +211,10 @@ fn start_ui(s: &Sandbox, extra: &[&str]) -> (std::process::Child, u16, String) {
     let repo = s.0.join("repo");
     let mut args = vec!["ui", "--repo", repo.to_str().unwrap(), "--tool", "claude-code", "--idle", "1"];
     args.extend(extra);
-    let mut child = Command::new(env!("CARGO_BIN_EXE_rigswig"))
+    let mut child = hermetic(Command::new(env!("CARGO_BIN_EXE_rigswig")))
         .args(&args)
         .env("HOME", s.0.join("home"))
         .env("USERPROFILE", s.0.join("home"))
-        .env_remove("CLAUDE_CONFIG_DIR")
         .stdout(std::process::Stdio::piped())
         .spawn()
         .unwrap();
@@ -259,14 +281,10 @@ fn write_mode_plans_applies_backs_up_and_undoes() {
 
 impl Sandbox {
     fn cmd(&self, args: &[&str]) -> std::process::Output {
-        Command::new(env!("CARGO_BIN_EXE_rigswig"))
+        hermetic(Command::new(env!("CARGO_BIN_EXE_rigswig")))
             .args(args)
             .env("HOME", self.0.join("home"))
             .env("USERPROFILE", self.0.join("home"))
-            .env_remove("CLAUDE_CONFIG_DIR")
-            .env_remove("ANTHROPIC_MODEL")
-            .env_remove("CLAUDE_CODE_DISABLE_AUTO_MEMORY")
-            .env_remove("CLAUDE_CODE_PROJECT_DIR_NAME")
             .output()
             .unwrap()
     }
