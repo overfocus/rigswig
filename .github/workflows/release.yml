@@ -76,3 +76,24 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --draft --title "$GITHUB_REF_NAME" --generate-notes
+
+  # crates.io, through trusted publishing: the job gets a short-lived token from crates.io with GitHub's OIDC, so no
+  # token is stored anywhere. It waits in the `crates-io` environment until the maintainer approves the run (a
+  # published version cannot be deleted). crates.io accepts it only from this repo, this workflow and that environment
+  # (each crate's Trusted Publishing settings). docs/RELEASING.md.
+  crates-io:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: crates-io
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: rust-lang/crates-io-auth-action@v1
+        id: auth
+      - name: Publish rigswig-core, then rigswig
+        run: cargo publish --workspace --locked
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
