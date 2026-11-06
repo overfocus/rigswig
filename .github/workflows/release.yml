@@ -102,8 +102,17 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: rust-lang/crates-io-auth-action@v1
         id: auth
+      # A re-run after a failed sibling publishes the same crate again; crates.io's "already" is not a
+      # failure then, the crates are simply up to date.
       - name: Publish rigswig-core, then rigswig
-        run: cargo publish --workspace --locked
+        run: |
+          if out="$(cargo publish --workspace --locked 2>&1)"; then
+            echo "$out"
+          else
+            echo "$out"
+            echo "$out" | grep -qi "already" || exit 1
+            echo "already on crates.io: nothing to do"
+          fi
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
 
@@ -128,6 +137,10 @@ jobs:
           node-version: 24
       # Trusted publishing needs npm >= 11.5.1; the runner's bundled npm can be older.
       - run: npm install --global npm@latest
+      # The picker carries no binary, so it is not a matrix artifact: it is staged here, in this job.
+      - uses: actions/checkout@v4
+      - name: Stage the picker
+        run: node npm/build.mjs --version "$GITHUB_REF_NAME" --picker --out stage
       - uses: actions/download-artifact@v4
         with:
           pattern: npm-*

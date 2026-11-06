@@ -40,7 +40,9 @@ cargo publish --workspace --dry-run   # packages both and builds the binary agai
 cargo publish --workspace             # rigswig-core, then rigswig
 ```
 
-A published version cannot be deleted, only yanked (`cargo yank --version X.Y.Z rigswig`).
+A published version cannot be deleted, only yanked (`cargo yank --version X.Y.Z rigswig`). A re-run of the
+workflow tolerates crates.io's "already": if the publish failed after a sibling, the retry reports nothing to do
+instead of failing.
 
 ## npm
 
@@ -49,8 +51,9 @@ Six packages, published with each release by the workflow's `npm` job: `@kftcda/
 carrying its platform's binary, then the small unscoped `rigswig`, which installs the right one through
 `optionalDependencies` and runs it (`npx rigswig`, `npm install -g rigswig`). The Linux binaries are musl and
 static, so they run on any Linux: one `cli-linux` package each. The packages' versions are the tag's, like the
-crates', and the packages are staged from the same matrix legs as the release binaries (`npm/build.mjs`, tested
-by `npm/test.mjs`, which also checks the target list against the workflow's matrix).
+crates'. The platform packages are staged from
+the same matrix legs as the release binaries and the picker is built inside the `npm` job itself (`npm/build.mjs`,
+tested by `npm/test.mjs`, which also checks the target list against the workflow's matrix).
 
 The platform packages deliberately declare no `bin` field. They are never run directly, and if they shared the
 picker's bin name, npm's install rollback would delete `node_modules/.bin/rigswig` whenever a sibling failed its
