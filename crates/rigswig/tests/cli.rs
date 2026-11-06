@@ -450,3 +450,15 @@ fn a_tie_between_harnesses_picks_the_first_in_rigswigs_list() {
     let audit = s.cmd(&["audit", "--repo", &repo]);
     assert!(String::from_utf8_lossy(&audit.stdout).starts_with("rigswig audit: claude-code"));
 }
+
+#[test]
+fn each_crate_ships_the_repos_licence_and_notice_unchanged() {
+    // A published crate holds only its own folder, so both crates carry copies; they must not drift.
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    for name in ["LICENSE", "NOTICE"] {
+        let want = std::fs::read(root.join(name)).unwrap();
+        for krate in ["crates/rigswig", "crates/rigswig-core"] {
+            assert_eq!(std::fs::read(root.join(krate).join(name)).unwrap(), want, "{krate}/{name} differs from {name}");
+        }
+    }
+}

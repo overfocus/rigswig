@@ -9,4 +9,5 @@ rust-version = "1.85"
 license = "Apache-2.0"
 repository = "https://github.com/overfocus/rigswig"
 description = "See everything your coding agent loads before you type, and where each piece came from. Harness-agnostic, local, read-only."
-publish = false
+homepage = "https://github.com/overfocus/rigswig"
+keywords = ["claude-code", "codex", "ai-agents", "context", "audit"]
