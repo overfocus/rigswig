@@ -24,6 +24,11 @@ Sorted by severity (high, medium, low), then by saving.
 | `permission-covered` | Allow rules that a broader rule in any layer already covers (`Bash(npm run:*)` covers `Bash(npm run lint)`). | no |
 | `warning:<code>` | The harness's own warnings (`status` shows them too), with a proposed fix. | no |
 
+## A repo that is not here
+
+`--github owner/repo` and `--archive <file>` audit a repo without cloning it: in memory, with an empty home, so
+only the repo's own setup counts. See [GITHUB.md](GITHUB.md).
+
 ## Plugin signals
 
 The built-in table is in `audit::builtin_signals`: language servers matched by their project files, and platforms

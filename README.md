@@ -42,6 +42,8 @@ cargo run -- check --repo path/to/repo --max-tokens 40k        # for CI: exit 1 
 cargo run -- status --repo path/to/repo --without layer:user   # what-if: the totals without some items
 cargo run -- audit --repo path/to/repo                          # ranked findings, each with a saving and a fix
 cargo run -- audit --repos '~/code/*'                           # fleet: each user-scope item against every repo
+cargo run -- audit --github owner/repo                          # a public GitHub repo, in memory, without your setup
+cargo run -- audit --archive repo.tar.gz                        # the same for an archive you downloaded, offline
 ```
 
 `rigswig audit` turns the numbers into a to-do list: user-scope agents and skills that nothing in the repo references,
@@ -61,7 +63,9 @@ diff, the budget before and after), a backup and undo: see [docs/WRITE-MODE.md](
 
 These are the point of the tool, and they will be enforced by tests:
 
-- **No network.** rigswig never makes a request, and sends no telemetry.
+- **No network unless you ask.** rigswig sends no telemetry and makes no request, except one: `--github owner/repo`
+  downloads that public repo's archive from `codeload.github.com`, and only in the run you give it to
+  ([GitHub repos](docs/GITHUB.md)). Build with `--no-default-features` for a rigswig with no network code at all.
 - **No model calls.** Everything it shows is read from files on your machine.
 - **Read-only by default.** Nothing is ever written unless you start the page with `rigswig ui --allow-writes`
   ([write mode](docs/WRITE-MODE.md)).

@@ -330,3 +330,88 @@ fn private_folders_are_refused_and_skipped() {
     assert!(text.contains("Skipped 1 private folder"), "{text}");
     assert!(!text.contains("secret"), "{text}");
 }
+
+/// A repo archive as GitHub serves it (`<repo>-<sha>/...`), with a symlinked CLAUDE.md pointing at `outside`.
+fn archive_with_link(dir: &std::path::Path, outside: &std::path::Path) -> std::path::PathBuf {
+    let mut b = tar::Builder::new(Vec::new());
+    let mut add = |name: &str, data: &[u8]| {
+        let mut h = tar::Header::new_gnu();
+        h.set_size(data.len() as u64);
+        h.set_mode(0o644);
+        h.set_cksum();
+        b.append_data(&mut h, name, data).unwrap();
+    };
+    add("shop-abc123/AGENTS.md", b"# Shop\nSee `docs/gone.md`.\n");
+    add("shop-abc123/docs/here.md", b"x");
+    add("shop-abc123/.claude/settings.json", br#"{"permissions":{"allow":["Bash(git push *)"]},"model":"m"}"#);
+    let mut h = tar::Header::new_gnu();
+    h.set_entry_type(tar::EntryType::Symlink);
+    h.set_size(0);
+    h.set_mode(0o777);
+    b.append_link(&mut h, "shop-abc123/CLAUDE.md", outside).unwrap();
+    let tar = b.into_inner().unwrap();
+    let mut gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
+    std::io::Write::write_all(&mut gz, &tar).unwrap();
+    let path = dir.join("shop.tar.gz");
+    std::fs::write(&path, gz.finish().unwrap()).unwrap();
+    path
+}
+
+#[test]
+fn an_archive_is_audited_in_memory_without_the_readers_setup_or_files() {
+    let s = Sandbox::new("archive");
+    // The reader's own setup and a private file the archive's link points at: neither may appear.
+    s.write("home/.claude/agents/mine.md", "---\nname: CANARY-MY-AGENT\ndescription: mine\n---\n");
+    s.write("home/.claude/CLAUDE.md", "CANARY-MY-INSTRUCTIONS\n");
+    s.write("secret.md", "CANARY-SECRET see `docs/CANARY-path.md`\n");
+    let archive = archive_with_link(&s.0, &s.0.join("secret.md"));
+    let archive = archive.to_str().unwrap();
+
+    let out = s.cmd(&["audit", "--archive", archive, "--json"]);
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(!text.contains("CANARY"), "{text}");
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(v["repo"], "shop.tar.gz");
+    let codes: Vec<&str> = v["findings"].as_array().unwrap().iter().map(|f| f["code"].as_str().unwrap()).collect();
+    assert!(codes.contains(&"permission-broad"), "{codes:?}");
+    assert!(codes.contains(&"dead-reference"), "{codes:?}");
+    assert!(!codes.contains(&"heavy-user-scope"), "the reader's agents are not read");
+    assert!(v["notes"][0].as_str().unwrap().contains("1 links and special files dropped"), "{}", v["notes"]);
+
+    let status = s.cmd(&["status", "--archive", archive, "--json"]);
+    let h: serde_json::Value = serde_json::from_slice(&status.stdout).unwrap();
+    let names: Vec<&str> = h["items"].as_array().unwrap().iter().map(|i| i["name"].as_str().unwrap()).collect();
+    assert!(names.contains(&"AGENTS.md"), "{names:?}");
+    assert!(!names.contains(&"CLAUDE.md"), "the link was dropped, so AGENTS.md is read instead: {names:?}");
+    assert!(!String::from_utf8_lossy(&status.stdout).contains("CANARY"));
+}
+
+#[test]
+fn github_input_is_checked_before_any_request_and_never_mixes_with_a_local_repo() {
+    let s = Sandbox::new("github-input");
+    for bad in ["https://evil.example/o/r", "file:///etc/passwd", "o/r@../x", "o"] {
+        let out = s.cmd(&["audit", "--github", bad]);
+        assert_eq!(out.status.code(), Some(2), "{bad}");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(!err.contains("downloading"), "refused before any request: {err}");
+    }
+    let repo = s.path("repo");
+    let both = s.cmd(&["audit", "--github", "o/r", "--repo", &repo]);
+    assert_eq!(both.status.code(), Some(2));
+    assert!(!String::from_utf8_lossy(&both.stderr).contains("downloading"));
+    // The commands people run every day never reach the downloader.
+    for args in [vec!["status", "--repo", &repo], vec!["audit", "--repo", &repo], vec!["check", "--repo", &repo]] {
+        let out = s.cmd(&args);
+        assert!(!String::from_utf8_lossy(&out.stderr).contains("downloading"), "{args:?}");
+    }
+}
+
+#[cfg(not(feature = "github"))]
+#[test]
+fn a_build_without_the_github_feature_cannot_fetch() {
+    let s = Sandbox::new("no-network");
+    let out = s.cmd(&["audit", "--github", "o/r"]);
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("built without the github feature"));
+}

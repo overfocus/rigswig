@@ -47,6 +47,10 @@ measured, and SessionStart hooks and each MCP server are named among the unmeasu
 write-mode actions (archive an agent or skill, move a plugin to project scope, drop permission rules). The page runs
 audits (one repo or a fleet) with a progress bar and shows the findings.
 
+GitHub repos (done; [GITHUB.md](GITHUB.md)): `audit` and `status` take `--github owner/repo[@ref]` (opt-in per run,
+one host, the archive unpacked into memory, an empty home) or `--archive <file>` (offline). Left: the page, private
+repos (a token from the environment), and a counts-only output for sharing.
+
 ## Later
 
 - Write mode for Codex (`config.toml` with comments kept) and for more kinds (skills, hooks) where the tool
@@ -58,4 +62,5 @@ audits (one repo or a fleet) with a progress bar and shows the findings.
 
 ## Not in scope
 
-Session monitoring and transcripts, writing or syncing configuration, testing MCP servers, any network call.
+Session monitoring and transcripts, writing or syncing configuration, testing MCP servers, any network call other than
+the opt-in `--github` download.

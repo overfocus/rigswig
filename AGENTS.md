@@ -25,7 +25,8 @@ Schema); every new crate needs a reason in its commit message.
   before 1.0.0 a minor bump may break, from 1.0.0 only a major one may. Every adapter's output must pass
   `check::contract_errors`, and each rule there has a broken copy in `tests/model.rs` that must fail.
 
-- **The guarantees in README.md are invariants**: no network, no model calls, no secrets printed or served, no
+- **The guarantees in README.md are invariants**: no network unless a run passes `--github` (docs/GITHUB.md: one
+  host, in memory, opt-in per run, and absent from a `--no-default-features` build), no model calls, no secrets printed or served, no
   transcripts read, and no writes unless `ui --allow-writes`. Every one needs a test, and no change may weaken one.
 - **Writes** (docs/WRITE-MODE.md): rigswig-core only plans (`Adapter::plan`); the binary applies (`src/writes.rs`).
   A new kind of change needs a plan test, a refusal test and a browser check, and never targets managed settings,
