@@ -81,7 +81,64 @@ fn rule_scope(text: &str, file: &Path) -> (LoadWhen, Vec<String>) {
     }
 }
 
-pub(crate) fn instructions(b: &mut Build, p: &Paths) {
+/// Folders the subfolder search never enters, besides dot folders: dependencies and build output.
+const SKIP_DIRS: &[&str] = &[
+    "node_modules",
+    "target",
+    "dist",
+    "build",
+    "out",
+    "vendor",
+    "coverage",
+    "__pycache__",
+    "venv",
+    "Pods",
+    "DerivedData",
+];
+/// The subfolder search stops after this many folders, and says so.
+const MAX_SUBFOLDERS: usize = 20_000;
+
+/// Every real folder below the repo, with its repo-relative path (`apps/web`), nearest first. Dot folders,
+/// dependencies and build output are skipped, and links are never followed (a link is not a folder here).
+pub(crate) fn subfolders(b: &mut Build, repo: &Path) -> Vec<(PathBuf, String)> {
+    let mut out = Vec::new();
+    let mut queue = std::collections::VecDeque::from([(repo.to_path_buf(), String::new(), 0usize)]);
+    while let Some((dir, rel, depth)) = queue.pop_front() {
+        if depth >= 12 {
+            continue;
+        }
+        for e in b.fs().read_dir(&dir).unwrap_or_default() {
+            if e.kind != crate::fs::EntryKind::Dir || e.name.starts_with('.') || SKIP_DIRS.contains(&e.name.as_str()) {
+                continue;
+            }
+            if out.len() >= MAX_SUBFOLDERS {
+                b.note_not_modelled(format!(
+                    "subfolders past the first {MAX_SUBFOLDERS}: their CLAUDE.md files and skills are not listed"
+                ));
+                return out;
+            }
+            let r = if rel.is_empty() { e.name.clone() } else { format!("{rel}/{}", e.name) };
+            out.push((dir.join(&e.name), r.clone()));
+            queue.push_back((dir.join(&e.name), r, depth + 1));
+        }
+    }
+    out
+}
+
+/// Items added since `from` load when Claude reads, writes or edits a file under `rel`, not at startup.
+fn on_demand(b: &mut Build, from: usize, rel: &str) {
+    for it in &mut b.items[from..] {
+        if it.effective {
+            it.load.when = LoadWhen::OnMatch;
+        }
+        match &mut it.detail {
+            ItemDetail::Instruction(a) if a.applies_to.is_empty() => a.applies_to = vec![format!("{rel}/**")],
+            _ => {}
+        }
+    }
+}
+
+pub(crate) fn instructions(b: &mut Build, p: &Paths, subs: &[(PathBuf, String)]) {
     let roots: Vec<PathBuf> =
         [&p.repo, &p.cfg].iter().map(|r| b.fs().canonicalize(r).unwrap_or_else(|_| (*r).clone())).collect();
     let mut st = Instr { p, seen: BTreeSet::new(), roots };
@@ -111,6 +168,16 @@ pub(crate) fn instructions(b: &mut Build, p: &Paths) {
     for (f, _) in b.walk(&p.repo.join(".claude/rules"), ".md") {
         add_instruction(b, &mut st, &f, "project", 0, None);
     }
+
+    // CLAUDE.md and CLAUDE.local.md in subfolders load on demand: once Claude reads, writes or edits a file there.
+    // What they import loads with them.
+    for (d, rel) in subs {
+        let from = b.items.len();
+        add_instruction(b, &mut st, &d.join("CLAUDE.md"), "project", 0, None);
+        add_instruction(b, &mut st, &d.join("CLAUDE.local.md"), "local", 0, None);
+        on_demand(b, from, rel);
+    }
+    b.note_not_modelled("AGENTS.md and .claude/rules in subfolders (the docs do not say when they load)");
 }
 
 fn read_fm(b: &Build, file: &Path) -> Option<(String, FrontMatter)> {
@@ -205,20 +272,41 @@ fn skills_in(
     out
 }
 
-pub(crate) fn agents_skills_commands(b: &mut Build, p: &Paths, plugins: &[Plugin]) {
+pub(crate) fn agents_skills_commands(b: &mut Build, p: &Paths, plugins: &[Plugin], subs: &[(PathBuf, String)]) {
     let all = |_: &Build, _: &Path| true;
     let enterprise = p.system.join(".claude");
     b.note_not_modelled("the enterprise agents and skills folders are assumed to be .claude/agents and .claude/skills in the system folder");
 
     // Agents: managed > project > user > plugin (plugins are namespaced and never clash).
+    // Each folder is scanned recursively; a subfolder does not change an agent's name, which comes from `name`. Project
+    // agents come from every .claude/agents between the working directory and the git root, the closest winning.
     let mut agents = Vec::new();
-    for (root, layer) in [
-        (enterprise.join("agents"), "managed"),
-        (p.repo.join(".claude/agents"), "project"),
-        (p.cfg.join("agents"), "user"),
-    ] {
-        for f in b.files_in(&root, ".md") {
+    let root = git_root(b, &p.repo);
+    let project_dirs: Vec<PathBuf> =
+        p.repo.ancestors().take_while(|d| d.starts_with(&root)).map(|d| d.join(".claude/agents")).collect();
+    let mut roots = vec![(enterprise.join("agents"), "managed", 0usize)];
+    roots.extend(project_dirs.into_iter().enumerate().map(|(n, d)| (d, "project", n)));
+    roots.push((p.cfg.join("agents"), "user", 0));
+    for (dir, layer, distance) in roots {
+        for (f, _) in b.walk(&dir, ".md") {
             let name = read_fm(b, &f).and_then(|(_, fm)| fm.str("name").map(String::from)).unwrap_or_else(|| stem(&f));
+            if distance > 0 {
+                // A farther folder's agent with a name a closer one has is overridden by it: `push` already shadows
+                // it by the first one in, the closer; the warning it adds about two files "in one place" is dropped.
+                let id = format!("{}:agent:project:{}", super::ID, crate::read::redact::printable(&name));
+                if b.items.iter().any(|i| i.id == id) {
+                    let msg = format!(
+                        "two agents named {:?} in one place; the second is ignored",
+                        crate::read::redact::printable(&name)
+                    );
+                    let before = b.warnings.iter().filter(|w| w.message == msg).count();
+                    agent(b, &f, layer, name);
+                    if b.warnings.iter().filter(|w| w.message == msg).count() > before {
+                        b.warnings.retain(|w| w.message != msg);
+                    }
+                    continue;
+                }
+            }
             agents.extend(agent(b, &f, layer, name));
         }
     }
@@ -245,6 +333,16 @@ pub(crate) fn agents_skills_commands(b: &mut Build, p: &Paths, plugins: &[Plugin
     ] {
         skills.extend(skills_in(b, &root, layer, None, &all));
     }
+    // Skills in a subfolder's .claude/skills load the first time Claude reads or edits a file there, named after the
+    // folder (`apps/web:deploy`), and never clash with the root's.
+    for (d, rel) in subs {
+        let from = b.items.len();
+        skills_in(b, &d.join(".claude/skills"), "project", Some(rel), &all);
+        on_demand(b, from, rel);
+    }
+    b.note_not_modelled(
+        "skills nested deeper than skills/<name>/SKILL.md, command subfolders, and .claude/agents below the working directory",
+    );
     let mut commands = Vec::new();
     for (root, layer) in [(p.cfg.join("commands"), "user"), (p.repo.join(".claude/commands"), "project")] {
         for f in b.files_in(&root, ".md") {

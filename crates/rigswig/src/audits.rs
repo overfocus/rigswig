@@ -53,8 +53,10 @@ pub fn remote(r: &Remote, tool: Option<&str>, progress: &mut dyn FnMut(Progress)
         Some(t) => {
             adapters.iter().find(|a| a.id() == t).ok_or(format!("no harness called {t} (see `rigswig tools`)"))?
         }
-        None => adapters.iter().max_by_key(|a| a.detect(&ctx).score).expect("an adapter"),
+        None => adapters.iter().rev().max_by_key(|a| a.detect(&ctx).score).expect("an adapter"),
     };
+    let others: Vec<&str> =
+        adapters.iter().filter(|o| o.id() != a.id() && o.detect(&ctx).score > 50).map(|o| o.id()).collect();
     let h = a.resolve(&ctx);
     // The built-in signals only: ~/.rigswig/signals.json belongs to this machine.
     let mut out = audit::audit_with(&ctx, &h, &audit::Options::default(), &mut |p| {
@@ -62,6 +64,10 @@ pub fn remote(r: &Remote, tool: Option<&str>, progress: &mut dyn FnMut(Progress)
     });
     out.repo = rigswig_core::read::redact::printable(&label);
     out.notes.insert(0, summary);
+    if !others.is_empty() {
+        out.notes
+            .insert(1, format!("also configured in this repo: {} (add --tool <id> to audit it)", others.join(", ")));
+    }
     Ok(out)
 }
 

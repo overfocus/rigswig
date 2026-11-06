@@ -418,3 +418,17 @@ fn a_build_without_the_github_feature_cannot_fetch() {
     assert_eq!(page.status.code(), Some(2), "the page cannot be started with downloads on");
     assert!(String::from_utf8_lossy(&page.stderr).contains("built without the github feature"));
 }
+
+#[test]
+fn a_tie_between_harnesses_picks_the_first_in_rigswigs_list() {
+    // Both harnesses have their own folder in the repo: evidence 100 each.
+    let s = Sandbox::new("tie");
+    std::fs::create_dir_all(s.0.join("repo/.codex")).unwrap();
+    let repo = s.path("repo");
+    let out = s.cmd(&["status", "--repo", &repo]);
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(text.starts_with("claude-code in repo"), "{text}");
+    assert!(text.contains("Also configured here: codex"), "{text}");
+    let audit = s.cmd(&["audit", "--repo", &repo]);
+    assert!(String::from_utf8_lossy(&audit.stdout).starts_with("rigswig audit: claude-code"));
+}

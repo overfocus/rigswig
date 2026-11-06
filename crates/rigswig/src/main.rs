@@ -21,7 +21,8 @@ fn usage() -> String {
 Usage:
   rigswig status [--repo <path>] [--tool <id>] [--json]
                                             what a coding-agent session in a repo loads, and where each piece came from
-                                            (--tool picks the harness; by default the one with the most evidence)
+                                            (--tool picks the harness; by default the one with the most evidence,
+                                            and on a tie the first of claude-code, codex)
   rigswig check [--repo <path>] [--tool <id>] [--max-tokens <n>] [--max-item-tokens <n>] [--no-warnings] [--json]
                                             for CI: exits 1 when a limit is passed (n may be 40000, 40k or 1m)
   rigswig audit [--repo <path>] [--tool <id>] [--json]
@@ -213,7 +214,7 @@ fn with_remote<R>(
         Some(t) => {
             adapters.iter().find(|a| a.id() == t).ok_or(format!("no harness called {t} (see `rigswig tools`)"))?
         }
-        None => adapters.iter().max_by_key(|a| a.detect(&ctx).score).expect("an adapter"),
+        None => adapters.iter().rev().max_by_key(|a| a.detect(&ctx).score).expect("an adapter"),
     };
     Ok((f(a.as_ref(), &ctx), label, summary))
 }
@@ -322,9 +323,9 @@ fn status(args: &[String], mode: Mode) -> ExitCode {
                 return fail(&format!("no harness called {t} (see `rigswig tools`)"));
             }
         }
-        let default = tool
-            .clone()
-            .unwrap_or_else(|| scored.iter().max_by_key(|(_, d)| d.score).expect("an adapter").0.id().to_string());
+        let default = tool.clone().unwrap_or_else(|| {
+            scored.iter().rev().max_by_key(|(_, d)| d.score).expect("an adapter").0.id().to_string()
+        });
         let choices: Vec<ui::ToolChoice> = scored
             .iter()
             .map(|(a, d)| ui::ToolChoice {
@@ -446,7 +447,7 @@ fn status(args: &[String], mode: Mode) -> ExitCode {
             Some(s) => s,
             None => return fail(&format!("no harness called {t} (see `rigswig tools`)")),
         },
-        None => scored.iter().max_by_key(|(_, d)| d.score).expect("at least one adapter"),
+        None => scored.iter().rev().max_by_key(|(_, d)| d.score).expect("at least one adapter"),
     };
     let mut h = chosen.0.resolve(&ctx_for(chosen.0));
     if !removals.is_empty() {
@@ -471,6 +472,9 @@ fn status(args: &[String], mode: Mode) -> ExitCode {
     ExitCode::SUCCESS
 }
 
+// Picking a harness: the one with the most evidence; on a tie, the first in `adapters::all()` (Claude Code, then
+// Codex). `max_by_key` keeps the last of equal maximums, so every pick runs over the list reversed.
+
 /// Run `f` with `tool` (or the adapter with the most evidence) and its context for `repo`. `f` also gets the
 /// adapter's detection score.
 fn with_harness<R>(
@@ -490,7 +494,7 @@ fn with_harness<R>(
         Some(t) => {
             adapters.iter().find(|a| a.id() == t).ok_or(format!("no harness called {t} (see `rigswig tools`)"))?
         }
-        None => adapters.iter().max_by_key(|a| a.detect(&ctx_for(a.as_ref())).score).expect("an adapter"),
+        None => adapters.iter().rev().max_by_key(|a| a.detect(&ctx_for(a.as_ref())).score).expect("an adapter"),
     };
     let ctx = ctx_for(a.as_ref());
     let score = a.detect(&ctx).score;
