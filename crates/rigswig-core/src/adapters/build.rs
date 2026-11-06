@@ -50,7 +50,10 @@ impl<'a> Build<'a> {
         } else if let Ok(r) = p.strip_prefix(&self.ctx.home) {
             format!("~/{}", r.to_string_lossy().replace('\\', "/"))
         } else {
-            p.to_string_lossy().into_owned()
+            // An absolute path outside both roots. The two branches above normalize this too, and every
+            // consumer of these strings assumes forward slashes, so the joined form does as well: on Windows
+            // `Path::join` emits the platform separator mid-path (DSH_HOME moved by an env var is one case).
+            p.to_string_lossy().replace('\\', "/")
         };
         printable(&s)
     }
