@@ -4,8 +4,9 @@
 //! archive of a public repo first: the one network request rigswig can make, and only when a run asks for it. See
 //! docs/GITHUB.md for the rules and why each exists. In short:
 //!
-//! - the archive becomes an in-memory tree ([`MemFs`]): nothing is written, and only its regular files are kept, so a
-//!   link in the repo has nothing on this machine to point at;
+//! - the archive becomes an in-memory tree ([`MemFs`]): nothing is written, and the tree holds nothing but the archive,
+//!   so no link can reach this machine; a symbolic link is kept only when its relative target stays inside the repo
+//!   (`.claude/skills -> ../.agents/skills`), every other link and special file is dropped;
 //! - the harness is read with an empty, invented home folder, so the reader's own setup never mixes in;
 //! - one host, `codeload.github.com`, over HTTPS; the input is checked against GitHub's own name rules and cannot be a
 //!   URL to anywhere else; no redirects are followed; no token, no cookies, and a user agent with no more than
@@ -46,7 +47,9 @@ pub const LIMITS: Limits = Limits {
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Unpacked {
     pub files: usize,
-    /// Symbolic and hard links, devices and anything else that is not a file or a folder.
+    /// Symbolic links whose relative target stays inside the repo, kept as links within the in-memory tree.
+    pub links_kept: usize,
+    /// Every other link (absolute, leaving the repo, hard links), devices and anything else not a file or a folder.
     pub links_dropped: usize,
     /// Files over [`Limits::max_file`] or not UTF-8 text, kept by name only.
     pub kept_empty: usize,
@@ -177,6 +180,16 @@ pub fn unpack(gz: impl Read, root: &Path, limits: Limits) -> Result<(MemFs, Unpa
                 }
                 fs = fs.file(&dest, text);
             }
+            tar::EntryType::Symlink => {
+                let target = entry.link_name().ok().flatten().map(|t| t.into_owned());
+                match target.and_then(|t| link_inside(root, &dest, &t)) {
+                    Some(t) => {
+                        fs = fs.symlink(&dest, t);
+                        report.links_kept += 1;
+                    }
+                    None => report.links_dropped += 1,
+                }
+            }
             _ => report.links_dropped += 1,
         }
     }
@@ -184,6 +197,29 @@ pub fn unpack(gz: impl Read, root: &Path, limits: Limits) -> Result<(MemFs, Unpa
         return Err(format!("the archive is larger than {} MB", limits.max_compressed / (1024 * 1024)));
     }
     Ok((fs, report))
+}
+
+/// Where a symbolic link at `link` points, as an absolute path in the in-memory tree, when its target is relative and,
+/// resolved from the link's folder, stays inside `root`. `None` for an absolute target or one that leaves the repo. A
+/// link to a link is fine: the tree resolves chains, and every hop was checked the same way.
+fn link_inside(root: &Path, link: &Path, target: &Path) -> Option<PathBuf> {
+    if target.as_os_str().is_empty() || target.has_root() {
+        return None;
+    }
+    let mut out = link.parent()?.to_path_buf();
+    for c in target.components() {
+        match c {
+            Component::Normal(p) => out.push(p),
+            Component::CurDir => {}
+            Component::ParentDir => {
+                if !out.pop() || !out.starts_with(root) {
+                    return None;
+                }
+            }
+            _ => return None,
+        }
+    }
+    (out.starts_with(root) && out != root).then_some(out)
 }
 
 /// The path below the archive's top folder, checked: `None` for the top folder itself, an error for any path that is
@@ -373,8 +409,33 @@ mod tests {
         assert!(!fs.exists(&root().join("AGENTS.md")), "a symlink is dropped, not followed");
         assert!(!fs.exists(&root().join("hard.md")), "a hard link is dropped");
         assert_eq!(fs.read_to_string(&root().join("logo.png")).unwrap(), "", "binary files are kept by name only");
-        assert_eq!(rep, Unpacked { files: 3, links_dropped: 3, kept_empty: 1 });
+        assert_eq!(rep, Unpacked { files: 3, links_kept: 0, links_dropped: 3, kept_empty: 1 });
         assert!(fs.exists(Path::new(HOME)));
+    }
+
+    #[test]
+    fn keeps_links_that_stay_inside_the_repo_and_drops_the_rest() {
+        use rigswig_core::fs::Fs;
+        let gz = tarball(&[
+            ("r-abc/.agents/skills/guide/SKILL.md", tar::EntryType::Regular, b"---\ndescription: guide\n---\n", None),
+            ("r-abc/.claude/skills/guide", tar::EntryType::Symlink, b"", Some("../../.agents/skills/guide")),
+            ("r-abc/docs/rules.md", tar::EntryType::Regular, b"rules", None),
+            ("r-abc/CLAUDE.md", tar::EntryType::Symlink, b"", Some("docs/rules.md")),
+            ("r-abc/chain.md", tar::EntryType::Symlink, b"", Some("CLAUDE.md")),
+            ("r-abc/up.md", tar::EntryType::Symlink, b"", Some("../outside.md")),
+            ("r-abc/deep/up.md", tar::EntryType::Symlink, b"", Some("../../../../etc/passwd")),
+            ("r-abc/abs.md", tar::EntryType::Symlink, b"", Some("/etc/passwd")),
+            ("r-abc/root", tar::EntryType::Symlink, b"", Some("..")),
+        ]);
+        let (fs, rep) = unpack(&gz[..], &root(), LIMITS).unwrap();
+        let r = root();
+        assert!(fs.read_to_string(&r.join(".claude/skills/guide/SKILL.md")).unwrap().contains("guide"));
+        assert_eq!(fs.read_to_string(&r.join("CLAUDE.md")).unwrap(), "rules");
+        assert_eq!(fs.read_to_string(&r.join("chain.md")).unwrap(), "rules", "a chain of inside links resolves");
+        for gone in ["up.md", "deep/up.md", "abs.md", "root"] {
+            assert!(!fs.exists(&r.join(gone)), "{gone} leaves the repo and is dropped");
+        }
+        assert_eq!((rep.links_kept, rep.links_dropped), (3, 4));
     }
 
     #[test]

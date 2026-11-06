@@ -357,6 +357,9 @@ pub fn audit_with(ctx: &Ctx, h: &Harness, opts: &Options, progress: &mut dyn FnM
     let user_scope = heavy_user_scope(ctx, h, &text, opts, &mut findings, &mut notes);
     say("Checking instruction files".into(), 0.85);
     instruction_files(ctx, h, &mut findings, &mut notes);
+    if h.tool.id == "claude-code" {
+        agents_md_not_imported(ctx, h, &mut findings);
+    }
     say("Checking permission rules".into(), 0.94);
     permissions(h, &mut findings);
     warnings(h, &mut findings);
@@ -615,6 +618,90 @@ fn sections(text: &str) -> Vec<(String, u64)> {
     }
     out.sort_by_key(|a| std::cmp::Reverse(a.1));
     out
+}
+
+/// A CLAUDE.md that mentions the AGENTS.md beside it without importing it. With a CLAUDE.md present, Claude Code reads
+/// AGENTS.md only through an `@AGENTS.md` import, so a markdown link (`[AGENTS.md](AGENTS.md)`) or a "see AGENTS.md"
+/// loads nothing, and the rules in it never reach the model. One finding for the files that load at startup, one for
+/// those in subfolders (on demand).
+fn agents_md_not_imported(ctx: &Ctx, h: &Harness, findings: &mut Vec<Finding>) {
+    let repo_real = ctx.fs.canonicalize(&ctx.repo).unwrap_or_else(|_| ctx.repo.clone());
+    let inside = |p: &Path| ctx.fs.canonicalize(p).is_ok_and(|r| r.starts_with(&repo_real));
+    let loaded: BTreeSet<&str> =
+        h.items.iter().filter(|i| i.effective).filter_map(|i| i.origin.file.as_deref()).collect();
+    // (startup?, the CLAUDE.md, its line, the AGENTS.md, its tokens, its item id)
+    let mut hits: Vec<(bool, String, String, String, u64, String)> = Vec::new();
+    for i in h.items.iter().filter(|i| {
+        i.effective
+            && matches!(i.detail, ItemDetail::Instruction(_))
+            && matches!(i.load.when, LoadWhen::Startup | LoadWhen::OnMatch)
+    }) {
+        let Some(shown) = i.origin.file.as_deref() else { continue };
+        let base = Path::new(shown).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        if !(base == "CLAUDE.md" || base == "CLAUDE.local.md") || shown.starts_with("~/") || Path::new(shown).has_root()
+        {
+            continue;
+        }
+        let dir = Path::new(shown).parent().map(|d| d.to_string_lossy().replace('\\', "/")).unwrap_or_default();
+        // `.claude/CLAUDE.md` sits beside the repo's own AGENTS.md, at the top.
+        let dir = if dir == ".claude" { String::new() } else { dir };
+        let agents = if dir.is_empty() { "AGENTS.md".to_string() } else { format!("{dir}/AGENTS.md") };
+        let (claude_path, agents_path) = (real_path(ctx, shown), real_path(ctx, &agents));
+        if loaded.contains(agents.as_str()) || !inside(&claude_path) || !inside(&agents_path) {
+            continue;
+        }
+        let (Ok(text), Ok(agents_text)) = (ctx.fs.read_to_string(&claude_path), ctx.fs.read_to_string(&agents_path))
+        else {
+            continue;
+        };
+        let Some(line) = text.lines().find(|l| l.contains("AGENTS.md")) else { continue };
+        hits.push((
+            i.load.when == LoadWhen::Startup,
+            shown.to_string(),
+            line.trim().to_string(),
+            agents,
+            tokens(agents_text.chars().count() as u64),
+            i.id.clone(),
+        ));
+    }
+    for startup in [true, false] {
+        let group: Vec<&(bool, String, String, String, u64, String)> = hits.iter().filter(|x| x.0 == startup).collect();
+        if group.is_empty() {
+            continue;
+        }
+        let total: u64 = group.iter().map(|x| x.4).sum();
+        let mut evidence: Vec<String> = group
+            .iter()
+            .take(8)
+            .map(|(_, c, line, a, t, _)| {
+                format!("{} says \"{}\"; {} (~{t} tokens) never loads", printable(c), short(line, 70), printable(a))
+            })
+            .collect();
+        if group.len() > 8 {
+            evidence.push(format!("... and {} more", group.len() - 8));
+        }
+        let title = if startup {
+            format!(
+                "{} mentions AGENTS.md without importing it, so Claude Code never reads it (~{total} tokens of rules)",
+                group.iter().map(|x| printable(&x.1)).collect::<Vec<_>>().join(" and ")
+            )
+        } else {
+            format!(
+                "{} in subfolders mention their AGENTS.md without importing it (~{total} tokens of rules never load)",
+                plural(group.len(), "CLAUDE.md", "CLAUDE.md files")
+            )
+        };
+        findings.push(Finding {
+            code: "agents-md-not-imported".into(),
+            severity: Severity::Medium,
+            title,
+            evidence,
+            saving: None,
+            proposal: "Put @AGENTS.md on a line of its own in each CLAUDE.md: with a CLAUDE.md present, Claude Code reads AGENTS.md only through an import. If the mention is meant for people, leave it.".into(),
+            items: group.iter().map(|x| x.5.clone()).collect(),
+            file: group.first().map(|x| x.1.clone()),
+        });
+    }
 }
 
 fn budget(d: &Doc, findings: &mut Vec<Finding>) {

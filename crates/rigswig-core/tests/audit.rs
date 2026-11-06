@@ -324,3 +324,31 @@ fn a_repo_instruction_file_linking_out_of_the_repo_is_never_quoted() {
     let h = ClaudeCode.resolve(&c);
     assert!(h.items.iter().any(|i| i.name == "CLAUDE.md" && i.effective));
 }
+
+#[test]
+fn a_claude_md_that_mentions_agents_md_without_importing_it_is_a_finding() {
+    let rules = "# Rules\n".to_string() + &"Always run the tests before you commit anything.\n".repeat(20);
+    let fs = base()
+        .file(format!("{REPO}/CLAUDE.md"), "See [AGENTS.md](AGENTS.md) for the rules.\n")
+        .file(format!("{REPO}/AGENTS.md"), rules.clone())
+        .file(format!("{REPO}/packages/api/CLAUDE.md"), "参考[AGENTS.md](AGENTS.md)")
+        .file(format!("{REPO}/packages/api/AGENTS.md"), rules.clone())
+        .file(format!("{REPO}/packages/web/CLAUDE.md"), "@AGENTS.md\n")
+        .file(format!("{REPO}/packages/web/AGENTS.md"), rules.clone())
+        .file(format!("{REPO}/packages/ui/CLAUDE.md"), "# UI\n")
+        .file(format!("{REPO}/packages/ui/AGENTS.md"), rules);
+    let a = run(&fs);
+    let f = find(&a, "agents-md-not-imported");
+    assert_eq!(f.len(), 2, "{:#?}", a.findings);
+    let top = f.iter().find(|x| x.title.starts_with("CLAUDE.md mentions")).expect("the startup one");
+    assert!(top.evidence[0].contains("See [AGENTS.md](AGENTS.md)"), "{:?}", top.evidence);
+    let subs = f.iter().find(|x| x.title.contains("in subfolders")).expect("the subfolder one");
+    assert!(subs.title.starts_with("1 CLAUDE.md in subfolders"), "{}", subs.title);
+    assert!(subs.evidence[0].starts_with("packages/api/CLAUDE.md"), "{:?}", subs.evidence);
+    let all = format!("{:?}", f);
+    assert!(!all.contains("packages/web") && !all.contains("packages/ui"), "imported, or not mentioned: {all}");
+
+    // Imported at the top: nothing to report there.
+    let fixed = fs.clone().file(format!("{REPO}/CLAUDE.md"), "@AGENTS.md\n");
+    assert!(find(&run(&fixed), "agents-md-not-imported").iter().all(|x| !x.title.starts_with("CLAUDE.md")));
+}

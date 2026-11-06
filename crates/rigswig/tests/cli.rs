@@ -377,7 +377,7 @@ fn an_archive_is_audited_in_memory_without_the_readers_setup_or_files() {
     assert!(codes.contains(&"permission-broad"), "{codes:?}");
     assert!(codes.contains(&"dead-reference"), "{codes:?}");
     assert!(!codes.contains(&"heavy-user-scope"), "the reader's agents are not read");
-    assert!(v["notes"][0].as_str().unwrap().contains("1 links and special files dropped"), "{}", v["notes"]);
+    assert!(v["notes"][0].as_str().unwrap().contains("1 other links and special files dropped"), "{}", v["notes"]);
 
     let status = s.cmd(&["status", "--archive", archive, "--json"]);
     let h: serde_json::Value = serde_json::from_slice(&status.stdout).unwrap();

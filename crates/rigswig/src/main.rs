@@ -179,8 +179,8 @@ fn load_remote(
     let root = PathBuf::from(github::ROOT).join(&name);
     let (fs, rep) = github::unpack(&bytes[..], &root, github::LIMITS)?;
     let summary = format!(
-        "{label} was read in memory with an empty home folder, so your own setup is not part of it: {} files, {} links and special files dropped, {} kept by name only (binary or over 1 MB)",
-        rep.files, rep.links_dropped, rep.kept_empty
+        "{label} was read in memory with an empty home folder, so your own setup is not part of it: {} files, {} links inside the repo kept, {} other links and special files dropped, {} kept by name only (binary or over 1 MB)",
+        rep.files, rep.links_kept, rep.links_dropped, rep.kept_empty
     );
     Ok((fs, root, label, summary))
 }
