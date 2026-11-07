@@ -547,11 +547,19 @@ impl Sandbox {
             .output()
             .unwrap()
     }
+    /// The sandbox repo's real path as the binary resolves it (`real_path` in main.rs): on Windows a plain drive
+    /// path, `C:\repo`, never the verbatim `\\?\C:\repo` that `canonicalize` returns — Claude Code names its
+    /// project folder from the plain one.
+    fn real_repo(&self) -> String {
+        let real = std::fs::canonicalize(self.0.join("repo")).unwrap().to_string_lossy().into_owned();
+        match real.strip_prefix(r"\\?\") {
+            Some(rest) if rest.as_bytes().get(1) == Some(&b':') => rest.to_string(),
+            _ => real,
+        }
+    }
     /// Where Claude Code keeps this sandbox repo's session logs.
     fn logs(&self) -> String {
-        let real = std::fs::canonicalize(self.0.join("repo")).unwrap();
-        let name: String =
-            real.to_string_lossy().chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect();
+        let name: String = self.real_repo().chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect();
         format!("home/.claude/projects/{name}")
     }
 }
@@ -561,10 +569,12 @@ impl Sandbox {
 #[test]
 fn usage_reads_large_logs_as_metadata_only() {
     let s = Sandbox::new("usage");
-    let repo = std::fs::canonicalize(s.0.join("repo")).unwrap();
-    let repo = repo.to_str().unwrap();
+    let real = s.real_repo();
+    let repo = real.as_str();
+    // The `cwd` as JSON: a Windows path's backslashes must be escaped.
+    let cwd = serde_json::to_string(repo).unwrap();
     let filler = format!(
-        r#"{{"type":"user","sessionId":"s1","timestamp":"2026-10-20T09:00:00Z","cwd":"{repo}","message":{{"role":"user","content":"CANARY-CLI {}"}}}}"#,
+        r#"{{"type":"user","sessionId":"s1","timestamp":"2026-10-20T09:00:00Z","cwd":{cwd},"message":{{"role":"user","content":"CANARY-CLI {}"}}}}"#,
         "x".repeat(1000)
     );
     let mut log = String::new();
@@ -573,7 +583,7 @@ fn usage_reads_large_logs_as_metadata_only() {
         log.push('\n');
     }
     log.push_str(&format!(
-        r#"{{"type":"assistant","sessionId":"s1","timestamp":"2026-10-20T09:00:01Z","cwd":"{repo}","message":{{"id":"m1","model":"model-a","content":[{{"type":"tool_use","id":"c1","name":"Skill","input":{{"skill":"deploy","args":"CANARY-CLI"}}}}],"usage":{{"input_tokens":1,"output_tokens":2}}}}}}"#
+        r#"{{"type":"assistant","sessionId":"s1","timestamp":"2026-10-20T09:00:01Z","cwd":{cwd},"message":{{"id":"m1","model":"model-a","content":[{{"type":"tool_use","id":"c1","name":"Skill","input":{{"skill":"deploy","args":"CANARY-CLI"}}}}],"usage":{{"input_tokens":1,"output_tokens":2}}}}}}"#
     ));
     s.write(&format!("{}/s1.jsonl", s.logs()), &log);
 
