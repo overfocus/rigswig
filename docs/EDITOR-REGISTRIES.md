@@ -15,6 +15,13 @@ npm gate.
   release workflow already packages the VSIX with the tag's name; the version inside the VSIX is the
   manifest's.
 
+## Marketplace — DONE (2026-11-07, v0.0.1 of `kftcda.rigswig`)
+
+The `VSCE_PAT` secret + the `marketplace` environment gate held, and extension-publish's `workflow_dispatch`
+published 0.0.1 (`Published kftcda.rigswig v0.0.1` in the run, verified with `npx @vscode/vsce show
+kftcda.rigswig`; note the item page 404s for several minutes while the Marketplace index propagates). From here
+the extension publishes itself with each release whose manifest version changed — no step left for this half.
+
 ## Step 1 — you: marketplace publisher
 
 1. Sign in at `https://marketplace.visualstudio.com/manage` with a Microsoft account; create publisher `kftcda`.
