@@ -16,7 +16,8 @@ node vscode/test.mjs         # the editor extension's logic (node >= 18, no deps
 - `crates/rigswig`: the binary: argument parsing, terminal output, and later the local page server (the page's HTML,
   CSS and JS embedded in the binary, so it is one file with nothing to install).
 - `vscode/`: a thin editor extension (VS Code and its forks): a status-bar bill (harness, tokens, the audit's
-  findings) and the read-only page in a webview, with a refresh/open toolbar on the panel. It spawns the CLI
+  findings), a view of the findings and of what loads, findings in the Problems panel, a re-read when a harness file
+  changes, and the read-only page in a webview, with a refresh/open toolbar on the panel. It spawns the CLI
   (`rigswig.executablePath`) and implements nothing twice; its page spawn carries neither `--allow-writes` nor
   `--allow-github`, and its findings spawn never carries `--usage`, by test.
 
