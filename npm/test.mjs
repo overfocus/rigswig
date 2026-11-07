@@ -104,8 +104,10 @@ test('release.yml keeps the npm packages off the GitHub release: two artifact se
   const yml = readFileSync(RELEASE_YML, 'utf8');
   assert.match(yml, /name: binary-\$\{\{ matrix\.target \}\}/, 'the tarball artifacts carry the binary- prefix');
   assert.match(yml, /name: npm-\$\{\{ matrix\.target \}\}/, 'the npm artifacts carry the npm- prefix');
-  assert.match(yml, /pattern: binary-\*/, 'the release job downloads only the binary- artifacts');
-  assert.match(yml, /pattern: npm-\*/, 'the npm job downloads only the npm- artifacts');
+  // The release job downloads the tarballs and the extension's VSIX (pattern: "{binary-*,vsix}"), never the
+  // npm- packages - those are the npm job's to publish.
+  assert.match(yml, /pattern: "\{binary-\*,vsix\}"/, 'the release job downloads the binary- set plus the vsix');
+  assert.doesNotMatch(yml, /pattern: "\{[^}]*npm-/i, 'the release download pattern never carries npm-');
   const downloads = yml.split('\n');
   const steps = downloads
     .map((line, index) => (line.includes('download-artifact') ? index : null))
