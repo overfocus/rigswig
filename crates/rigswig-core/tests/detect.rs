@@ -31,6 +31,8 @@ fn everything_installed() -> MemFs {
         .file(format!("{HOME}/.config/devin/config.json"), "{}")
         .file(format!("{HOME}/.config/devin/AGENTS.md"), "# me")
         .file(format!("{HOME}/.copilot/copilot-instructions.md"), "# me")
+        .file(format!("{HOME}/.agents/skills/hf-cli/SKILL.md"), "---\nname: hf-cli\n---\n")
+        .dir(format!("{HOME}/.hf-cli"))
 }
 
 #[test]

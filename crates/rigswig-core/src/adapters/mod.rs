@@ -10,6 +10,7 @@ pub mod devin;
 pub mod dsh;
 pub mod gemini;
 pub mod hermes;
+pub mod hf;
 pub mod ollama;
 pub mod shared;
 
@@ -22,6 +23,7 @@ pub use devin::Devin;
 pub use dsh::Dsh;
 pub use gemini::Gemini;
 pub use hermes::Hermes;
+pub use hf::Hf;
 pub use ollama::Ollama;
 
 use crate::adapter::Adapter;
@@ -34,6 +36,7 @@ pub fn all() -> Vec<Box<dyn Adapter>> {
         Box::new(Copilot),
         Box::new(Cursor),
         Box::new(Gemini),
+        Box::new(Hf),
         Box::new(Hermes),
         Box::new(Ollama),
         Box::new(Devin),
