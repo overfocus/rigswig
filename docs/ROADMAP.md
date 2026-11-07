@@ -39,7 +39,8 @@ failed limit), and `--without` what-ifs on `status` and `check`.
 
 Release builds (done): a version tag builds five platform binaries into a draft GitHub release
 ([RELEASING.md](RELEASING.md)); v0.1.0 is the first, also on crates.io (`rigswig`, `rigswig-core`, trusted
-publishing) and on npm (`npx rigswig`, trusted publishing). Left: Homebrew.
+publishing) and on npm (`npx rigswig`, trusted publishing). Homebrew since v0.2.0: `brew install
+overfocus/tap/rigswig`, a formula over the release binaries in [the tap](https://github.com/overfocus/homebrew-tap).
 
 Audit (done, [#2](https://github.com/overfocus/rigswig/issues/2); [AUDIT.md](AUDIT.md)): `rigswig audit` with
 ranked findings, savings and fixes, and fleet mode (`--repos`). The gaps it found are closed: the auto-memory index is

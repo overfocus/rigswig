@@ -47,7 +47,8 @@ rigswig is a single binary written in Rust. Install it with `cargo install rigsw
 `npx rigswig` or `npm install -g rigswig` ([npm](https://www.npmjs.com/package/rigswig): the package installs the
 right prebuilt binary for your platform), or download it for macOS, Linux or Windows from
 [the releases](https://github.com/overfocus/rigswig/releases), each with a `SHA256SUMS` line to check it against.
-Homebrew is not set up yet. From a checkout:
+On macOS or Linux, `brew install overfocus/tap/rigswig` installs the same release binaries through Homebrew
+([the tap](https://github.com/overfocus/homebrew-tap)). From a checkout:
 
 ```sh
 cargo run -- status --repo path/to/repo          # a summary

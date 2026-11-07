@@ -10,6 +10,7 @@ repo, and it is useful inside a minute.
 ```sh
 cargo install rigswig        # crates.io; add --no-default-features for a build with no network code at all
 npm install -g rigswig       # npm: installs the right prebuilt binary for your platform
+brew install overfocus/tap/rigswig   # Homebrew, macOS or Linux: the same release binaries
 ```
 
 Or download a macOS, Linux or Windows binary from [the releases](https://github.com/overfocus/rigswig/releases),

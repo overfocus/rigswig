@@ -17,13 +17,13 @@ Nothing is public until a maintainer publishes the draft and approves the crates
    same version (`rigswig-core = { path = ..., version = "X.Y.Z" }` in `crates/rigswig/Cargo.toml`: the caret
    refuses a new minor). Run `cargo check` without `--locked` so `Cargo.lock` carries both, then `cargo test
    --locked`, and commit.
-2. Tag the version from step 1 and push the tag: `git tag vX.Y.Z && git push origin vX.Y.Z` (for this release,
-   `v0.2.0`).
+2. Tag the version from step 1 and push the tag: `git tag vX.Y.Z && git push origin vX.Y.Z`.
 3. When the builds finish, read the draft release (notes, assets, checksums) and publish it.
 4. Approve the `crates-io` job (the release run on GitHub, "Review deployments"); it publishes `rigswig-core`, then
    `rigswig`.
 5. Approve the `npm` job; it publishes the five platform packages, then `rigswig`. (The first release with npm
    needs the bootstrap below first.)
+6. Once the release is published, update the Homebrew formula ([below](#homebrew)).
 
 ## crates.io
 
@@ -92,7 +92,22 @@ A published npm version cannot be overwritten. To take one out of circulation, d
 `npm deprecate <package>@<version> "reason"`. Unpublishing (within 72 hours of publishing) leaves that version
 number permanently unusable; avoid it.
 
-- **Homebrew**: a tap formula pointing at the release assets and their checksums. The tap is
-  [overfocus/homebrew-tap](https://github.com/overfocus/homebrew-tap) (`brew install overfocus/tap/rigswig`), and
-  `homebrew/formula.mjs` writes its `Formula/rigswig.rb` from a published release's `SHA256SUMS`; the first formula
-  lands with 0.2.0.
+## Homebrew
+
+The formula lives in a tap, [overfocus/homebrew-tap](https://github.com/overfocus/homebrew-tap)
+(`brew install overfocus/tap/rigswig`), and installs the release's own macOS and Linux tarballs, never a build from
+source. `homebrew/formula.mjs` writes it from the published release's `SHA256SUMS`, so each URL carries the checksum
+the release published; `homebrew/test.mjs` (in CI) fails when the release workflow's targets or asset names drift
+from what the formula expects. For each release, in a checkout of the tap:
+
+```sh
+gh release download vX.Y.Z -R overfocus/rigswig -p SHA256SUMS -D /tmp/sums
+node path/to/rigswig/homebrew/formula.mjs --version vX.Y.Z --sums /tmp/sums/SHA256SUMS > Formula/rigswig.rb
+git commit -am "rigswig X.Y.Z"    # first: a local tap is a clone, so it sees commits, not the working tree
+brew tap local/check "$PWD" && brew install local/check/rigswig && brew test local/check/rigswig \
+  && brew audit --strict --online local/check/rigswig; brew uninstall rigswig; brew untap local/check
+git push
+```
+
+The tap's own CI (`brew test-bot`) runs on the push. Then `brew install overfocus/tap/rigswig` should give the new
+version.
