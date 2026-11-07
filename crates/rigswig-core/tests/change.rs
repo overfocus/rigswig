@@ -130,3 +130,42 @@ fn refusals() {
 
     assert!(Codex.plan(&c, &plugin(Scope::Local, false)).unwrap_err().contains("cannot change codex"));
 }
+
+#[test]
+fn a_hand_laid_out_file_keeps_its_layout_and_only_the_changed_member_moves() {
+    let local = "{\n  \"permissions\": { \"allow\": [\"Bash(npm test:*)\", \"Read\"] },\n  \"enabledPlugins\": { \"fmt@mk\": true }\n}\n";
+    let fs = setup().file(format!("{REPO}/.claude/settings.local.json"), local);
+    let p = ClaudeCode.plan(&ctx(&fs), &plugin(Scope::Local, false)).unwrap();
+    assert_eq!(p.after, local.replace("\"fmt@mk\": true", "\"fmt@mk\": false"));
+    let changed: Vec<_> = p.diff.iter().filter(|l| l.op != ' ').collect();
+    assert_eq!(changed.len(), 2, "one line out, one line in: {changed:?}");
+    assert!(!p.notes.iter().any(|n| n.contains("rewrites")));
+
+    // A key the file does not have yet is added after the last member, in the file's own style.
+    let compact = r#"{"permissions":{"allow":["Read"]}}"#;
+    let fs = setup().file(format!("{REPO}/.claude/settings.local.json"), compact);
+    let p = ClaudeCode.plan(&ctx(&fs), &plugin(Scope::Local, false)).unwrap();
+    assert_eq!(p.after, r#"{"permissions":{"allow":["Read"]},"enabledPlugins":{ "fmt@mk": false }}"#);
+
+    // An MCP approval moves a name between the two lists and drops a list left empty, with its comma.
+    let mcp = "{\n  \"model\": \"big\",\n  \"enabledMcpjsonServers\": [\"docs\"]\n}\n";
+    let fs = setup().file(format!("{REPO}/.claude/settings.local.json"), mcp);
+    let off = ClaudeCode.plan(&ctx(&fs), &Change::McpJson { name: "docs".into(), scope: Scope::Local, on: false });
+    assert_eq!(off.unwrap().after, "{\n  \"model\": \"big\",\n  \"disabledMcpjsonServers\": [\"docs\"]\n}\n");
+}
+
+#[test]
+fn a_file_the_edit_cannot_place_safely_is_rewritten_whole_and_the_plan_says_so() {
+    // A key written twice: JSON keeps the last, and editing either by hand would be a guess.
+    let twice = r#"{"enabledPlugins":{"fmt@mk":true},"enabledPlugins":{"fmt@mk":true}}"#;
+    let fs = setup().file(format!("{REPO}/.claude/settings.local.json"), twice);
+    let p = ClaudeCode.plan(&ctx(&fs), &plugin(Scope::Local, false)).unwrap();
+    assert_eq!(p.after, "{\n  \"enabledPlugins\": {\n    \"fmt@mk\": false\n  }\n}\n");
+    assert!(p.notes.iter().any(|n| n.contains("rewrites this file whole")));
+}
+
+#[test]
+fn a_compact_file_that_already_says_so_is_left_alone() {
+    let fs = setup().file(format!("{REPO}/.claude/settings.local.json"), r#"{"enabledPlugins":{"fmt@mk":false}}"#);
+    assert!(ClaudeCode.plan(&ctx(&fs), &plugin(Scope::Local, false)).unwrap_err().contains("already"));
+}

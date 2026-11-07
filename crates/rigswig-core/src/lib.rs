@@ -14,6 +14,7 @@ pub mod change;
 pub mod check;
 pub mod compare;
 pub mod fs;
+pub(crate) mod jsonedit;
 pub mod model;
 pub mod read;
 pub mod usage;
