@@ -5,11 +5,11 @@ See everything your coding agent loads before you type, and where each piece cam
 **Start here: [getting started](docs/GETTING-STARTED.md) — install it, three commands, and what each one tells
 you.**
 
-![rigswig's page for a repo: about 11.4k tokens load before you type, most of it AGENTS.md, with every kind of item as a tile](docs/images/overview.png)
+![rigswig's page for a repo: about 15.9k tokens load before you type, 1.6% of the 1M window its model (opus) has, most of it AGENTS.md, with every kind of item as a tile](docs/images/overview.png)
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/images/compare.png" alt="Claude Code and Codex on the same repo, two budgets on one scale and what differs by kind"></td>
+    <td width="50%"><img src="docs/images/compare.png" alt="Claude Code as A and Codex as B on the same repo: each one's model and window, two budgets on one scale, and a prompt to pick the window of a model rigswig does not know"></td>
     <td width="50%"><img src="docs/images/write-mode.png" alt="Write mode: turning a plugin off shows the file, the diff and the budget after, before anything is written"></td>
   </tr>
   <tr>
@@ -31,7 +31,7 @@ you.**
   </tr>
 </table>
 
-<sub>Screenshots of an invented setup, rebuilt with <code>docs/demo/make-demo.sh</code> (the audit's with <code>docs/demo/shoot.mjs</code>).</sub>
+<sub>Screenshots of an invented setup, rebuilt with <code>docs/demo/make-demo.sh</code> and taken with <code>docs/demo/shoot.mjs</code>.</sub>
 
 A coding agent's **harness** is everything around the model: instruction files (`CLAUDE.md`, `AGENTS.md`,
 `GEMINI.md`, rules), subagents, skills, commands, hooks, MCP servers, plugins, permissions and the model setting,
