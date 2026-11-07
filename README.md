@@ -108,7 +108,7 @@ Harness-agnostic: each harness is an adapter that reads its own files into one s
 | Gemini CLI | `rigswig status --tool gemini` ([the rules it models](docs/adapters/gemini.md)) |
 | DeepSeek Harness | `rigswig status --tool dsh` ([the rules it models](docs/adapters/dsh.md)) |
 | DeepSeek-CLI (community) | `rigswig status --tool deepseek` ([the rules it models](docs/adapters/deepseek-cli.md)) |
-| GitHub Copilot (repo files) | planned |
+| GitHub Copilot CLI | `rigswig status --tool copilot` ([the rules it models](docs/adapters/copilot.md)) |
 | OpenCode, others | adapters welcome |
 
 ## Related tools

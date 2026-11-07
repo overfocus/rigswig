@@ -3,6 +3,7 @@
 pub mod build;
 pub mod claude_code;
 pub mod codex;
+pub mod copilot;
 pub mod cursor;
 pub mod deepseek;
 pub mod devin;
@@ -14,6 +15,7 @@ pub mod shared;
 
 pub use claude_code::ClaudeCode;
 pub use codex::Codex;
+pub use copilot::Copilot;
 pub use cursor::Cursor;
 pub use deepseek::DeepSeekCli;
 pub use devin::Devin;
@@ -29,6 +31,7 @@ pub fn all() -> Vec<Box<dyn Adapter>> {
     vec![
         Box::new(ClaudeCode),
         Box::new(Codex),
+        Box::new(Copilot),
         Box::new(Cursor),
         Box::new(Gemini),
         Box::new(Hermes),

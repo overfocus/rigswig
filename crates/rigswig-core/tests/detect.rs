@@ -30,6 +30,7 @@ fn everything_installed() -> MemFs {
         .dir(format!("{HOME}/.ollama/launch"))
         .file(format!("{HOME}/.config/devin/config.json"), "{}")
         .file(format!("{HOME}/.config/devin/AGENTS.md"), "# me")
+        .file(format!("{HOME}/.copilot/copilot-instructions.md"), "# me")
 }
 
 #[test]
