@@ -55,12 +55,62 @@ one host, the archive unpacked into memory, an empty home) or `--archive <file>`
 
 Usage from session logs (done; [USAGE.md](USAGE.md)): `rigswig usage` and `audit --usage` read Claude Code's session
 logs opt-in per run, metadata only, and `not-invoked` names what loads but no session called. Codex and the other
-harnesses refuse for now, and the page and the MCP server stay out of it.
+harnesses refuse for now ([next](#next-usage-from-more-harnesses)), and the page and the MCP server stay out of it.
 
 The extension (done: [vscode/](../vscode/)): the status bar carries the harness, the token bill and the audit's
 findings with the tokens they could save; a view lists each finding (with its fix and files) and what loads by kind;
 findings land in the Problems panel; it re-reads when a harness file changes; and everything stays read-only — the
 findings spawn never passes `--usage`, and an untrusted workspace cannot choose the binary.
+
+## Next: usage from more harnesses
+
+`rigswig usage` reads only Claude Code's session logs today. An assessment (2026-11-07, from each harness's source
+and docs) asked whether the other harnesses can be read to the same bar as [USAGE.md](USAGE.md) sets:
+- logs opened only by a run that asks;
+- metadata only, proved by canary tests;
+- streamed;
+- matched to the repo by its working folder.
+
+| Harness | Verdict | Effort | Where the sessions are | Skills and agents | Caveats |
+|---|---|---|---|---|---|
+| Gemini CLI | feasible | S–M | JSONL per session under `~/.gemini/tmp/<project>/chats/`; matched by a hash of the project root | `activate_skill`, `invoke_agent` tool calls | MCP names join server and tool with one `_`; sessions are deleted after 30 days by default; the format moved from JSON to JSONL recently |
+| GitHub Copilot CLI | feasible | M | JSONL events per session under `~/.copilot/session-state/<id>/`, with `cwd` and git root | `skill.invoked`, `subagent.started` events; MCP server and tool are separate fields | token totals arrive only with a clean `session.shutdown` |
+| OpenAI Codex CLI | partial | M | JSONL rollout per thread under `$CODEX_HOME/sessions/YYYY/MM/DD/`, with `cwd` | subagents yes; **skills no**: they appear only inside message text | two token schemas across versions; zstd compression coming; some MCP names hashed |
+| Hermes Agent | feasible | M | one SQLite database, `~/.hermes/state.db`, with `cwd` per session | `skill_view`, `delegate_task` tool calls | needs SQLite; internal schema that changes |
+| DeepSeek Harness (dsh) | feasible | M | JSONL per session, zstd-compressed by default, under `~/.dsh/sessions/` | `skill` tool; subagents write child logs | pre-release; the format went v0 to v4 in months |
+| Devin CLI | partial | M | SQLite `sessions.db` plus a JSON transcript per session | undocumented | undocumented; each session is one large JSON value |
+| DeepSeek-CLI (community) | partial | S–M | one JSON file per session, rewritten whole | `task` tool for agents; **skills not logged** | MCP names ambiguous; cumulative tokens only |
+| Cursor | partial | L | SQLite (`state.vscdb` for the editor, `store.db` per chat for cursor-agent), undocumented | unknown | two or three formats; very large databases; token counts often zero |
+| Ollama | not applicable | – | no sessions (its prompt history is content, never read) | – | – |
+| Hugging Face CLI | not applicable | – | no agent loop, no session logs | – | – |
+
+**What it takes.**
+- **Two new dependencies:**
+  - SQLite, opened read-only and immutable, for Hermes, Devin and Cursor;
+  - zstd, for dsh and later Codex.
+  Each needs its reason in the commit, as the rules say.
+- **One line in memory, per format:**
+  - JSONL readers keep the rule as it stands.
+  - SQLite readers select only metadata columns, so content never leaves the database.
+  - Where a session is one large JSON value, a streaming parser skips the content keys.
+  USAGE.md will say per harness which of these applies.
+- **A canary test per format.** It covers SQL columns, nested JSON, and JSON-encoded `arguments` strings, where the
+  skill or agent name sits next to content.
+- **Invented fixtures** written from each harness's source, ideally checked against logs from a sandboxed install.
+- **MCP names matched to the configured servers**, where a harness joins server and tool with one `_` or hashes long
+  names. Matching errs toward "invoked", as it does for Claude Code.
+- **Gaps stated, not guessed.** Where a harness does not log skills (Codex, DeepSeek-CLI), `not-invoked` leaves
+  skills out instead of calling every skill idle.
+
+**Order.**
+1. Gemini CLI and Copilot CLI.
+2. Codex, without skills.
+3. Hermes, the first SQLite reader.
+4. dsh, once its format settles.
+5. Devin, DeepSeek-CLI and Cursor, on request.
+
+Until a harness has its reader, `usage` keeps refusing it. Ollama and the Hugging Face CLI will refuse with a clearer
+reason: they keep no sessions.
 
 ## Later
 

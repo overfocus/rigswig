@@ -39,8 +39,9 @@ spread across user, project, local and managed scopes. rigswig reads all of it f
 there actually gets, which scope decided each setting, what is overridden, and roughly how much context it costs
 before you type a word.
 
-**Status: 0.2, pre-1.0.** `rigswig status`, `rigswig audit`, `rigswig usage` and the local page, `rigswig ui`,
-work for every harness in the table below. See [docs/ROADMAP.md](docs/ROADMAP.md).
+**Status: 0.2, pre-1.0.** `rigswig status`, `rigswig audit` and the local page, `rigswig ui`, work for every
+harness in the table below. `rigswig usage` reads Claude Code's session logs only, for now; the other harnesses are
+[next](docs/ROADMAP.md#next-usage-from-more-harnesses). See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 rigswig is a single binary written in Rust. Install it with `cargo install rigswig`
 ([crates.io](https://crates.io/crates/rigswig); add `--no-default-features` for a build with no network code), with
