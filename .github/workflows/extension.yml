@@ -23,9 +23,10 @@ jobs:
         with:
           node-version: 24
       - run: node vscode/test.mjs
-      - name: Publish (nothing to do when the manifest's version is already there)
+      - name: Publish the manifest's version (nothing to do when it is already there)
         run: |
           cd vscode
+          echo "publishing kftcda.rigswig $(jq -r .version package.json)"
           if out="$(npx -y @vscode/vsce publish -p "$VSCE_PAT" 2>&1)"; then
             echo "$out"
           else
@@ -56,11 +57,13 @@ jobs:
           OVSX_TOKEN: ${{ secrets.OVSX_TOKEN }}
       - run: node vscode/test.mjs
         if: env.HAS_TOKEN == 'true'
-      - name: Publish (the namespace exists after the first run)
+      - name: Publish the manifest's version (the namespace exists after the first run)
         if: env.HAS_TOKEN == 'true'
         run: |
           cd vscode
-          npx -y ovsx create-namespace kftcda --pat "$OVSX_TOKEN" || true
+          echo "publishing kftcda.rigswig $(jq -r .version package.json)"
+          npx -y ovsx create-namespace kftcda --pat "$OVSX_TOKEN" \
+            || echo "create-namespace did not take (the namespace likely already exists from the dashboard); publishing"
           if out="$(npx -y ovsx publish --pat "$OVSX_TOKEN" 2>&1)"; then
             echo "$out"
           else
