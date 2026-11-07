@@ -33,6 +33,9 @@ Usage:
                                             ranked findings: what costs context and nothing here references, plugins the
                                             repo's files do not call for, instruction files over budget, repeated text,
                                             dead references and piled-up permission rules; each with a saving and a fix
+  rigswig audit [--repo <path>] [--tool <id>] --usage [--days <n>|all] [--json]
+                                            the same, with what past sessions here invoked: reads the harness's session
+                                            logs (opt-in, this run only), as metadata — see `rigswig usage`
   rigswig audit --repos <path|glob>... [--tool <id>] [--json]
                                             fleet mode: each user-scope item against every repo (--repos '~/code/*')
   rigswig audit|status --github <owner/repo[@ref]> [--tool <id>] [--json]
@@ -41,6 +44,12 @@ Usage:
                                             only when this flag is given
   rigswig audit|status --archive <repo.tar.gz> [--tool <id>] [--json]
                                             the same for an archive you downloaded yourself, with no network
+  rigswig usage [--repo <path>] [--tool <id>] [--days <n>|all] [--json]
+                                            what past sessions in a repo invoked (agents, skills, MCP servers), how many
+                                            sessions, which models and how many tokens, over the last 30 days by
+                                            default; read from the harness's own session logs as metadata only —
+                                            ids, times, models, token counts and the names of what was called; never
+                                            message text, tool inputs or results (docs/USAGE.md). Claude Code for now
   rigswig tools [--repo <path>]             the harnesses rigswig knows, and the evidence for each in this repo
   rigswig schema                            the JSON Schema of `status --json`
 
@@ -59,8 +68,8 @@ Usage:
 `status` and `check` take --without <what> (repeatable, or comma-separated): a plugin (name@marketplace), a
 layer (layer:user), a kind and name (agent:*, skill:deploy) or an item id. The totals are recomputed without them.
 
-rigswig never calls a model, makes no network request unless a run is given --github, and writes nothing unless
-`ui --allow-writes` is used.
+rigswig never calls a model, makes no network request unless a run is given --github, writes nothing unless
+`ui --allow-writes` is used, and opens session logs only for `usage` and `audit --usage` (metadata only).
 ",
         rigswig_core::VERSION
     )
@@ -585,11 +594,91 @@ fn expand(pattern: &str) -> Result<Vec<PathBuf>, String> {
 }
 
 /// `rigswig audit`: findings for one repo, or fleet mode across many.
+/// The `--days` value: a number of days, or `all`.
+fn parse_days(v: &str) -> Result<Option<u64>, String> {
+    if v == "all" {
+        return Ok(None);
+    }
+    v.parse().ok().filter(|d| *d > 0).map(Some).ok_or("--days needs a number of days, or all".into())
+}
+
+/// The window's start for the last `days` days, as an ISO 8601 date (UTC); `None` for every log there is.
+fn since(days: Option<u64>) -> Option<String> {
+    let days = days?;
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+    let (y, m, d) = civil_from_days((now / 86_400) as i64 - days as i64);
+    Some(format!("{y:04}-{m:02}-{d:02}"))
+}
+
+/// Days since 1970-01-01 to a calendar date (Howard Hinnant's algorithm, public domain).
+fn civil_from_days(z: i64) -> (i64, u32, u32) {
+    let z = z + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
+    (yoe + era * 400 + i64::from(m <= 2), m, d)
+}
+
+/// Said on stderr before any session log is opened.
+fn say_usage(since: Option<&str>) {
+    eprintln!(
+        "rigswig: reading session logs for this repo{} — metadata only: ids, times, models, token counts and the names of what was called; never message text, tool inputs or results",
+        since.map_or_else(String::new, |s| format!(" since {s}"))
+    );
+}
+
+fn usage_cmd(args: &[String]) -> ExitCode {
+    let mut repo: Option<PathBuf> = None;
+    let mut tool: Option<String> = None;
+    let mut json = false;
+    let mut days: Option<u64> = Some(30);
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        let mut value =
+            |name: &str| it.next().filter(|v| !v.starts_with("--")).cloned().ok_or(format!("{name} needs a value"));
+        match a.as_str() {
+            "--json" => json = true,
+            "--repo" => match value("--repo") {
+                Ok(v) => repo = Some(PathBuf::from(v)),
+                Err(e) => return fail(&e),
+            },
+            "--tool" => match value("--tool") {
+                Ok(v) => tool = Some(v),
+                Err(e) => return fail(&e),
+            },
+            "--days" => match value("--days").and_then(|v| parse_days(&v)) {
+                Ok(d) => days = d,
+                Err(e) => return fail(&e),
+            },
+            other => return fail(&format!("unknown option: {other}")),
+        }
+    }
+    let here = repo.unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+    let since = since(days);
+    say_usage(since.as_deref());
+    let u = match with_harness(&here, tool.as_deref(), |a, ctx, _| a.usage(ctx, since.as_deref())) {
+        Ok(Ok(u)) => u,
+        Ok(Err(e)) | Err(e) => return fail(&e),
+    };
+    if json {
+        println!("{}", serde_json::to_string_pretty(&u).expect("serialises"));
+    } else {
+        print!("{}", render::usage_text(&u));
+    }
+    ExitCode::SUCCESS
+}
+
 fn audit(args: &[String]) -> ExitCode {
     let mut repo: Option<PathBuf> = None;
     let mut repos: Vec<String> = Vec::new();
     let mut tool: Option<String> = None;
     let mut json = false;
+    let mut with_usage = false;
+    let mut days: Option<u64> = Some(30);
     let mut remote: Option<Remote> = None;
     let mut it = args.iter();
     while let Some(a) = it.next() {
@@ -614,6 +703,11 @@ fn audit(args: &[String]) -> ExitCode {
                 Ok(v) => tool = Some(v),
                 Err(e) => return fail(&e),
             },
+            "--usage" => with_usage = true,
+            "--days" => match value("--days").and_then(|v| parse_days(&v)) {
+                Ok(d) => days = d,
+                Err(e) => return fail(&e),
+            },
             // A shell that expands `--repos ~/code/*` passes the folders as separate words.
             other if !other.starts_with("--") && !repos.is_empty() => repos.push(other.to_string()),
             other => return fail(&format!("unknown option: {other}")),
@@ -621,6 +715,14 @@ fn audit(args: &[String]) -> ExitCode {
     }
     if repo.is_some() && !repos.is_empty() {
         return fail("use --repo for one repo or --repos for many, not both");
+    }
+    if with_usage && (remote.is_some() || !repos.is_empty()) {
+        return fail(
+            "--usage reads this machine's session logs for one repo here: not with --github, --archive or --repos",
+        );
+    }
+    if !with_usage && args.iter().any(|a| a == "--days") {
+        return fail("--days sets the --usage window: add --usage");
     }
     if let Some(r) = &remote {
         if repo.is_some() || !repos.is_empty() {
@@ -641,7 +743,11 @@ fn audit(args: &[String]) -> ExitCode {
     let quiet = &mut |_: rigswig_core::audit::Progress| {};
     if repos.is_empty() {
         let here = repo.unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
-        let a = match audits::repo(&here, tool.as_deref(), quiet) {
+        let since = since(days);
+        if with_usage {
+            say_usage(since.as_deref());
+        }
+        let a = match audits::repo(&here, tool.as_deref(), with_usage.then_some(since.as_deref()), quiet) {
             Ok((a, _)) => a,
             Err(e) => return fail(&e),
         };
@@ -882,6 +988,7 @@ fn main() -> ExitCode {
         Some("compare") => compare(&args[1..]),
         Some("check") => check(&args[1..]),
         Some("audit") => audit(&args[1..]),
+        Some("usage") => usage_cmd(&args[1..]),
         Some(other) => fail(&format!("unknown or unimplemented command: {other}")),
     }
 }

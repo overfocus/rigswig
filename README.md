@@ -92,8 +92,13 @@ These are the point of the tool, and they will be enforced by tests:
   in a panel. It spawns the CLI you already have; it starts nothing in write mode ([the extension](vscode/) and
   [its logic tests](vscode/test.mjs)).
 - **No secrets.** MCP server `env`, `headers` and `args`, URL paths and inline hook code are never printed or served.
-- **No transcripts.** It never reads session history. (Claude Code's auto-memory index, `MEMORY.md`, is read and
-  counted because it loads into every session; nothing else in that folder is.)
+- **Session logs only when you ask, and only their metadata.** No command opens a session log unless the run asks
+  for it: `rigswig usage` or `rigswig audit --usage`, never the page or the MCP server. Even then, rigswig reads
+  only ids, times, the working folder, models, token counts, and the names of the agents, skills and MCP servers
+  that were called. It never reads or prints message text, thinking, tool inputs or tool results
+  ([what is read, field by field](docs/USAGE.md)). This replaces the earlier "No transcripts" promise
+  ([what changed](docs/USAGE.md#what-changed-in-the-guarantee)). (Claude Code's
+  auto-memory index, `MEMORY.md`, is read and counted in every run because it loads into every session.)
 - **Private folders stay private.** List them in `~/.rigswig/private.json` (`{"private": ["~/notes"]}`): rigswig
   refuses them as a repo, and `audit --repos` skips them.
 

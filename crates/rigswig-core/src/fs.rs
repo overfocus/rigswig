@@ -33,7 +33,21 @@ pub trait Fs {
     fn exists(&self, path: &Path) -> bool {
         self.kind(path).is_ok()
     }
+
+    /// Each line of a file, in order, for files too large for [`Fs::read_to_string`] (session logs). `each` gets
+    /// `None` for a line it cannot have: longer than [`MAX_LINE_BYTES`], or not UTF-8. The default reads the whole
+    /// file; the real file system streams it.
+    fn for_each_line(&self, path: &Path, each: &mut dyn FnMut(Option<&str>)) -> io::Result<()> {
+        let text = self.read_to_string(path)?;
+        for l in text.lines() {
+            each((l.len() <= MAX_LINE_BYTES).then_some(l));
+        }
+        Ok(())
+    }
 }
+
+/// The longest line [`Fs::for_each_line`] hands over.
+pub const MAX_LINE_BYTES: usize = 16 * 1024 * 1024;
 
 /// True if `path` (already canonical) is `root` or inside it.
 pub fn is_within(path: &Path, root: &Path) -> bool {

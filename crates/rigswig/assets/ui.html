@@ -56,6 +56,18 @@ nav.tools a, nav.tools span, .chip {
 nav.tools a:hover, .chip:hover { border-color: var(--green); }
 nav.tools span[aria-current] { border-color: var(--green); color: var(--green); background: rgba(57, 255, 0, 0.08); }
 .badge { font-size: 13px; color: var(--muted); }
+details.more { max-width: 420px; text-align: right; }
+details.more > summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; color: var(--muted); font-size: 14px; }
+details.more > summary::-webkit-details-marker { display: none; }
+details.more > summary::before { content: "\25B8"; }
+details.more[open] > summary::before { content: "\25BE"; }
+details.more > summary:hover { color: var(--fg); }
+details.more p { font-size: 13px; margin: 0 0 6px; }
+ul.unseen { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+ul.unseen li { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+ul.unseen a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 12px; color: var(--fg); text-decoration: none; font: 15px var(--body); }
+ul.unseen a.muted { color: var(--muted); font-size: 13px; border-left: 1px solid var(--line); }
+ul.unseen a:hover { background: rgba(57, 255, 0, 0.08); color: var(--green); }
 
 /* Boxes: the home page's bento. A 2px coloured top edge, a Pixelify head, dense content. */
 .grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
@@ -223,6 +235,8 @@ footer { color: var(--muted); font-size: 14px; margin-top: 20px; }
 @media (max-width: 559px) {
   .switch { margin-left: 0; align-items: flex-start; width: 100%; }
   nav.tools { justify-content: flex-start; }
+  details.more { text-align: left; max-width: none; }
+  ul.unseen { justify-content: flex-start; }
   .big b { font-size: 40px; }
   .mark { font-size: 30px; }
 }
@@ -437,19 +451,39 @@ ul.rows > li.flash { outline: 2px solid var(--green); outline-offset: -2px; bord
     return svg("svg", { viewBox: "0 0 " + w + " " + hgt, preserveAspectRatio: "xMidYMid meet", "aria-hidden": "true", focusable: "false" }, [defs, g]);
   }
 
+  // The harnesses with evidence here are chips; every other one rigswig knows sits behind "not configured here",
+  // still openable and comparable: what a harness would load in a repo it has no config for is a real question
+  // (the shared AGENTS.md and skills often reach it), and the CLI's --tool already answers it.
   var nav = el("nav", { cls: "tools", "aria-label": "Harness" });
-  data.tools.forEach(function (t) {
-    if (t.id === h.tool.id) nav.appendChild(el("span", { "aria-current": "page", text: "● " + t.id }));
-    else if (t.score > 0) nav.appendChild(el("a", { href: href(t.id), text: t.id, title: "evidence: " + t.evidence.join(", ") }));
-  });
   var vsNav = el("nav", { cls: "tools", "aria-label": "Compare with" });
+  var unseen = [];
+  var hereScore = 0;
   data.tools.forEach(function (t) {
-    if (t.id === h.tool.id || t.score === 0) return;
+    if (t.id === h.tool.id) { hereScore = t.score; nav.appendChild(el("span", { "aria-current": "page", text: "● " + t.id })); return; }
     if (other && other.tool.id === t.id) {
       vsNav.appendChild(el("span", { "aria-current": "page", text: "vs " + t.id }));
       vsNav.appendChild(el("a", { href: href(h.tool.id), text: "stop comparing" }));
-    } else vsNav.appendChild(el("a", { href: href(h.tool.id, t.id), text: "compare with " + t.id }));
+    }
+    if (t.score > 0) {
+      nav.appendChild(el("a", { href: href(t.id), text: t.id, title: "evidence: " + t.evidence.join(", ") }));
+      if (!(other && other.tool.id === t.id)) vsNav.appendChild(el("a", { href: href(h.tool.id, t.id), text: "compare with " + t.id }));
+    } else unseen.push(t);
   });
+  var more = null;
+  if (unseen.length) {
+    var list = el("ul", { cls: "unseen" });
+    unseen.forEach(function (t) {
+      list.appendChild(el("li", null, [
+        el("a", { href: href(t.id), text: t.id, title: "what " + t.id + " would load here" }),
+        el("a", { cls: "muted", href: href(h.tool.id, t.id), text: "compare", "aria-label": "compare " + h.tool.id + " with " + t.id })
+      ]));
+    });
+    more = el("details", { cls: "more" }, [
+      el("summary", { text: "Not configured here (" + unseen.length + ")" }),
+      el("p", { cls: "muted", text: "No config for these was found in this repo or your home folder. Open one to see what it would load here as things stand." }),
+      list
+    ]);
+  }
   app.appendChild(el("header", { cls: "top" }, [
     el("div", { cls: "brand" }, [
       el("h1", { cls: "mark", "aria-label": "rigswig" }, ["rig", el("span", { text: "swig" })]),
@@ -457,9 +491,9 @@ ul.rows > li.flash { outline: 2px solid var(--green); outline-offset: -2px; bord
         el("small", { text: "brought to you by" }),
         el("a", { href: "https://kevinferron.com", rel: "noopener noreferrer", "aria-label": "kevinferron.com" }, [wordmark("kevinferron.com", "rw-kf", 0.5)])
       ]),
-      el("p", { cls: "where" }, ["What a ", el("b", { text: h.tool.id }), " session in ", el("b", { text: h.target.repo }), " loads ", data.writes ? el("span", { cls: "badge writes", text: "· write mode · local" }) : el("span", { cls: "badge", text: "· read-only · local" })])
+      el("p", { cls: "where" }, ["What a ", el("b", { text: h.tool.id }), " session in ", el("b", { text: h.target.repo }), " loads ", hereScore === 0 ? el("span", { cls: "badge", text: "· not configured here " }) : null, data.writes ? el("span", { cls: "badge writes", text: "· write mode · local" }) : el("span", { cls: "badge", text: "· read-only · local" })])
     ]),
-    el("div", { cls: "switch" }, [nav, vsNav.childNodes.length ? vsNav : null])
+    el("div", { cls: "switch" }, [nav, vsNav.childNodes.length ? vsNav : null, more])
   ]));
 
   // ---- The budget ---------------------------------------------------------------------------------------------

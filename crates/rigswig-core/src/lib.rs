@@ -4,7 +4,8 @@
 //! - no network, no process spawning, no writes: adapters read through an injected, read-only file system ([`fs`]);
 //! - secrets (MCP `env`, `headers`, `args`, URL paths, inline hook code) never enter the model;
 //! - every figure says whether it is native, calculated, estimated or unknown;
-//! - every output passes [`check::contract_errors`].
+//! - every output passes [`check::contract_errors`];
+//! - session logs are read only through [`adapter::Adapter::usage`], opt-in per run, as metadata ([`usage`]).
 
 pub mod adapter;
 pub mod adapters;
@@ -15,6 +16,7 @@ pub mod compare;
 pub mod fs;
 pub mod model;
 pub mod read;
+pub mod usage;
 pub mod whatif;
 
 /// The crate version, shared by the CLI.

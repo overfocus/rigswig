@@ -50,4 +50,11 @@ pub trait Adapter {
     fn plan(&self, _ctx: &Ctx, _change: &crate::change::Change) -> Result<crate::change::Plan, String> {
         Err(format!("rigswig cannot change {} settings yet", self.id()))
     }
+
+    /// What past sessions in `ctx.repo` invoked, from the harness's own session logs, since `since` (an ISO 8601
+    /// date or time; `None` for every log there is). Opt-in per run: only `rigswig usage` and `audit --usage` call
+    /// it, and what it may read is metadata ([`crate::usage`]). The default refuses: an adapter opts in.
+    fn usage(&self, _ctx: &Ctx, _since: Option<&str>) -> Result<crate::usage::Usage, String> {
+        Err(format!("rigswig does not read {} session logs yet", self.id()))
+    }
 }

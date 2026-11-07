@@ -4,9 +4,13 @@
 evidence, an estimated saving where one can be computed, and a proposed change. `--json` gives everything, including
 the `--without` patterns behind each saving and the user-scope items fleet mode is built from.
 
-Everything comes from files, offline: no transcripts, no network, no model. So a finding never says an item is
-"unused". It says what the files show: "nothing in the repo references this". Something you call by hand, or that a
-user-level file mentions, will still show up here.
+Everything comes from files, offline: no network, no model, and no session logs unless you add `--usage`. So a
+finding never says an item is "unused". It says what the files show: "nothing in the repo references this".
+Something you call by hand, or that a user-level file mentions, will still show up here.
+
+With `--usage` the audit also reads what past sessions in the repo invoked, as metadata only
+([usage](USAGE.md)). An item a session invoked then counts as needed, and `not-invoked` names what loads in every
+session but no session called. That is still not "unused": a skill you only type as `/name` is not counted.
 
 ## Findings
 
@@ -15,6 +19,7 @@ Sorted by severity (high, medium, low), then by saving.
 | Code | What it finds | Saving |
 |---|---|---|
 | `heavy-user-scope` | User-scope agents, skills or commands (one finding per kind) whose name, slug or file name appears nowhere in the repo's text files. Reported when at least 3 of them, worth at least 500 tokens, are unreferenced. | yes |
+| `not-invoked` | Only with `--usage`, and only with at least 5 sessions in the window: agents, skills and MCP servers (one finding per kind) that load in every session and that no session in the window invoked. A skills finding is never High, since a skill typed as `/name` is not counted. | yes, where the items have a measured size |
 | `plugin-fit` | A plugin switched on in user settings when the repo has none of the files that show it is needed (no `Cargo.toml` or `.rs` for a Rust language server, no `vercel.json` or `.vercel/` for a Vercel plugin). A plugin turned on by the project's own settings is never reported. | yes |
 | `instruction-budget` | A Claude Code instruction file over 200 lines, the aim the [memory docs](https://code.claude.com/docs/en/memory.md) give, with its five largest sections. Not checked for the auto-memory index, which Claude Code cuts itself. | no: rigswig never rewrites instruction files |
 | `repeated-text` | Sentences of eight words or more that appear in two instruction files, for example the user `CLAUDE.md` and the project one. | no |

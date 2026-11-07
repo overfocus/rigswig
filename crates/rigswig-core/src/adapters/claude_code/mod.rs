@@ -6,6 +6,7 @@ mod hooks;
 mod mcp;
 mod plugins;
 mod settings;
+mod usage;
 
 use std::path::{Path, PathBuf};
 
@@ -78,6 +79,10 @@ impl Adapter for ClaudeCode {
 
     fn plan(&self, ctx: &Ctx, change: &crate::change::Change) -> Result<crate::change::Plan, String> {
         change::plan(ctx, change)
+    }
+
+    fn usage(&self, ctx: &Ctx, since: Option<&str>) -> Result<crate::usage::Usage, String> {
+        usage::usage(ctx, since)
     }
 
     fn resolve(&self, ctx: &Ctx) -> Harness {
