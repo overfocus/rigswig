@@ -25,6 +25,16 @@ The command is `rigswig` with the argument `mcp`. The config rows the adapters a
   { "mcpServers": { "rigswig": { "command": "rigswig", "args": ["mcp"] } } }
   ```
 - **DeepSeek-CLI** — `~/.deepseek-cli/mcp.json` or the repo's `.mcp.json`, same `mcpServers` shape.
+- **VS Code** (Copilot) — the harness reads the portable format directly: the workspace-root `.mcp.json`, or the
+  global `$COPILOT_HOME/mcp-config.json` (`~/.copilot/mcp-config.json` by default) — same `mcpServers` shape, and
+  the user row is the very file rigswig's copilot adapter shows. The editor's own workspace file
+  `.vscode/mcp.json` works too, in VS Code's `servers` shape (forwarded to the session; rigswig needs no
+  interactive inputs, so nothing is held back):
+  ```json
+  { "servers": { "rigswig": { "type": "stdio", "command": "rigswig", "args": ["mcp"] } } }
+  ```
+  Or the guided flow: **MCP: Add Server**, choose **Command (stdio)**, enter the command `rigswig` with the
+  argument `mcp`.
 - **anything else that launches stdio servers** — same two words; MCP's stdio transport is standard.
 
 `rigswig` must be on the harness client's PATH (`cargo install rigswig`, or `npx rigswig` is not usable here —
