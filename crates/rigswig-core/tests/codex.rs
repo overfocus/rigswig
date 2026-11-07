@@ -46,7 +46,7 @@ fn with_user_config(trust: &str, extra: &str) -> MemFs {
 fn settings_follow_layer_precedence_and_project_limits() {
     let fs = with_user_config(
         "trusted",
-        "model = \"user-model\"\nmodel_provider = \"local-llm\"\napproval_policy = \"never\"",
+        "model = \"user-model\"\nmodel_provider = \"local-llm\"\napproval_policy = \"never\"\nmodel_context_window = 64000",
     )
     .file("/etc/codex/config.toml", "model = \"system-model\"\nsandbox_mode = \"read-only\"")
     .file(format!("{ROOT}/.codex/config.toml"), "model = \"root-model\"\nmodel_provider = \"ignored\"")
@@ -60,6 +60,7 @@ fn settings_follow_layer_precedence_and_project_limits() {
     assert_eq!(h.settings["provider"].value, "local-llm", "model_provider is ignored in project config");
     assert!(h.warnings.iter().any(|w| w.code == "project-key-ignored" && w.message.starts_with("model_provider")));
     assert_eq!(h.settings["sandbox_mode"].source.as_deref(), Some("system"));
+    assert_eq!(h.settings["model_context_window"].value, 64000, "a stated window is reported for the page to use");
     let ap = &h.settings["approval_policy"];
     assert_eq!(ap.trail.last().unwrap().layer, "requirements");
     assert!(h.warnings.iter().any(|w| w.code == "not-allowed"));

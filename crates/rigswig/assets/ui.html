@@ -47,27 +47,25 @@ header.top { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 24
 .by svg { width: 196px; height: auto; overflow: visible; display: block; }
 .where { color: var(--muted); font-size: 15px; margin: 2px 0 0; }
 .where b { color: var(--fg); font-weight: 600; }
-.switch { margin-left: auto; display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
-nav.tools { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
-nav.tools a, nav.tools span, .chip {
+.switch { margin-left: auto; display: flex; flex-direction: column; gap: 6px; align-items: flex-end; min-width: 0; max-width: 100%; }
+/* The harness picker: A and B as labelled selects in one row, swap and clear as icon links between and after. */
+.pick { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: 100%; }
+.pick .slot { display: inline-flex; align-items: stretch; min-width: 0; max-width: 100%; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.tag { display: inline-flex; align-items: center; justify-content: center; min-width: 1.6em; padding: 0 6px; border-radius: 5px; font: 700 13px var(--body); color: #000; background: var(--muted); }
+.tag.a { background: var(--a); } .tag.b { background: var(--b); }
+.pick .slot .tag { border-radius: 0; padding: 0 10px; font-size: 14px; }
+.pick .slot.a { border-color: var(--a); } .pick .slot.b { border-color: var(--b); }
+.pick .slot.b.empty { border-color: var(--line); border-style: dashed; } .pick .slot.b.empty .tag { background: transparent; color: var(--muted); border-right: 1px dashed var(--line); }
+.pick select { border: 0; border-radius: 0; min-width: 0; max-width: 260px; text-overflow: ellipsis; }
+.pick .vs { color: var(--muted); font-size: 14px; }
+.iconbtn { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 10px; border: 1px solid var(--line); color: var(--fg); text-decoration: none; font-size: 18px; }
+.iconbtn:hover { border-color: var(--green); color: var(--green); }
+.chip {
   display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 14px; border-radius: 999px;
   border: 1px solid var(--line); color: var(--fg); text-decoration: none; font: 15px var(--body); background: transparent;
 }
-nav.tools a:hover, .chip:hover { border-color: var(--green); }
-nav.tools span[aria-current] { border-color: var(--green); color: var(--green); background: rgba(57, 255, 0, 0.08); }
+.chip:hover { border-color: var(--green); }
 .badge { font-size: 13px; color: var(--muted); }
-details.more { max-width: 420px; text-align: right; }
-details.more > summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; color: var(--muted); font-size: 14px; }
-details.more > summary::-webkit-details-marker { display: none; }
-details.more > summary::before { content: "\25B8"; }
-details.more[open] > summary::before { content: "\25BE"; }
-details.more > summary:hover { color: var(--fg); }
-details.more p { font-size: 13px; margin: 0 0 6px; }
-ul.unseen { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
-ul.unseen li { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
-ul.unseen a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 12px; color: var(--fg); text-decoration: none; font: 15px var(--body); }
-ul.unseen a.muted { color: var(--muted); font-size: 13px; border-left: 1px solid var(--line); }
-ul.unseen a:hover { background: rgba(57, 255, 0, 0.08); color: var(--green); }
 
 /* Boxes: the home page's bento. A 2px coloured top edge, a Pixelify head, dense content. */
 .grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
@@ -100,6 +98,14 @@ select {
 .bar { position: relative; display: flex; gap: 2px; height: 34px; border-radius: 6px; overflow: hidden; background: var(--soft); border: 1px solid var(--line); }
 .barrow .bar { height: 26px; margin-bottom: 6px; }
 .bar > i { display: block; height: 100%; min-width: 3px; flex: none; }
+.bar > i.winend { position: absolute; top: 0; bottom: 0; width: 2px; min-width: 0; margin-left: -1px; background: var(--fg); opacity: 0.8; }
+/* Model lines: per harness, the model and where it was set, and the window used, with the reader's override. */
+.modellines { display: grid; gap: 6px; margin-top: 12px; }
+.modelline { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; font-size: 15px; }
+.modelline .ml-model { min-width: 0; overflow-wrap: anywhere; }
+.modelline .ml-model b { font-size: 14px; color: var(--fg); }
+.modelline .ml-win { display: inline-flex; align-items: center; gap: 6px; }
+.modelline .ml-hint { color: var(--warn); font-size: 14px; }
 .bar > i.unmeasured {
   min-width: 34px; flex: none; display: flex; align-items: center; justify-content: center; font: 600 14px var(--body); font-style: normal; color: var(--fg);
   background: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0 5px, rgba(255, 255, 255, 0.38) 5px 7px);
@@ -234,9 +240,10 @@ footer { color: var(--muted); font-size: 14px; margin-top: 20px; }
 }
 @media (max-width: 559px) {
   .switch { margin-left: 0; align-items: flex-start; width: 100%; }
-  nav.tools { justify-content: flex-start; }
-  details.more { text-align: left; max-width: none; }
-  ul.unseen { justify-content: flex-start; }
+  .switch { align-items: stretch; }
+  .pick { display: grid; grid-template-columns: minmax(0, 1fr) 44px; }
+  .pick .slot { max-width: none; } .pick select { flex: 1; max-width: none; }
+  .pick .vs { justify-self: center; }
   .big b { font-size: 40px; }
   .mark { font-size: 30px; }
 }
@@ -250,7 +257,7 @@ footer { color: var(--muted); font-size: 14px; margin-top: 20px; }
   .tile .m { grid-column: 1 / -1; grid-row: 3; }
 }
 @media (prefers-reduced-motion: no-preference) {
-  .tile, .chip, nav.tools a, button.link { transition: border-color 150ms ease, background-color 150ms ease; }
+  .tile, .chip, .iconbtn, button.link { transition: border-color 150ms ease, background-color 150ms ease; }
   .panel { animation: open 160ms ease-out; }
   @keyframes open { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
 }
@@ -394,7 +401,7 @@ ul.rows > li.flash { outline: 2px solid var(--green); outline-offset: -2px; bord
     return n;
   }
   function fmt(n) { return Math.round(n).toLocaleString("en-US"); }
-  function k(n) { return n >= 1000 ? (n / 1000).toFixed(n >= 100000 ? 0 : 1).replace(/\.0$/, "") + "k" : String(n); }
+  function k(n) { if (n >= 1000000) return (n / 1000000).toFixed(1).replace(/\.0$/, "") + "M"; return n >= 1000 ? (n / 1000).toFixed(n >= 100000 ? 0 : 1).replace(/\.0$/, "") + "k" : String(n); }
   function tok(chars) { return Math.ceil(chars / 4); }
   function ap(n) { return [el("span", { cls: "approx", text: "~" }), k(n)]; }
   function pct(x) { return x <= 0 ? "0%" : x < 0.1 ? "<0.1%" : (x < 10 ? x.toFixed(1) : Math.round(x)) + "%"; }
@@ -451,39 +458,38 @@ ul.rows > li.flash { outline: 2px solid var(--green); outline-offset: -2px; bord
     return svg("svg", { viewBox: "0 0 " + w + " " + hgt, preserveAspectRatio: "xMidYMid meet", "aria-hidden": "true", focusable: "false" }, [defs, g]);
   }
 
-  // The harnesses with evidence here are chips; every other one rigswig knows sits behind "not configured here",
-  // still openable and comparable: what a harness would load in a repo it has no config for is a real question
-  // (the shared AGENTS.md and skills often reach it), and the CLI's --tool already answers it.
-  var nav = el("nav", { cls: "tools", "aria-label": "Harness" });
-  var vsNav = el("nav", { cls: "tools", "aria-label": "Compare with" });
-  var unseen = [];
+  // The harness picker: A is the harness read, B the one to compare with, each a select grouped by whether a harness
+  // has evidence here. Every harness rigswig knows stays openable and comparable: what one would load in a repo it has
+  // no config for is a real question (the shared AGENTS.md and skills often reach it), and the CLI's --tool answers it.
+  // Choosing navigates (?tool=&vs=), so Back and a copied link keep working; swap and clear are plain links.
   var hereScore = 0;
-  data.tools.forEach(function (t) {
-    if (t.id === h.tool.id) { hereScore = t.score; nav.appendChild(el("span", { "aria-current": "page", text: "● " + t.id })); return; }
-    if (other && other.tool.id === t.id) {
-      vsNav.appendChild(el("span", { "aria-current": "page", text: "vs " + t.id }));
-      vsNav.appendChild(el("a", { href: href(h.tool.id), text: "stop comparing" }));
-    }
-    if (t.score > 0) {
-      nav.appendChild(el("a", { href: href(t.id), text: t.id, title: "evidence: " + t.evidence.join(", ") }));
-      if (!(other && other.tool.id === t.id)) vsNav.appendChild(el("a", { href: href(h.tool.id, t.id), text: "compare with " + t.id }));
-    } else unseen.push(t);
-  });
-  var more = null;
-  if (unseen.length) {
-    var list = el("ul", { cls: "unseen" });
-    unseen.forEach(function (t) {
-      list.appendChild(el("li", null, [
-        el("a", { href: href(t.id), text: t.id, title: "what " + t.id + " would load here" }),
-        el("a", { cls: "muted", href: href(h.tool.id, t.id), text: "compare", "aria-label": "compare " + h.tool.id + " with " + t.id })
-      ]));
+  data.tools.forEach(function (t) { if (t.id === h.tool.id) hereScore = t.score; });
+  function pickSelect(id, label, current, exclude, blank) {
+    var s = el("select", { id: id, "aria-label": label });
+    if (blank) s.appendChild(el("option", { value: "", text: blank }));
+    [["Configured here", function (t) { return t.score > 0; }], ["Not configured here", function (t) { return !(t.score > 0); }]].forEach(function (g) {
+      var group = el("optgroup", { label: g[0] });
+      data.tools.forEach(function (t) {
+        if (!g[1](t) || t.id === exclude) return;
+        var o = el("option", { value: t.id, text: t.id, title: t.score > 0 ? "evidence: " + t.evidence.join(", ") : "what " + t.id + " would load here" });
+        if (t.id === current) o.selected = true;
+        group.appendChild(o);
+      });
+      if (group.childNodes.length) s.appendChild(group);
     });
-    more = el("details", { cls: "more" }, [
-      el("summary", { text: "Not configured here (" + unseen.length + ")" }),
-      el("p", { cls: "muted", text: "No config for these was found in this repo or your home folder. Open one to see what it would load here as things stand." }),
-      list
-    ]);
+    return s;
   }
+  var bId = other ? other.tool.id : "";
+  var pickA = pickSelect("pick-a", "Harness A: the one to read", h.tool.id, null, null);
+  var pickB = pickSelect("pick-b", "Harness B: the one to compare with", bId, h.tool.id, other ? null : "compare with…");
+  pickA.addEventListener("change", function () { location.assign(href(pickA.value, pickA.value === bId ? h.tool.id : bId)); });
+  pickB.addEventListener("change", function () { location.assign(href(h.tool.id, pickB.value)); });
+  var picker = el("div", { cls: "pick", role: "group", "aria-label": "Harnesses" }, [
+    el("label", { cls: "slot a" }, [el("span", { cls: "tag a", text: "A" }), pickA]),
+    other ? el("a", { cls: "iconbtn", href: href(bId, h.tool.id), title: "Swap A and B", "aria-label": "Swap A and B", text: "⇄" }) : el("span", { cls: "vs", "aria-hidden": "true", text: "vs" }),
+    el("label", { cls: "slot b" + (other ? "" : " empty") }, [el("span", { cls: "tag" + (other ? " b" : ""), text: "B" }), pickB]),
+    other ? el("a", { cls: "iconbtn", href: href(h.tool.id), title: "Stop comparing", "aria-label": "Stop comparing", text: "✕" }) : null
+  ]);
   app.appendChild(el("header", { cls: "top" }, [
     el("div", { cls: "brand" }, [
       el("h1", { cls: "mark", "aria-label": "rigswig" }, ["rig", el("span", { text: "swig" })]),
@@ -491,45 +497,104 @@ ul.rows > li.flash { outline: 2px solid var(--green); outline-offset: -2px; bord
         el("small", { text: "brought to you by" }),
         el("a", { href: "https://kevinferron.com", rel: "noopener noreferrer", "aria-label": "kevinferron.com" }, [wordmark("kevinferron.com", "rw-kf", 0.5)])
       ]),
-      el("p", { cls: "where" }, ["What a ", el("b", { text: h.tool.id }), " session in ", el("b", { text: h.target.repo }), " loads ", hereScore === 0 ? el("span", { cls: "badge", text: "· not configured here " }) : null, data.writes ? el("span", { cls: "badge writes", text: "· write mode · local" }) : el("span", { cls: "badge", text: "· read-only · local" })])
+      el("p", { cls: "where" }, ["What a ", el("b", { text: h.tool.id }), " session in ", el("b", { text: h.target.repo }), " loads", other ? ", next to " : null, other ? el("b", { text: other.tool.id }) : null, " ", hereScore === 0 ? el("span", { cls: "badge", text: "· not configured here " }) : null, data.writes ? el("span", { cls: "badge writes", text: "· write mode · local" }) : el("span", { cls: "badge", text: "· read-only · local" })])
     ]),
-    el("div", { cls: "switch" }, [nav, vsNav.childNodes.length ? vsNav : null, more])
+    el("div", { cls: "switch" }, [picker])
   ]));
 
-  // ---- The budget ---------------------------------------------------------------------------------------------
-  var win = Number(store("rigswig.window")) || 200000;
-  if (WINDOWS.indexOf(win) < 0) win = 200000;
+  // Which window each harness's session most likely has. First the reader's own pick for that harness (kept per
+  // harness in this browser), then a window the harness's config states, then the model it resolves to through a
+  // small family table, else unknown and a 200k stand-in the page says is one. Never a fact about the session: the
+  // line under the headline says which of these it came from, and the select overrides it.
+  // Claude: platform.claude.com's models overview (Fable 5/5.1, Opus 4.6+, Sonnet 4.6+ and Haiku 5.5 have 1M; older
+  // ones 200k; Claude Code's bare aliases resolve to the current generation). Codex: its gpt-5 family's 272k
+  // model_context_window. Gemini 2.5 and 3: 1M.
+  var WINDOW_SETTINGS = ["model_context_window", "contextLength"];
+  function windowForModel(model) {
+    var m = String(model).toLowerCase().trim();
+    if (/\[1m\]$/.test(m)) return 1000000;
+    if (/^(opus|sonnet|haiku|fable|opusplan|best)$/.test(m)) return 1000000;
+    if (/claude|opus|sonnet|haiku|fable|mythos/.test(m)) {
+      if (/fable|mythos|(opus|sonnet|haiku)-5|(opus|sonnet)-4-[6-9]/.test(m)) return 1000000;
+      return 200000;
+    }
+    if (/^(openai\/)?gpt-5/.test(m)) return 272000;
+    if (/gemini-(2\.5|3)/.test(m)) return 1000000;
+    return null;
+  }
+  function layerWhere(hh, id) {
+    var l = hh.layers.filter(function (x) { return x.id === id; })[0];
+    return l ? (l.path || l.label) : id;
+  }
+  function windowOf(hh) {
+    var d = hh.settings.model, model = d && typeof d.value === "string" && d.value ? d.value : null;
+    var r = { model: model, modelFrom: d && d.source ? layerWhere(hh, d.source) : null, auto: 200000, autoFrom: "unknown" };
+    for (var i = 0; i < WINDOW_SETTINGS.length; i++) {
+      var s = hh.settings[WINDOW_SETTINGS[i]], n = s ? Number(s.value) : NaN;
+      if (n > 0) { r.auto = n; r.autoFrom = "setting"; r.setting = WINDOW_SETTINGS[i]; r.settingFrom = s.source ? layerWhere(hh, s.source) : null; break; }
+    }
+    if (r.autoFrom === "unknown" && model && windowForModel(model)) { r.auto = windowForModel(model); r.autoFrom = "model"; }
+    var own = Number(store("rigswig.window." + hh.tool.id));
+    r.pick = own > 0 ? own : null;
+    r.value = r.pick || r.auto;
+    return r;
+  }
+  var winA = windowOf(h), winB = other ? windowOf(other) : null;
   var budget = el("section", { cls: "box", "aria-labelledby": "budget-h" });
   var openKind = null;
 
-  function barFor(hh, label) {
+  // One line per harness: the model and where it was set, and the window it implies, with the override.
+  function modelLine(hh, w, tag) {
+    var autoText = w.autoFrom === "setting" ? k(w.auto) + " (" + w.setting + ")" : w.autoFrom === "model" ? k(w.auto) + " (from the model)" : "unknown";
+    var select = el("select", { "aria-label": "Context window for " + hh.tool.id });
+    select.appendChild(el("option", { value: "", text: "auto: " + autoText }));
+    var sizes = WINDOWS.slice();
+    if (w.pick && sizes.indexOf(w.pick) < 0) sizes.push(w.pick);
+    sizes.forEach(function (n) { var o = el("option", { value: String(n), text: k(n) }); if (n === w.pick) o.selected = true; select.appendChild(o); });
+    select.addEventListener("change", function () {
+      var id = select.id;
+      store("rigswig.window." + hh.tool.id, select.value);
+      w.pick = Number(select.value) || null;
+      w.value = w.pick || w.auto;
+      drawBudget();
+      var again = document.getElementById(id); if (again) again.focus();
+    });
+    select.id = "win-" + (tag || "a").toLowerCase();
+    var model = w.model
+      ? [el("b", { cls: "mono", text: w.model }), w.modelFrom ? el("span", { cls: "muted", text: " set in " + w.modelFrom }) : null]
+      : [el("span", { cls: "muted", text: "no model set here (the tool's default)" })];
+    return el("div", { cls: "modelline" }, [
+      tag ? el("span", { cls: "tag " + tag.toLowerCase(), text: tag }) : null,
+      el("span", { cls: "ml-model" }, [el("span", { cls: "muted", text: "model " })].concat(model)),
+      el("label", { cls: "ml-win" }, [el("span", { cls: "muted", text: "window" }), select]),
+      !w.pick && w.autoFrom === "unknown" ? el("span", { cls: "ml-hint", text: w.model ? "▲ rigswig does not know this model's window: pick it" : "▲ pick the window your model has" }) : null
+    ]);
+  }
+
+  // Each bar is drawn on one shared axis, the larger of the two windows, with a tick where its own window ends.
+  function barFor(hh, label, w, axis) {
     var kinds = kindsOf(hh);
     var present = KINDS.filter(function (x) { return kinds[x]; });
-    var bar = el("div", { cls: "bar", role: "img", "aria-label": label + ": " + present.map(function (x) { return TITLE[x] + " about " + k(tok(kinds[x])) + " tokens"; }).join(", ") + (hh.context.notMeasured.length ? "; plus parts not measured" : "") + ", on a " + k(win) + " token window" });
+    var bar = el("div", { cls: "bar", role: "img", "aria-label": label + ": " + present.map(function (x) { return TITLE[x] + " about " + k(tok(kinds[x])) + " tokens"; }).join(", ") + (hh.context.notMeasured.length ? "; plus parts not measured" : "") + ", on a " + k(w) + " token window" });
     present.forEach(function (x) {
-      var w = Math.min(100, tok(kinds[x]) / win * 100);
-      bar.appendChild(el("i", { style: "width:" + w + "%;background:var(--k-" + x + ")", title: TITLE[x] + ": ~" + k(tok(kinds[x])) + " tokens" }));
+      var pc = Math.min(100, tok(kinds[x]) / axis * 100);
+      bar.appendChild(el("i", { style: "width:" + pc + "%;background:var(--k-" + x + ")", title: TITLE[x] + ": ~" + k(tok(kinds[x])) + " tokens" }));
     });
     if (hh.context.notMeasured.length) bar.appendChild(el("i", { cls: "unmeasured", text: "?", title: "Not measured: " + hh.context.notMeasured.map(function (n) { return n.what; }).join("; ") }));
+    if (w < axis) bar.appendChild(el("i", { cls: "winend", style: "left:" + (w / axis * 100) + "%", title: hh.tool.id + "'s window ends here (" + k(w) + ")" }));
     return bar;
   }
 
-  function scaleRow() {
+  function scaleRow(axis) {
     var scale = el("div", { cls: "scale", "aria-hidden": "true" });
-    [0, 0.25, 0.5, 0.75, 1].forEach(function (f) { scale.appendChild(el("span", { text: f === 0 ? "0" : k(win * f), style: "left:" + f * 100 + "%" })); });
+    [0, 0.25, 0.5, 0.75, 1].forEach(function (f) { scale.appendChild(el("span", { text: f === 0 ? "0" : k(axis * f), style: "left:" + f * 100 + "%" })); });
     return scale;
   }
   function drawBudget() {
     budget.textContent = "";
     var t = h.context.tokens;
+    var win = winA.value;
     var share = t.value / win * 100;
-    var select = el("select", { "aria-label": "Context window size" });
-    WINDOWS.forEach(function (w) {
-      var o = el("option", { value: String(w), text: k(w) + " window" });
-      if (w === win) o.selected = true;
-      select.appendChild(o);
-    });
-    select.addEventListener("change", function () { win = Number(select.value); store("rigswig.window", String(win)); drawBudget(); select = budget.querySelector("select"); if (select) select.focus(); });
 
     var biggest = ranked[0];
     var top3 = ranked.slice(0, 3).reduce(function (s, i) { return s + i.load.chars.value; }, 0);
@@ -548,27 +613,30 @@ ul.rows > li.flash { outline: 2px solid var(--green); outline-offset: -2px; bord
       el("div", null, [
         el("h2", { id: "budget-h", text: "Context budget" }),
         el("p", { cls: "big" }, [el("b", null, ap(t.value)), el("span", { text: "tokens before you type" })]),
-        el("p", { cls: "sub" }, [el("strong", { text: pct(share) }), " of a", select]),
-        el("p", { cls: "sub", text: "Between " + k(t.low) + " and " + k(t.high) + ", estimated from " + fmt(h.context.chars.value) + " characters (" + t.method + ")." })
+        el("p", { cls: "sub" }, [el("strong", { text: pct(share) }), " of a " + k(win) + " window" + (winA.pick || winA.autoFrom !== "unknown" ? "" : " (a stand-in: the model's window is unknown)")]),
+        el("p", { cls: "sub", text: "Between " + k(t.low) + " and " + k(t.high) + ", estimated from " + fmt(h.context.chars.value) + " characters (" + t.method + ")." }),
+        el("div", { cls: "modellines" }, [modelLine(h, winA, other ? "A" : null), other ? modelLine(other, winB, "B") : null])
       ]),
       stats
     ]));
 
     var bars = el("div", { cls: "bars" });
     if (other) {
+      var axis = Math.max(winA.value, winB.value), tb = other.context.tokens.value;
       bars.appendChild(el("div", { cls: "barrow" }, [
-        el("b", { text: "A " + h.tool.id + " ~" + k(t.value) }), barFor(h, "A " + h.tool.id),
-        el("b", { text: "B " + other.tool.id + " ~" + k(other.context.tokens.value) }), barFor(other, "B " + other.tool.id),
-        el("span", { cls: "hide-sm", "aria-hidden": "true" }), scaleRow()
+        el("b", null, [el("span", { cls: "tag a", text: "A" }), " " + h.tool.id + " ~" + k(t.value) + " · " + pct(share)]), barFor(h, "A " + h.tool.id, win, axis),
+        el("b", null, [el("span", { cls: "tag b", text: "B" }), " " + other.tool.id + " ~" + k(tb) + " · " + pct(tb / winB.value * 100)]), barFor(other, "B " + other.tool.id, winB.value, axis),
+        el("span", { cls: "hide-sm", "aria-hidden": "true" }), scaleRow(axis)
       ]));
-    } else { bars.appendChild(barFor(h, h.tool.id)); bars.appendChild(scaleRow()); }
+    } else { bars.appendChild(barFor(h, h.tool.id, win, win)); bars.appendChild(scaleRow(win)); }
     budget.appendChild(bars);
     if (h.context.notMeasured.length) {
       budget.appendChild(el("div", { cls: "unm" }, h.context.notMeasured.map(function (n) {
         return el("span", { title: n.why }, [el("i", { cls: "sw hatch", "aria-hidden": "true" }), "? not measured: " + n.what]);
       })));
     }
-    if (t.value > win) budget.appendChild(el("p", { cls: "note", text: "▲ The measured part alone is larger than this window." }));
+    if (t.value > win) budget.appendChild(el("p", { cls: "note", text: "▲ " + (other ? "A's" : "The") + " measured part alone is larger than its window." }));
+    if (other && other.context.tokens.value > winB.value) budget.appendChild(el("p", { cls: "note", text: "▲ B's measured part alone is larger than its window." }));
     budget.appendChild(tiles);
     placePanel();
   }

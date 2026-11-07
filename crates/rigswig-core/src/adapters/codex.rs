@@ -359,6 +359,7 @@ impl Run<'_, '_> {
             "model",
             "model_provider",
             "model_reasoning_effort",
+            "model_context_window",
             "approval_policy",
             "sandbox_mode",
             "project_doc_max_bytes",
