@@ -24,7 +24,7 @@ default = ["github"]
 github = ["dep:ureq"]
 
 [dependencies]
-rigswig-core = { path = "../rigswig-core", version = "0.2.0" }
+rigswig-core = { path = "../rigswig-core", version = "0.2.1" }
 
 # Reading a repo archive into memory (`--archive`, `--github`): gzip in pure Rust, and tar without extended attributes.
 flate2 = { version = "1.1", default-features = false, features = ["rust_backend"] }
