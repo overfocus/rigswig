@@ -12,6 +12,7 @@ pub mod gemini;
 pub mod hermes;
 pub mod hf;
 pub mod ollama;
+pub mod pi;
 pub mod shared;
 
 pub use claude_code::ClaudeCode;
@@ -25,6 +26,7 @@ pub use gemini::Gemini;
 pub use hermes::Hermes;
 pub use hf::Hf;
 pub use ollama::Ollama;
+pub use pi::Pi;
 
 use crate::adapter::Adapter;
 
@@ -42,5 +44,6 @@ pub fn all() -> Vec<Box<dyn Adapter>> {
         Box::new(Devin),
         Box::new(Dsh),
         Box::new(DeepSeekCli),
+        Box::new(Pi),
     ]
 }

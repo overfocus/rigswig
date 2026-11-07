@@ -126,6 +126,7 @@ Harness-agnostic: each harness is an adapter that reads its own files into one s
 | DeepSeek-CLI (community) | `rigswig status --tool deepseek` ([the rules it models](docs/adapters/deepseek-cli.md)) |
 | GitHub Copilot CLI | `rigswig status --tool copilot` ([the rules it models](docs/adapters/copilot.md)) |
 | Hugging Face CLI | `rigswig status --tool hf` ([the rules it models](docs/adapters/hf.md)) |
+| Pi | `rigswig status --tool pi` ([the rules it models](docs/adapters/pi.md)) |
 | OpenCode, others | adapters welcome |
 
 ## Related tools
