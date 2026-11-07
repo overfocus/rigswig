@@ -68,7 +68,7 @@ jobs:
           path: npm-stage
 
   # The editor extension: packaged from the manifest, the tag's release carries it as an asset.
-  # Publishing it to the Marketplace and Open VSX stays a maintainer step (docs/EDITOR-REGISTRIES.md).
+  # The registries publish from .github/workflows/extension.yml, which also runs when the release is published.
   vsix:
     needs: test
     runs-on: ubuntu-latest

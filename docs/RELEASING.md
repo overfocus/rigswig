@@ -7,8 +7,7 @@ A release is a version tag. Pushing `vX.Y.Z` runs `.github/workflows/release.yml
 3. packages each with `LICENSE`, `NOTICE` and `README.md`, adds `SHA256SUMS`, and opens a **draft** GitHub release;
 4. publishes both crates to crates.io, once a maintainer approves the `crates-io` job;
 5. publishes the six npm packages, once a maintainer approves the `npm` job;
-6. packages the editor extension's VSIX and attaches it to the draft (the Marketplace and Open VSX publish is a
-   maintainer step: docs/EDITOR-REGISTRIES.md).
+6. packages the editor extension's VSIX and attaches it to the draft.
 
 Nothing is public until a maintainer publishes the draft and approves the crates.io and npm jobs.
 
@@ -89,6 +88,4 @@ A published npm version cannot be overwritten. To take one out of circulation, d
 `npm deprecate <package>@<version> "reason"`. Unpublishing (within 72 hours of publishing) leaves that version
 number permanently unusable; avoid it.
 
-- **The editor registries**: the Marketplace and Open VSX publish, with their steps and tokens
-  (docs/EDITOR-REGISTRIES.md).
 - **Homebrew**: a tap formula pointing at the release assets and their checksums.

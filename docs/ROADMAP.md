@@ -57,8 +57,8 @@ one host, the archive unpacked into memory, an empty home) or `--archive <file>`
   documents a switch.
 - DeepSeek: show DeepSeek setups, as its own harness or as a model provider seen through other harnesses
   ([#1](https://github.com/overfocus/rigswig/issues/1)).
-- The editor extension's next steps: publish it to the Marketplace and Open VSX; a WebAssembly build of
-  `rigswig-core` may still serve a page that reads an uploaded `--json`, without the CLI installed.
+- A WebAssembly build of `rigswig-core`, for a page that reads an uploaded `--json` without the CLI installed
+  (the extension publishes instead, from `.github/workflows/extension.yml`).
 - Real tokenizer counts where a harness's tokenizer is public, labelled as such.
 
 ## Not in scope

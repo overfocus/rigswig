@@ -2,7 +2,7 @@ name: extension-publish
 
 # The editor extension (vscode/) to its two registries: by hand, or when a release is published with a new
 # extension version. Neither the Marketplace nor Open VSX supports trusted publishing - each registry uses a
-# stored personal access token in its own environment (docs/EDITOR-REGISTRIES.md).
+# stored personal access token in its own environment, behind its approval gate.
 
 on:
   workflow_dispatch:
@@ -37,8 +37,7 @@ jobs:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
   openvsx:
-    # The Open VSX token is the maintainer step still pending (docs/EDITOR-REGISTRIES.md step 2): this job
-    # starts publishing the day the OVSX_TOKEN secret lands.
+    # The OVSX_TOKEN secret carries this job: when it is absent the job ends after its gate step.
     runs-on: ubuntu-latest
     environment: openvsx
     steps:
@@ -51,7 +50,7 @@ jobs:
           if [ -n "$OVSX_TOKEN" ]; then
             echo "HAS_TOKEN=true" >> "$GITHUB_ENV"
           else
-            echo "OVSX_TOKEN is not set yet; ending here (docs/EDITOR-REGISTRIES.md)"
+            echo "OVSX_TOKEN is not set yet; ending here"
           fi
         env:
           OVSX_TOKEN: ${{ secrets.OVSX_TOKEN }}
