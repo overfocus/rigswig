@@ -2,11 +2,13 @@
 
 mod audits;
 mod github;
+mod mcp;
 mod os_fs;
 mod render;
 mod ui;
 mod writes;
 
+use serde_json::Value;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -49,6 +51,8 @@ Usage:
   rigswig compare <repo-a> <repo-b> [--tool <id>] [--json]
   rigswig compare <repo> --tools <id-a>,<id-b> [--json]
                                             what differs: two repos with one harness, or two harnesses on one repo
+  rigswig mcp                               the five read-only surfaces as MCP tools over stdio; add it to a harness's
+                                            MCP config as the command `rigswig` with the argument `mcp` (docs/MCP.md)
 
 `status` and `check` take --without <what> (repeatable, or comma-separated): a plugin (name@marketplace), a
 layer (layer:user), a kind and name (agent:*, skill:deploy) or an item id. The totals are recomputed without them.
@@ -310,9 +314,14 @@ fn status(args: &[String], mode: Mode) -> ExitCode {
         adapters.iter().map(|a| (a.as_ref(), a.detect(&ctx_for(a.as_ref())))).collect();
 
     if mode == Mode::Tools {
-        for (a, d) in &scored {
-            let ev = if d.evidence.is_empty() { "no sign of it here".into() } else { d.evidence.join(", ") };
-            println!("{:<12} {:>3}  {}", a.id(), d.score, printable(&ev));
+        match detections(&repo) {
+            Ok(list) => {
+                for (id, score, evidence) in list {
+                    let ev = if evidence.is_empty() { "no sign of it here".into() } else { evidence.join(", ") };
+                    println!("{:<12} {:>3}  {}", id, score, ev);
+                }
+            }
+            Err(e) => return fail(&e),
         }
         return ExitCode::SUCCESS;
     }
@@ -624,6 +633,78 @@ fn audit(args: &[String]) -> ExitCode {
     ExitCode::SUCCESS
 }
 
+/// `check`'s verdict rows as one JSON object (`tool`, `repo`, `passed`, `checks`), shared with the MCP `check`.
+pub(crate) fn check_json(
+    h: &rigswig_core::model::Harness,
+    max_tokens: Option<u64>,
+    max_item: Option<u64>,
+    no_warnings: bool,
+) -> Value {
+    // (name, passed, detail)
+    let mut results: Vec<(String, bool, String)> = Vec::new();
+    let errs = rigswig_core::check::contract_errors(h);
+    results.push((
+        "contract".into(),
+        errs.is_empty(),
+        if errs.is_empty() { "the output keeps the contract".into() } else { errs.join("; ") },
+    ));
+    let t = &h.context.tokens;
+    if let Some(max) = max_tokens {
+        results.push((
+            "max-tokens".into(),
+            t.value <= max,
+            format!("~{} tokens before you type (estimate, {}..{}); limit {max}", t.value, t.low, t.high),
+        ));
+    }
+    if let Some(max) = max_item {
+        let over: Vec<String> = h
+            .items
+            .iter()
+            .filter(|i| {
+                i.effective
+                    && i.load.when == rigswig_core::model::LoadWhen::Startup
+                    && i.load.chars.value.div_ceil(4) > max
+            })
+            .map(|i| format!("{} {} (~{})", i.detail.kind(), printable(&i.name), i.load.chars.value.div_ceil(4)))
+            .collect();
+        let detail = if over.is_empty() {
+            format!("no item over {max} tokens")
+        } else {
+            format!("over {max} tokens: {}", over.join(", "))
+        };
+        results.push(("max-item-tokens".into(), over.is_empty(), detail));
+    }
+    if no_warnings {
+        let ws: Vec<String> =
+            h.warnings.iter().filter(|w| w.code != "what-if").map(|w| printable(&w.message)).collect();
+        let detail = if ws.is_empty() { "no warnings".into() } else { ws.join("; ") };
+        results.push(("no-warnings".into(), ws.is_empty(), detail));
+    }
+    let passed = results.iter().all(|(_, ok, _)| *ok);
+    let rows: Vec<Value> =
+        results.iter().map(|(n, ok, d)| serde_json::json!({ "check": n, "passed": ok, "detail": d })).collect();
+    serde_json::json!({ "tool": h.tool.id, "repo": h.target.repo, "passed": passed, "checks": rows })
+}
+
+/// Every harness with its detection for one repo: the `rigswig tools` surface, text and MCP alike.
+pub(crate) fn detections(repo: &std::path::Path) -> Result<Vec<(String, u8, Vec<String>)>, String> {
+    let repo = real_path(repo).map_err(|_| format!("no such folder: {}", repo.display()))?;
+    let home = home().ok_or("the home folder is not set")?;
+    refuse_private(&repo, &home)?;
+    let adapters = rigswig_core::adapters::all();
+    let ctx_for = |a: &dyn Adapter| {
+        let env = a.env_vars().iter().filter_map(|k| std::env::var(k).ok().map(|v| ((*k).to_string(), v))).collect();
+        Ctx { fs: &os_fs::OsFs, env, home: home.clone(), repo: repo.clone(), os: this_os() }
+    };
+    Ok(adapters
+        .iter()
+        .map(|a| {
+            let d = a.detect(&ctx_for(a.as_ref()));
+            (a.id().to_string(), d.score, d.evidence.iter().map(|e| printable(e)).collect())
+        })
+        .collect())
+}
+
 /// `rigswig check`: limits for CI. Exit 0 when every limit holds, 1 when one does not, 2 on a usage error.
 fn check(args: &[String]) -> ExitCode {
     let mut repo: Option<PathBuf> = None;
@@ -671,56 +752,19 @@ fn check(args: &[String]) -> ExitCode {
         h = rigswig_core::whatif::without(&h, &removals).0;
     }
 
-    // (name, passed, detail)
-    let mut results: Vec<(String, bool, String)> = Vec::new();
-    let errs = rigswig_core::check::contract_errors(&h);
-    results.push((
-        "contract".into(),
-        errs.is_empty(),
-        if errs.is_empty() { "the output keeps the contract".into() } else { errs.join("; ") },
-    ));
-    let t = &h.context.tokens;
-    if let Some(max) = max_tokens {
-        results.push((
-            "max-tokens".into(),
-            t.value <= max,
-            format!("~{} tokens before you type (estimate, {}..{}); limit {max}", t.value, t.low, t.high),
-        ));
-    }
-    if let Some(max) = max_item {
-        let over: Vec<String> = h
-            .items
-            .iter()
-            .filter(|i| {
-                i.effective
-                    && i.load.when == rigswig_core::model::LoadWhen::Startup
-                    && i.load.chars.value.div_ceil(4) > max
-            })
-            .map(|i| format!("{} {} (~{})", i.detail.kind(), printable(&i.name), i.load.chars.value.div_ceil(4)))
-            .collect();
-        let detail = if over.is_empty() {
-            format!("no item over {max} tokens")
-        } else {
-            format!("over {max} tokens: {}", over.join(", "))
-        };
-        results.push(("max-item-tokens".into(), over.is_empty(), detail));
-    }
-    if no_warnings {
-        let ws: Vec<String> =
-            h.warnings.iter().filter(|w| w.code != "what-if").map(|w| printable(&w.message)).collect();
-        let detail = if ws.is_empty() { "no warnings".into() } else { ws.join("; ") };
-        results.push(("no-warnings".into(), ws.is_empty(), detail));
-    }
-    let passed = results.iter().all(|(_, ok, _)| *ok);
+    let out = check_json(&h, max_tokens, max_item, no_warnings);
+    let passed = out["passed"].as_bool().unwrap_or(false);
     if json {
-        let rows: Vec<serde_json::Value> =
-            results.iter().map(|(n, ok, d)| serde_json::json!({ "check": n, "passed": ok, "detail": d })).collect();
-        let out = serde_json::json!({ "tool": h.tool.id, "repo": h.target.repo, "passed": passed, "checks": rows });
         println!("{}", serde_json::to_string_pretty(&out).expect("serialises"));
     } else {
         println!("rigswig check: {} in {}", printable(&h.tool.id), printable(&h.target.repo));
-        for (n, ok, d) in &results {
-            println!("  {} {:<16} {}", if *ok { "PASS" } else { "FAIL" }, n, d);
+        for row in out["checks"].as_array().expect("the rows") {
+            println!(
+                "  {} {:<16} {}",
+                if row["passed"].as_bool().unwrap_or(false) { "PASS" } else { "FAIL" },
+                row["check"].as_str().unwrap_or_default(),
+                row["detail"].as_str().unwrap_or_default()
+            );
         }
     }
     if passed { ExitCode::SUCCESS } else { ExitCode::from(1) }
@@ -787,6 +831,7 @@ fn main() -> ExitCode {
         Some("status") => status(&args[1..], Mode::Status),
         Some("tools") => status(&args[1..], Mode::Tools),
         Some("ui") => status(&args[1..], Mode::Ui),
+        Some("mcp") => mcp::serve(&args[1..]),
         Some("compare") => compare(&args[1..]),
         Some("check") => check(&args[1..]),
         Some("audit") => audit(&args[1..]),

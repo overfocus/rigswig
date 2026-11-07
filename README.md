@@ -85,6 +85,8 @@ These are the point of the tool, and they will be enforced by tests:
 - **No model calls.** Everything it shows is read from files on your machine.
 - **Read-only by default.** Nothing is ever written unless you start the page with `rigswig ui --allow-writes`
   ([write mode](docs/WRITE-MODE.md)).
+- **An MCP server.** `rigswig mcp` serves the five read-only surfaces as MCP tools over stdio, so a harness
+  can ask rigswig about a checkout from inside its own session ([the server and its registration](docs/MCP.md)).
 - **No secrets.** MCP server `env`, `headers` and `args`, URL paths and inline hook code are never printed or served.
 - **No transcripts.** It never reads session history. (Claude Code's auto-memory index, `MEMORY.md`, is read and
   counted because it loads into every session; nothing else in that folder is.)
