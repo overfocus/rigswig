@@ -104,10 +104,11 @@ from what the formula expects. For each release, in a checkout of the tap:
 gh release download vX.Y.Z -R overfocus/rigswig -p SHA256SUMS -D /tmp/sums
 node path/to/rigswig/homebrew/formula.mjs --version vX.Y.Z --sums /tmp/sums/SHA256SUMS > Formula/rigswig.rb
 git commit -am "rigswig X.Y.Z"    # first: a local tap is a clone, so it sees commits, not the working tree
-brew tap local/check "$PWD" && brew install local/check/rigswig && brew test local/check/rigswig \
+brew tap local/check "$PWD" && brew trust local/check && brew install local/check/rigswig && brew test local/check/rigswig \
   && brew audit --strict --online local/check/rigswig; brew uninstall rigswig; brew untap local/check
 git push
 ```
 
-The tap's own CI (`brew test-bot`) runs on the push. Then `brew install overfocus/tap/rigswig` should give the new
-version.
+Homebrew 7 loads formulae only from taps it trusts, so `brew trust local/check` comes before the install; without it
+the audit refuses to load the formula (and its failure is easy to miss behind a pipe). The tap's own CI
+(`brew test-bot`) runs on the push. Then `brew install overfocus/tap/rigswig` should give the new version.
