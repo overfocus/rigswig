@@ -128,7 +128,7 @@ fn check(args: &Map<String, Value>) -> Result<Value, String> {
 /// `audit`: the ranked findings for one repo.
 fn audit(args: &Map<String, Value>) -> Result<Value, String> {
     let quiet = &mut |_: rigswig_core::audit::Progress| {};
-    let (a, _) = crate::audits::repo(&arg_repo(args)?, arg_tool(args).as_deref(), quiet)?;
+    let (a, _) = crate::audits::repo(&arg_repo(args)?, arg_tool(args).as_deref(), None, quiet)?;
     Ok(serde_json::to_value(&a).expect("serialises"))
 }
 

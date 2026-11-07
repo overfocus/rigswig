@@ -1,8 +1,11 @@
 //! `rigswig audit`: ranked findings about a harness, each with its evidence, an estimated saving where one can be
 //! computed (with [`crate::whatif::without`]) and a proposed change. Everything is derived from files, offline.
 //!
-//! Findings never say an item is "unused": rigswig cannot see usage without transcripts, which it never reads. They
-//! say what is true of the files: "nothing in the repo references this".
+//! By default findings never say an item is "unused": without session logs rigswig cannot see usage, and it reads
+//! them only when a run asks (`audit --usage`). They say what is true of the files: "nothing in the repo references
+//! this". With [`Options::usage`] they also say what the logs show: an item invoked in the window counts as needed
+//! here, and `not-invoked` names what loads but no session called — still never "unused", since a skill typed as
+//! `/name` is not counted ([`crate::usage`]).
 //!
 //! The audit reads through the same injected, read-only file system as the adapters (instruction files, the repo's
 //! files for references and signals, and the user's optional signal table), and prints nothing.
@@ -16,6 +19,7 @@ use crate::adapter::Ctx;
 use crate::fs::EntryKind;
 use crate::model::{Harness, Item, ItemDetail, LayerKind, LoadWhen, PermissionEffect};
 use crate::read::redact::printable;
+use crate::usage::{MIN_SESSIONS, Usage};
 use crate::whatif::{glob, without};
 
 /// Claude Code's documented aim for one instruction file: under 200 lines
@@ -37,13 +41,17 @@ pub struct Audit {
     pub user_scope: Vec<UserScoped>,
     /// What the audit could not judge.
     pub notes: Vec<String>,
+    /// The session-log counts the findings used, when the run asked for them (`--usage`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub usage: Option<Usage>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Finding {
     /// A stable code: `heavy-user-scope`, `plugin-fit`, `instruction-budget`, `repeated-text`, `dead-reference`,
-    /// `permission-one-off`, `permission-covered`, `permission-broad`, `warning:<code>`.
+    /// `permission-one-off`, `permission-covered`, `permission-broad`, `not-invoked` (only with `--usage`),
+    /// `warning:<code>`.
     pub code: String,
     pub severity: Severity,
     pub title: String,
@@ -105,6 +113,8 @@ pub struct Signal {
 pub struct Options {
     /// Signals that add to (and, for the same plugin pattern, replace) the built-in table.
     pub signals: Vec<Signal>,
+    /// Session-log counts for this repo ([`crate::adapter::Adapter::usage`]), when the run asked for them.
+    pub usage: Option<Usage>,
 }
 
 /// The built-in plugin signals: language servers by their project files, platforms by their config.
@@ -355,6 +365,9 @@ pub fn audit_with(ctx: &Ctx, h: &Harness, opts: &Options, progress: &mut dyn FnM
     }
 
     let user_scope = heavy_user_scope(ctx, h, &text, opts, &mut findings, &mut notes);
+    if let Some(u) = &opts.usage {
+        not_invoked(h, u, &mut findings, &mut notes);
+    }
     say("Checking instruction files".into(), 0.85);
     instruction_files(ctx, h, &mut findings, &mut notes);
     if h.tool.id == "claude-code" {
@@ -379,6 +392,7 @@ pub fn audit_with(ctx: &Ctx, h: &Harness, opts: &Options, progress: &mut dyn FnM
         findings,
         user_scope,
         notes,
+        usage: opts.usage.clone(),
     }
 }
 
@@ -406,7 +420,8 @@ fn heavy_user_scope(
         let mut unref = Vec::new();
         let mut referenced = Vec::new();
         for i in &all {
-            let needed = names_of(i).iter().any(|n| mentions(text, n));
+            let needed =
+                names_of(i).iter().any(|n| mentions(text, n)) || opts.usage.as_ref().is_some_and(|u| invoked(u, i));
             rows.push(UserScoped {
                 id: i.id.clone(),
                 kind: kind.into(),
@@ -432,7 +447,11 @@ fn heavy_user_scope(
         }
         if !referenced.is_empty() {
             let names: Vec<String> = referenced.iter().take(8).map(|i| short(&i.name, 40)).collect();
-            evidence.push(format!("referenced here: {}", names.join(", ")));
+            let how = if opts.usage.is_some() { "referenced or invoked here" } else { "referenced here" };
+            evidence.push(format!("{how}: {}", names.join(", ")));
+        }
+        if let Some(u) = opts.usage.as_ref().filter(|u| u.sessions > 0) {
+            evidence.push(format!("and none of the others was invoked in {}", window(u)));
         }
         let ids: Vec<String> = unref.iter().map(|i| i.id.clone()).collect();
         let s = saving(h, ids.clone());
@@ -516,6 +535,103 @@ fn heavy_user_scope(
         ));
     }
     rows
+}
+
+/// Whether the session logs show `i` invoked: an agent by its type, a skill by its name, an MCP server by any of its
+/// tools. A plugin's `plugin:name` also counts when called by its bare `name` (sessions do call them that way): the
+/// claim this guards is "never invoked", so a match that might be another item's errs towards invoked.
+fn invoked(u: &Usage, i: &Item) -> bool {
+    match i.detail.kind() {
+        "mcp" => u.mcp_calls(&i.name) > 0 || u.find("mcp", &i.name).is_some(),
+        k @ ("agent" | "skill") => {
+            u.find(k, &i.name).is_some() || i.name.rsplit_once(':').is_some_and(|(_, bare)| u.find(k, bare).is_some())
+        }
+        _ => false,
+    }
+}
+
+/// "23 sessions since 2026-10-08", for evidence.
+fn window(u: &Usage) -> String {
+    let n = plural(u.sessions as usize, "session", "sessions");
+    match u.since.as_deref().or(u.first.as_deref()) {
+        Some(d) => format!("{n} since {}", d.get(..10).unwrap_or(d)),
+        None => n,
+    }
+}
+
+/// Agents, skills and MCP servers that load in every session and that no session in the window invoked. Items an
+/// earlier finding already names are left to it.
+fn not_invoked(h: &Harness, u: &Usage, findings: &mut Vec<Finding>, notes: &mut Vec<String>) {
+    if u.sessions < MIN_SESSIONS {
+        notes.push(format!(
+            "usage: {} in the logs, fewer than {MIN_SESSIONS}; too few to say what is never invoked",
+            plural(u.sessions as usize, "session", "sessions")
+        ));
+        return;
+    }
+    let named: BTreeSet<String> = findings.iter().flat_map(|f| f.items.iter().cloned()).collect();
+    for (kind, title) in [("agent", "agents"), ("skill", "skills"), ("mcp", "MCP servers")] {
+        let mut idle: Vec<&Item> = h
+            .items
+            .iter()
+            .filter(|i| i.effective && i.detail.kind() == kind && !named.contains(&i.id))
+            .filter(|i| kind == "mcp" || i.load.when == LoadWhen::Startup)
+            .filter(|i| !invoked(u, i))
+            .collect();
+        if idle.is_empty() {
+            continue;
+        }
+        idle.sort_by(|a, b| b.load.chars.value.cmp(&a.load.chars.value).then(a.name.cmp(&b.name)));
+        let cost: u64 = idle.iter().map(|i| tokens(i.load.chars.value)).sum();
+        let mut evidence: Vec<String> = idle
+            .iter()
+            .take(8)
+            .map(|i| {
+                let size = if i.load.chars.value > 0 {
+                    format!("~{} tokens", tokens(i.load.chars.value))
+                } else {
+                    "tool listing not measured".into()
+                };
+                format!("{} ({size}, {})", short(&i.name, 60), i.origin.layer)
+            })
+            .collect();
+        if idle.len() > 8 {
+            evidence.push(format!("... and {} more", idle.len() - 8));
+        }
+        evidence.push(format!("invoked in none of {} in this repo", window(u)));
+        if kind == "skill" {
+            evidence.push("a skill you only ever type as /name is not counted: check these before archiving".into());
+        }
+        let ids: Vec<String> = idle.iter().map(|i| i.id.clone()).collect();
+        let s = saving(h, ids.clone());
+        // A skill typed as /name is not counted, so a skill finding is never High.
+        let big = s.as_ref().is_some_and(|s| s.tokens >= 2_000);
+        let severity = match (big, kind) {
+            (true, "skill") => Severity::Medium,
+            (true, _) => Severity::High,
+            (false, "skill") => Severity::Low,
+            (false, _) => Severity::Medium,
+        };
+        findings.push(Finding {
+            code: "not-invoked".into(),
+            severity,
+            title: format!(
+                "{} {} in every session and none was invoked in {}{}",
+                plural(idle.len(), &title[..title.len() - 1], title),
+                if idle.len() == 1 { "loads" } else { "load" },
+                window(u),
+                if cost > 0 { format!(" (~{cost} tokens)") } else { String::new() }
+            ),
+            evidence,
+            saving: s,
+            proposal: match kind {
+                "mcp" => "Turn off the servers this repo does not call (`rigswig ui --allow-writes` can, for project servers), or move them to the repos that do.".into(),
+                _ => "Archive the ones you no longer use, or move them to the scope of the repos that invoke them. `rigswig usage` lists what each session here did invoke.".into(),
+            },
+            items: ids,
+            file: None,
+        });
+    }
 }
 
 /// Whether the repo has `need`: a path, a folder (`x/`), or a file pattern (`*.tf`) at the top or one folder down.

@@ -537,3 +537,75 @@ fn the_guess_is_silent_in_json_but_the_pick_is_stable() {
     assert_eq!(rigswig_core::check::contract_errors(&h), Vec::<String>::new());
     assert_eq!(h.tool.id, "hf");
 }
+
+impl Sandbox {
+    fn run(&self, args: &[&str]) -> std::process::Output {
+        hermetic(Command::new(env!("CARGO_BIN_EXE_rigswig")))
+            .args(args)
+            .env("HOME", self.0.join("home"))
+            .env("USERPROFILE", self.0.join("home"))
+            .output()
+            .unwrap()
+    }
+    /// Where Claude Code keeps this sandbox repo's session logs.
+    fn logs(&self) -> String {
+        let real = std::fs::canonicalize(self.0.join("repo")).unwrap();
+        let name: String =
+            real.to_string_lossy().chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect();
+        format!("home/.claude/projects/{name}")
+    }
+}
+
+/// `rigswig usage` on the real file system: says what it reads before it reads, streams a log larger than the 4 MB
+/// a repo file may be, and prints no message text.
+#[test]
+fn usage_reads_large_logs_as_metadata_only() {
+    let s = Sandbox::new("usage");
+    let repo = std::fs::canonicalize(s.0.join("repo")).unwrap();
+    let repo = repo.to_str().unwrap();
+    let filler = format!(
+        r#"{{"type":"user","sessionId":"s1","timestamp":"2026-10-20T09:00:00Z","cwd":"{repo}","message":{{"role":"user","content":"CANARY-CLI {}"}}}}"#,
+        "x".repeat(1000)
+    );
+    let mut log = String::new();
+    while log.len() < 5 * 1024 * 1024 {
+        log.push_str(&filler);
+        log.push('\n');
+    }
+    log.push_str(&format!(
+        r#"{{"type":"assistant","sessionId":"s1","timestamp":"2026-10-20T09:00:01Z","cwd":"{repo}","message":{{"id":"m1","model":"model-a","content":[{{"type":"tool_use","id":"c1","name":"Skill","input":{{"skill":"deploy","args":"CANARY-CLI"}}}}],"usage":{{"input_tokens":1,"output_tokens":2}}}}}}"#
+    ));
+    s.write(&format!("{}/s1.jsonl", s.logs()), &log);
+
+    let out = s.run(&["usage", "--repo", repo, "--days", "all", "--json"]);
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(out.status.success(), "{err}");
+    assert!(err.contains("metadata only"), "{err}");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(!stdout.contains("CANARY"), "{stdout}");
+    let u: rigswig_core::usage::Usage = serde_json::from_str(&stdout).unwrap();
+    assert_eq!((u.files, u.files_unread, u.sessions), (1, 0, 1));
+    assert_eq!(u.find("skill", "deploy").map(|i| i.calls), Some(1), "the call after 5 MB of lines is counted");
+
+    let text = s.run(&["usage", "--repo", repo, "--days", "all"]);
+    assert!(!String::from_utf8_lossy(&text.stdout).contains("CANARY"));
+    let audit = s.run(&["audit", "--repo", repo, "--usage", "--days", "all", "--json"]);
+    assert!(audit.status.success());
+    assert!(!String::from_utf8_lossy(&audit.stdout).contains("CANARY"));
+}
+
+#[test]
+fn usage_flags_are_refused_where_they_do_not_belong() {
+    let s = Sandbox::new("usage-flags");
+    let repo = s.0.join("repo");
+    let repo = repo.to_str().unwrap();
+    assert_eq!(s.run(&["audit", "--repo", repo, "--days", "7"]).status.code(), Some(2), "--days without --usage");
+    assert_eq!(s.run(&["audit", "--usage", "--repos", repo]).status.code(), Some(2), "not in fleet mode");
+    assert_eq!(s.run(&["audit", "--usage", "--archive", "x.tar.gz"]).status.code(), Some(2), "not for an archive");
+    assert_eq!(s.run(&["usage", "--repo", repo, "--days", "0"]).status.code(), Some(2));
+    let none = s.run(&["usage", "--repo", repo]);
+    assert_eq!(none.status.code(), Some(2), "no logs folder is an error, not an empty report");
+    // Without --usage, the audit says nothing about session logs.
+    let plain = s.run(&["audit", "--repo", repo]);
+    assert!(!String::from_utf8_lossy(&plain.stderr).contains("session logs"));
+}

@@ -7,8 +7,9 @@ over a stdio subprocess the client launches and owns.
 
 There is deliberately nothing else on the wire: no network transport (a socket would make rigswig a listener, and
 the harnesses' own clients already launch stdio servers), no write tools (the page's write mode never becomes
-agent-invokable), and no GitHub tool (a tool call that downloads is a network request; use the CLI's `--archive`
-for an offline repo you downloaded yourself). The server answers nothing it does not know with `method not
+agent-invokable), no GitHub tool (a tool call that downloads is a network request; use the CLI's `--archive`
+for an offline repo you downloaded yourself), and no usage tool (session logs are read only by a run you start
+yourself: [usage](USAGE.md)). The server answers nothing it does not know with `method not
 found`, exits when stdin closes, and writes its logs to stderr, where a client may ignore them.
 
 ## Register it

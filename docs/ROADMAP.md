@@ -63,5 +63,6 @@ one host, the archive unpacked into memory, an empty home) or `--archive <file>`
 
 ## Not in scope
 
-Session monitoring and transcripts, writing or syncing configuration, testing MCP servers, any network call other than
+Session monitoring, reading session content (`usage` reads metadata only: [USAGE.md](USAGE.md)), writing or
+syncing configuration, testing MCP servers, any network call other than
 the opt-in `--github` download.

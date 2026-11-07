@@ -11,16 +11,27 @@ use rigswig_core::audit::{self, Audit, Fleet, Progress};
 
 use crate::{Remote, expand, home, load_remote, private_folders, real_path, this_os, with_harness};
 
-/// Audit one repo; `progress` hears every stage, from reading the harness to ranking.
-pub fn repo(path: &Path, tool: Option<&str>, progress: &mut dyn FnMut(Progress)) -> Result<(Audit, u8), String> {
+/// Audit one repo; `progress` hears every stage, from reading the harness to ranking. `usage` is `None` unless the
+/// run asked for session-log counts (`audit --usage`), and then holds the window's start (`None` for every log).
+pub fn repo(
+    path: &Path,
+    tool: Option<&str>,
+    usage: Option<Option<&str>>,
+    progress: &mut dyn FnMut(Progress),
+) -> Result<(Audit, u8), String> {
     with_harness(path, tool, |a, ctx, score| {
         progress(Progress { stage: "Reading the harness".into(), fraction: 0.0 });
         let (signals, note) = audit::user_signals(ctx);
         let h = a.resolve(ctx);
-        let mut out = audit::audit_with(ctx, &h, &audit::Options { signals }, &mut |p| {
+        let mut notes: Vec<String> = note.into_iter().collect();
+        let usage = usage.and_then(|since| {
+            progress(Progress { stage: "Reading session logs (metadata only)".into(), fraction: 0.05 });
+            a.usage(ctx, since).map_err(|e| notes.push(format!("usage: {e}"))).ok()
+        });
+        let mut out = audit::audit_with(ctx, &h, &audit::Options { signals, usage }, &mut |p| {
             progress(Progress { stage: p.stage, fraction: 0.1 + 0.9 * p.fraction })
         });
-        out.notes.extend(note);
+        out.notes.extend(notes);
         (out, score)
     })
 }
@@ -111,7 +122,7 @@ pub fn fleet(patterns: &[String], tool: Option<&str>, progress: &mut dyn FnMut(P
                 fraction: (i as f64 + x.fraction) / n as f64,
             })
         };
-        match repo(p, tool, &mut each) {
+        match repo(p, tool, None, &mut each) {
             // A repo is a git checkout or a folder with the harness's own files; the user config folder alone (which
             // every folder sees) does not make one.
             Ok((a, score)) if score > 50 || p.join(".git").exists() => audits.push(a),
@@ -318,7 +329,7 @@ fn repo_json(repo: &Path, tool: &str, progress: &mut dyn FnMut(Progress)) -> Res
 }
 
 fn repo_audit(repo: &Path, tool: &str, progress: &mut dyn FnMut(Progress)) -> Result<Audit, String> {
-    self::repo(repo, Some(tool), progress).map(|(a, _)| a)
+    self::repo(repo, Some(tool), None, progress).map(|(a, _)| a)
 }
 
 #[cfg(test)]

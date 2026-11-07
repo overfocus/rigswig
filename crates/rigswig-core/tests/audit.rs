@@ -129,7 +129,10 @@ fn the_users_signals_judge_plugins_the_table_does_not_know() {
     let row = a.user_scope.iter().find(|u| u.kind == "plugin").unwrap();
     assert_eq!(row.needed, None);
 
-    let opts = Options { signals: vec![Signal { plugin: vec!["deploy*".into()], needs: vec!["deploy.yaml".into()] }] };
+    let opts = Options {
+        signals: vec![Signal { plugin: vec!["deploy*".into()], needs: vec!["deploy.yaml".into()] }],
+        ..Options::default()
+    };
     assert_eq!(find(&run_with(&fs, &opts), "plugin-fit").len(), 1);
 
     // Read from ~/.rigswig/signals.json; a broken file is a note, not a failure.
@@ -297,6 +300,7 @@ fn fleet_mode_recommends_by_how_many_repos_need_each_item() {
         findings: Vec::new(),
         user_scope: rows,
         notes: Vec::new(),
+        usage: None,
     };
     let audits = vec![
         repo(

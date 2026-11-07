@@ -201,6 +201,15 @@ pub fn audit_text(a: &rigswig_core::audit::Audit) -> String {
         p(&a.repo),
         thousands(a.tokens)
     );
+    if let Some(u) = &a.usage {
+        let _ = writeln!(
+            o,
+            "  with usage from {} session{} in the logs{} (metadata only; `rigswig usage` for the counts)",
+            u.sessions,
+            if u.sessions == 1 { "" } else { "s" },
+            u.since.as_deref().map_or_else(String::new, |s| format!(" since {}", p(s)))
+        );
+    }
     if a.findings.is_empty() {
         let _ = writeln!(o, "\n  No findings.");
     }
@@ -297,5 +306,90 @@ pub fn fleet_text(f: &rigswig_core::audit::Fleet) -> String {
     for n in &f.notes {
         let _ = writeln!(o, "  note: {}", p(n));
     }
+    o
+}
+
+/// `rigswig usage` as text.
+pub fn usage_text(u: &rigswig_core::usage::Usage) -> String {
+    let mut o = String::new();
+    let p = |s: &str| printable(s);
+    let day = |s: &str| p(s.get(..10).unwrap_or(s));
+    let _ = writeln!(o, "rigswig usage: {} in {}", p(&u.tool), p(&u.repo));
+    let window = match (&u.since, &u.first, &u.last) {
+        (Some(s), _, Some(l)) => format!("since {}, last {}", day(s), day(l)),
+        (None, Some(f), Some(l)) => format!("{} to {}", day(f), day(l)),
+        (Some(s), _, None) => format!("since {}", day(s)),
+        _ => "every log there is".into(),
+    };
+    let _ = writeln!(
+        o,
+        "  {} session{} ({window}), from {} log file{}",
+        u.sessions,
+        if u.sessions == 1 { "" } else { "s" },
+        u.files,
+        if u.files == 1 { "" } else { "s" }
+    );
+    if u.sessions == 0 {
+        let _ = writeln!(o, "\n  No sessions in the window.");
+    } else {
+        let t = &u.tokens;
+        let _ = writeln!(
+            o,
+            "\n  Tokens   input {}  output {}  cache read {}  cache write {}",
+            thousands(t.input),
+            thousands(t.output),
+            thousands(t.cache_read),
+            thousands(t.cache_write)
+        );
+        if !u.models.is_empty() {
+            let mut models: Vec<_> = u.models.iter().collect();
+            models.sort_by(|a, b| b.1.cmp(a.1).then(a.0.cmp(b.0)));
+            let list: Vec<String> = models.iter().map(|(m, n)| format!("{} ({})", p(m), thousands(**n))).collect();
+            let _ = writeln!(o, "  Models   {} responses: {}", thousands(u.models.values().sum()), list.join(", "));
+        }
+        for (kind, title) in [("agent", "Agents"), ("skill", "Skills"), ("mcp", "MCP servers")] {
+            let rows: Vec<_> = u.invoked.iter().filter(|i| i.kind == kind).collect();
+            let _ = writeln!(o, "\n  {title} invoked");
+            if rows.is_empty() {
+                let _ = writeln!(o, "    none");
+            }
+            for i in rows {
+                let _ = writeln!(
+                    o,
+                    "    {:<40} {:>6} call{}  in {} session{}",
+                    p(&i.name),
+                    thousands(i.calls),
+                    if i.calls == 1 { " " } else { "s" },
+                    i.sessions,
+                    if i.sessions == 1 { "" } else { "s" }
+                );
+            }
+        }
+    }
+    if u.files_unread > 0 {
+        let _ = writeln!(
+            o,
+            "\n  {} log file{} could not be read, so {} not counted",
+            u.files_unread,
+            if u.files_unread == 1 { "" } else { "s" },
+            if u.files_unread == 1 { "it is" } else { "they are" }
+        );
+    }
+    if u.skipped_lines > 0 {
+        let _ = writeln!(
+            o,
+            "\n  {} line{} in a shape this does not read, skipped",
+            thousands(u.skipped_lines),
+            if u.skipped_lines == 1 { " was" } else { "s were" }
+        );
+    }
+    let _ = writeln!(o, "\n  Not counted:");
+    for n in &u.not_counted {
+        let _ = writeln!(o, "    - {}", p(n));
+    }
+    let _ = writeln!(
+        o,
+        "\n  `rigswig audit --usage` turns these counts into findings: what loads in every session and is never invoked."
+    );
     o
 }
