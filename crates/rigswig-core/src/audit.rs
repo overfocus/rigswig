@@ -585,6 +585,16 @@ fn instruction_files(ctx: &Ctx, h: &Harness, findings: &mut Vec<Finding>, notes:
             budget(d, findings);
         }
     }
+    if h.tool.id == "dsh" {
+        // dsh renders each instruction chain under a per-chain byte budget (`maxBytes`, 65,536 bytes per
+        // chain in the dsh-base default; docs/adapters/dsh.md, from deepseek-harness's agent-instructions
+        // README): broader files are dropped first, then the most specific file is truncated at render
+        // time. In multilingual text a byte figure and a chars/4 token estimate drift apart, so the finding
+        // names where the cut lands on the file's own bytes.
+        for d in docs.iter().filter(|d| d.item.detail.kind() == "instruction") {
+            chain_budget(d, findings);
+        }
+    }
     repeated(&docs, h, findings);
     for d in &docs {
         let kind = layer_kind(h, &d.item.origin.layer);
@@ -592,6 +602,78 @@ fn instruction_files(ctx: &Ctx, h: &Harness, findings: &mut Vec<Finding>, notes:
             dead_references(ctx, d, findings);
         }
     }
+}
+
+/// Where bytes cost more than characters: multilingual text (one CJK character is 3 bytes in UTF-8) makes a
+/// byte budget fill sooner than a chars/4 token estimate shows.
+fn divergence(chars: u64, bytes: u64) -> Option<String> {
+    let per_char = bytes as f64 / chars.max(1) as f64;
+    (per_char >= 1.2).then(|| {
+        format!(
+            "multilingual text at {per_char:.1} bytes a character: a byte budget fills about {per_char:.1}x sooner than this chars/4 estimate shows"
+        )
+    })
+}
+
+/// dsh's chain budget (`maxBytes`, 65,536 bytes per chain in the dsh-base default - docs/adapters/dsh.md, from
+/// deepseek-harness's agent-instructions README): broader files are dropped first, then the most specific file
+/// is truncated at render time. The audit reports where that cut lands on this file's actual bytes - the line,
+/// and the file's own instructions at the boundary - so the byte figure means something a person can see.
+fn chain_budget(d: &Doc, findings: &mut Vec<Finding>) {
+    const CHAIN_BYTES: u64 = 65_536;
+    const AROUND: usize = 60;
+    let lines = d.text.lines().count();
+    if lines <= CLAUDE_MD_LINES {
+        return;
+    }
+    let chars = d.text.chars().count() as u64;
+    let bytes = d.text.len() as u64;
+    if bytes <= CHAIN_BYTES {
+        return;
+    }
+    let cut = floor_char_boundary(&d.text, CHAIN_BYTES as usize);
+    let line = d.text[..cut].matches('\n').count() + 1;
+    let squeeze = |s: String| s.split_whitespace().collect::<Vec<_>>().join(" ");
+    let before: String = d.text[..cut].chars().rev().take(AROUND).collect();
+    let before: String = before.chars().rev().collect();
+    let after: String = d.text[cut..].chars().take(AROUND).collect();
+    let mut evidence = vec![format!(
+        "{lines} lines, {chars} characters, {bytes} bytes (~{} tokens; the estimate counts characters, the budget counts bytes)",
+        tokens(chars),
+    )];
+    if let Some(note) = divergence(chars, bytes) {
+        evidence.push(note);
+    }
+    evidence.push(
+        "the chain's maxBytes budget (65,536 bytes per chain in dsh-base) lands mid-file: everything from the cut never renders".to_string(),
+    );
+    evidence.push(format!(
+        "the cut lands on line {line}, at byte {CHAIN_BYTES}: \u{2026}{}\u{27e8}cut\u{27e9}{}\u{2026}",
+        squeeze(before),
+        squeeze(after),
+    ));
+    findings.push(Finding {
+        code: "instruction-budget".into(),
+        severity: Severity::High,
+        title: format!(
+            "{} is {lines} lines ({bytes} bytes); dsh's chain budget (maxBytes 65,536) cuts it at line {line}",
+            printable(&d.item.name),
+        ),
+        evidence,
+        saving: None,
+        proposal: "Split the rules per directory so every file renders whole inside the chain budget. rigswig never rewrites instruction files.".into(),
+        items: vec![d.item.id.clone()],
+        file: d.item.origin.file.clone(),
+    });
+}
+
+/// The last UTF-8 character boundary at or before `at`: a budget can cut inside a character, a quote may not.
+fn floor_char_boundary(text: &str, mut at: usize) -> usize {
+    at = at.min(text.len());
+    while at > 0 && !text.is_char_boundary(at) {
+        at -= 1;
+    }
+    at
 }
 
 /// Markdown sections (by `#` to `###` headings) with their sizes, largest first.
@@ -710,7 +792,11 @@ fn budget(d: &Doc, findings: &mut Vec<Finding>) {
         return;
     }
     let chars = d.text.chars().count() as u64;
-    let mut evidence = vec![format!("{lines} lines, {chars} characters (~{} tokens)", tokens(chars))];
+    let bytes = d.text.len() as u64;
+    let mut evidence = vec![format!("{lines} lines, {chars} characters, {bytes} bytes (~{} tokens)", tokens(chars))];
+    if let Some(note) = divergence(chars, bytes) {
+        evidence.push(note);
+    }
     for (title, size) in sections(&d.text).iter().take(5) {
         evidence.push(format!(
             "{:>4.1}%  {} (~{} tokens)",

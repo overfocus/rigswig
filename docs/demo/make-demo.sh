@@ -6,13 +6,14 @@
 # (the audit's fleet box takes ~/code/*). docs/demo/shoot.mjs takes the screenshots.
 set -euo pipefail
 root="${1:?usage: make-demo.sh <empty folder>}"
+# The dsh chain budget demo: HOME=<root>/home rigswig audit --repo <root>/home/code/acme-shop --tool dsh
 mkdir -p "$root"
 root="$(cd "$root" && pwd)"
 home="$root/home"
 repo="$home/code/acme-shop"
 market="$home/marketplaces/acme-tools"
 mkdir -p "$home/.claude/agents" "$home/.claude/skills" "$home/.claude/plugins" "$home/.codex" "$home/.agents/skills" \
-  "$repo/.git" "$repo/.claude/agents" "$repo/.claude/rules" "$repo/.claude/commands" "$market/.claude-plugin"
+  "$home/.dsh" "$repo/.git" "$repo/.claude/agents" "$repo/.claude/rules" "$repo/.claude/commands" "$market/.claude-plugin"
 
 w() { mkdir -p "$(dirname "$1")"; cat > "$1"; }
 
@@ -156,6 +157,35 @@ EOF
     done
   done
 } > "$repo/AGENTS.md"
+
+# The same file, as the dsh chain budget sees it: the team carries its rules in every language it works in, and
+# the file grows past dsh's per-chain maxBytes (65,536 bytes in dsh-base). With `HOME=<root>/home
+# rigswig audit --repo "$repo" --tool dsh` the instruction-budget finding names the cut: the line, and the file's
+# own text at the boundary, next to the chars/4 token estimate (CJK text costs ~3 bytes a character, so the two
+# drift apart here exactly as they do for a real bilingual team).
+{
+  echo "# Shared rules, carried in every language the team works in"
+  echo
+  echo "English first. Each language's copy of the rules says the same thing; the shop's handbook is not rewritten"
+  echo "per language, so every agent session in every tool loads the whole file."
+  echo
+  jap="各リポジトリのルールに従い、変更ごとにテストを実行し、差分をレビューに出してください。"
+  zhs="每个仓库规则优先：改动前先运行测试，提交前请审查差异,保持提交简短。"
+  kor="각 저장소의 규칙을 따르고, 변경할 때마다 테스트를 실행하며, 커밋 전에 차이를 검토하세요."
+  batch=1
+  while [ "$(wc -c < "$repo/AGENTS.md")" -lt 70000 ]; do
+    echo
+    echo "## 第${batch}節：共有ルール / 共同规则 / 공통 규칙 (batch ${batch})"
+    for n in 1 2; do
+      echo "- ${jap}"
+      echo "- ${zhs}"
+      echo "- ${kor}"
+    done
+    echo "- Batch ${batch}: the rules above apply to every area of the shop; run the affected suites before opening a"
+    echo "  pull request, and keep the changelog entry with the change itself."
+    batch=$((batch + 1))
+  done
+} >> "$repo/AGENTS.md"
 printf -- "---\nname: code-reviewer\ndescription: Reviews acme-shop pull requests against the checkout and payments checklists.\ntools: Read, Grep, Glob\n---\nReview.\n" > "$repo/.claude/agents/code-reviewer.md"
 printf -- "---\npaths:\n  - src/api/**\n---\nAPI handlers validate input with the shared schemas and return problem+json errors.\n" > "$repo/.claude/rules/api.md"
 printf -- "---\ndescription: Summarise yesterday's merged pull requests for the team channel.\n---\nSummarise.\n" > "$repo/.claude/commands/standup.md"

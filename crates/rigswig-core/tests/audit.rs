@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use rigswig_core::adapter::{Adapter, Ctx};
-use rigswig_core::adapters::ClaudeCode;
+use rigswig_core::adapters::{ClaudeCode, Dsh};
 use rigswig_core::audit::{self, Audit, Finding, Options, Recommendation, Severity, Signal};
 use rigswig_core::fs::MemFs;
 use rigswig_core::model::Os;
@@ -29,6 +29,18 @@ fn run_with(fs: &MemFs, opts: &Options) -> Audit {
 
 fn run(fs: &MemFs) -> Audit {
     run_with(fs, &Options::default())
+}
+
+/// `rigswig audit --tool dsh` on the same harness pick a dsh-only machine gets.
+fn run_dsh(fs: &MemFs) -> Audit {
+    let c = ctx(fs);
+    let h = Dsh.resolve(&c);
+    let a = audit::audit(&c, &h, &Options::default());
+    for f in &a.findings {
+        let all = format!("{} {} {}", f.title, f.evidence.join(" "), f.proposal).to_lowercase();
+        assert!(!all.contains("unused"), "findings never claim usage: {all}");
+    }
+    a
 }
 
 fn base() -> MemFs {
@@ -358,4 +370,74 @@ fn a_claude_md_that_mentions_agents_md_without_importing_it_is_a_finding() {
     // Imported at the top: nothing to report there.
     let fixed = fs.clone().file(format!("{REPO}/CLAUDE.md"), "@AGENTS.md\n");
     assert!(find(&run(&fixed), "agents-md-not-imported").iter().all(|x| !x.title.starts_with("CLAUDE.md")));
+}
+
+#[test]
+fn dsh_s_chain_budget_names_the_cut_line_and_quotes_the_text_at_it() {
+    // Multilingual rules: one CJK character costs 3 bytes, so the chain budget (a byte figure) is exceeded
+    // far before the chars/4 token estimate suggests it.
+    let para = "各リポジトリのルールに従い、変更ごとにテストを実行し、差分をレビューに出してください。";
+    let mut text = String::from("# Shared rules\n\nEnglish rules for the shop.\n\n");
+    let mut section = 1;
+    loop {
+        text.push_str(&format!("## 第{section}節：共有ルール\n{para}\n"));
+        section += 1;
+        if text.len() > 70_000 {
+            break;
+        }
+    }
+    let fs = MemFs::new()
+        .dir(format!("{REPO}/.claude"))
+        .file(format!("{HOME}/.dsh/AGENTS.md"), "# House rules\n\nSmall house rules.\n")
+        .file(format!("{REPO}/AGENTS.md"), &text);
+    let a = run_dsh(&fs);
+    let f = find(&a, "instruction-budget");
+    assert_eq!(f.len(), 1, "{:#?}", a.findings.iter().map(|f| &f.code).collect::<Vec<_>>());
+    let f = f[0];
+    assert_eq!(f.severity, Severity::High, "the cut tail never runs");
+    assert!(f.title.contains("65,536"), "the budget in the title: {}", f.title);
+    assert!(f.title.contains("line"), "the cut is a line, not a figure only: {}", f.title);
+    let all = f.evidence.join("\n");
+    assert!(all.contains(&format!("{} bytes", text.len())), "exact bytes next to the estimate: {all}");
+    assert!(all.contains("bytes a character"), "the divergence line: {all}");
+    assert!(all.contains("chars/4"), "the token estimate stays alongside: {all}");
+    assert!(all.contains("the cut lands on line"), "{all}");
+    assert!(all.contains("⟨cut⟩"), "the boundary marker: {all}");
+    // The quoted text is this file's own multilingual rules, not a generic sentence.
+    assert!(all.contains("共有"), "the excerpt quotes the actual instructions: {all}");
+    assert!(f.saving.is_none(), "instruction files are never rewritten");
+    assert!(
+        find(&a, "instruction-budget").len() == 1,
+        "the small chain files stay out: {:#?}",
+        a.findings.iter().map(|f| &f.code).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn a_dsh_chain_under_the_budget_is_left_alone_and_claude_s_estimate_gets_bytes_only() {
+    let small = MemFs::new()
+        .dir(format!("{REPO}/.claude"))
+        .file(format!("{HOME}/.dsh/AGENTS.md"), "# House rules\n\nSmall.\n")
+        .file(format!("{REPO}/AGENTS.md"), "# Shop rules\n\nBe kind.\n");
+    assert!(find(&run_dsh(&small), "instruction-budget").is_empty(), "{}", run_dsh(&small).findings.len());
+
+    // The same oversized, multilingual file under Claude Code: bytes and the divergence are shown, but
+    // Claude Code models no byte budget for the file, so there is no cut to name.
+    let para = "各リポジトリのルールに従い、変更ごとにテストを実行し、差分をレビューに出してください。";
+    let mut text = String::from("# Shared rules\n");
+    let mut section = 1;
+    loop {
+        text.push_str(&format!("## 第{section}節：共有ルール\n{para}\n"));
+        section += 1;
+        if text.len() > 40_000 {
+            break;
+        }
+    }
+    let a = run(&MemFs::new().dir(format!("{REPO}/.claude")).file(format!("{REPO}/CLAUDE.md"), &text));
+    let f = find(&a, "instruction-budget");
+    assert_eq!(f.len(), 1);
+    let all = f[0].evidence.join("\n");
+    assert!(all.contains("bytes"), "the byte figure is there: {all}");
+    assert!(all.contains("bytes a character"), "the divergence is visible: {all}");
+    assert!(!all.contains("the cut lands on line"), "no modeled byte budget, no named cut: {all}");
 }
