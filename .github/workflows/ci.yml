@@ -45,3 +45,4 @@ jobs:
         with:
           node-version: 24
       - run: node npm/test.mjs
+      - run: node homebrew/test.mjs

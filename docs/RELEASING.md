@@ -92,4 +92,7 @@ A published npm version cannot be overwritten. To take one out of circulation, d
 `npm deprecate <package>@<version> "reason"`. Unpublishing (within 72 hours of publishing) leaves that version
 number permanently unusable; avoid it.
 
-- **Homebrew**: a tap formula pointing at the release assets and their checksums.
+- **Homebrew**: a tap formula pointing at the release assets and their checksums. The tap is
+  [overfocus/homebrew-tap](https://github.com/overfocus/homebrew-tap) (`brew install overfocus/tap/rigswig`), and
+  `homebrew/formula.mjs` writes its `Formula/rigswig.rb` from a published release's `SHA256SUMS`; the first formula
+  lands with 0.2.0.
