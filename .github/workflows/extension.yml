@@ -39,7 +39,6 @@ jobs:
   openvsx:
     # The Open VSX token is the maintainer step still pending (docs/EDITOR-REGISTRIES.md step 2): this job
     # starts publishing the day the OVSX_TOKEN secret lands.
-    if: ${{ secrets.OVSX_TOKEN != '' }}
     runs-on: ubuntu-latest
     environment: openvsx
     steps:
@@ -47,8 +46,19 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+      - name: The OVSX_TOKEN gate
+        run: |
+          if [ -n "$OVSX_TOKEN" ]; then
+            echo "HAS_TOKEN=true" >> "$GITHUB_ENV"
+          else
+            echo "OVSX_TOKEN is not set yet; ending here (docs/EDITOR-REGISTRIES.md)"
+          fi
+        env:
+          OVSX_TOKEN: ${{ secrets.OVSX_TOKEN }}
       - run: node vscode/test.mjs
+        if: env.HAS_TOKEN == 'true'
       - name: Publish (the namespace exists after the first run)
+        if: env.HAS_TOKEN == 'true'
         run: |
           cd vscode
           npx -y ovsx create-namespace kftcda --pat "$OVSX_TOKEN" || true
