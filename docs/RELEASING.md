@@ -7,7 +7,7 @@ A release is a version tag. Pushing `vX.Y.Z` runs `.github/workflows/release.yml
 3. packages each with `LICENSE`, `NOTICE` and `README.md`, adds `SHA256SUMS`, and opens a **draft** GitHub release;
 4. publishes both crates to crates.io, once a maintainer approves the `crates-io` job;
 5. publishes the six npm packages, once a maintainer approves the `npm` job;
-6. packages the editor extension's VSIX and attaches it to the draft.
+6. packages the editor extension's VSIX and attaches it to the draft ([below](#the-editor-extension)).
 
 Nothing is public until a maintainer publishes the draft and approves the crates.io and npm jobs.
 
@@ -112,3 +112,36 @@ git push
 Homebrew 7 loads formulae only from taps it trusts, so `brew trust local/check` comes before the install; without it
 the audit refuses to load the formula (and its failure is easy to miss behind a pipe). The tap's own CI
 (`brew test-bot`) runs on the push. Then `brew install overfocus/tap/rigswig` should give the new version.
+
+## The editor extension
+
+`vscode/` versions on its own: its `package.json` version, not the tag. A release attaches its VSIX, and
+publishing the release runs `.github/workflows/extension.yml`, which publishes the manifest's version to the
+Marketplace and Open VSX (each behind its own approval gate) and reports nothing to do when that version is already
+there. So bump `vscode/package.json`'s version whenever the extension changes, or the publish skips it.
+
+To check a build before it ships:
+
+```sh
+node vscode/test.mjs
+cd vscode && npx -y @vscode/vsce ls --no-dependencies       # the files the VSIX will carry
+npx -y @vscode/vsce package --no-dependencies               # rigswig-<version>.vsix, to install by hand
+```
+
+### Its icons
+
+Two icons, for two places:
+
+- **The Marketplace and Open VSX icon** (the extensions list, the extension's page): `vscode/media/icon.png`, named
+  by `"icon"` in `vscode/package.json`. It must be a PNG (the Marketplace refuses SVG), square, at least 128x128;
+  256x256 keeps it sharp on high-density screens. Keep the art inside a margin: the lists draw it small and round
+  the corners. The page behind it is `galleryBanner.color` in the same file.
+- **The activity bar icon** (the rigswig view): `vscode/media/activity.svg`, also on the page panel's tab. A 24x24
+  SVG drawn in one colour: the editor masks it and paints it in the theme's colour, so fills and colours are
+  ignored and only the shape shows. Strokes of about 1.5px read best.
+
+To change either: replace the file, keeping its name (or change the path in `package.json`), run
+`node vscode/test.mjs` (it checks that both exist, that the icon is a PNG of at least 128x128 and that the VSIX
+ships them), bump the extension's version, and package it to look at the result: `code --install-extension
+rigswig-<version>.vsix` shows the new icon in the extensions list. A registry shows the new icon only with a new
+version, since a published version cannot change.

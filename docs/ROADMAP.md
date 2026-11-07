@@ -58,8 +58,9 @@ logs opt-in per run, metadata only, and `not-invoked` names what loads but no se
 harnesses refuse for now, and the page and the MCP server stay out of it.
 
 The extension (done: [vscode/](../vscode/)): the status bar carries the harness, the token bill and the audit's
-findings with the tokens they could save, the page panel has a refresh/open toolbar, and everything stays read-only
-— the findings spawn never passes `--usage`.
+findings with the tokens they could save; a view lists each finding (with its fix and files) and what loads by kind;
+findings land in the Problems panel; it re-reads when a harness file changes; and everything stays read-only — the
+findings spawn never passes `--usage`, and an untrusted workspace cannot choose the binary.
 
 ## Later
 
