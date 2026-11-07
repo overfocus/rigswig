@@ -54,7 +54,9 @@ Two more limits:
   or not JSON, are skipped and counted.
 - **Lines without a timestamp.** Claude Code repeats some responses without their `timestamp`. Such a line
   follows its file: the session counts when the file's own timestamps put it in the window (or the run asked for
-  every log), and its calls and tokens count with it; outside the window it is skipped and counted.
+  every log), and its calls and tokens count with it. When the file's timestamps are all before the window, the
+  line is dropped like any line there; when no line of the file has a timestamp, nothing places it in the window,
+  so it is skipped and counted.
 - **No content in errors.** A file that cannot be read is counted. Neither the file nor any of its text is printed.
 
 ## What is not counted

@@ -378,7 +378,7 @@ pub fn usage_text(u: &rigswig_core::usage::Usage) -> String {
     if u.skipped_lines > 0 {
         let _ = writeln!(
             o,
-            "\n  {} line{} in a shape this does not read, skipped",
+            "\n  {} line{} skipped: not in a shape this reads, or with no timestamp to place in the window",
             thousands(u.skipped_lines),
             if u.skipped_lines == 1 { " was" } else { "s were" }
         );

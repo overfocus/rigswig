@@ -9,7 +9,8 @@
 //! Two things the files themselves settle, because the folder name and the timestamp can both be missing: the
 //! `cwd` lines of a file say which repo it is (sibling repos share the folder-name prefix), and a line without
 //! its `timestamp` — Claude Code repeats some responses that way — follows its file, counting its session and
-//! its figures inside the window, landing in the skipped count outside it.
+//! its figures inside the window, dropped before it, and landing in the skipped count only when nothing in its
+//! file has a timestamp to place it.
 
 use std::fmt;
 use std::path::{Path, PathBuf};
@@ -230,10 +231,14 @@ pub(crate) fn usage(ctx: &Ctx, since: Option<&str>) -> Result<Usage, String> {
             if !this_repo {
                 continue;
             }
-            let in_window =
-                since.is_none_or(|s| lines.iter().any(|l| l.timestamp.as_deref().is_some_and(|time| time >= s)));
+            let window = match since {
+                None => Window::In,
+                Some(s) if lines.iter().any(|l| l.timestamp.as_deref().is_some_and(|time| time >= s)) => Window::In,
+                Some(_) if lines.iter().any(|l| l.timestamp.is_some()) => Window::Before,
+                Some(_) => Window::Unplaceable,
+            };
             for line in lines {
-                read_line(ctx, since, &mut t, line, in_window);
+                read_line(ctx, since, &mut t, line, window);
             }
         }
     }
@@ -241,27 +246,41 @@ pub(crate) fn usage(ctx: &Ctx, since: Option<&str>) -> Result<Usage, String> {
     Ok(t.finish(super::ID, &repo, since, not_counted()))
 }
 
-fn read_line(ctx: &Ctx, since: Option<&str>, t: &mut Tally, line: Line, in_window: bool) {
+/// Where a file's own timestamps put it against the window: that is where its untimed lines go.
+#[derive(Clone, Copy)]
+enum Window {
+    /// A timestamped line is in the window, or the run asked for every log there is.
+    In,
+    /// Every timestamped line is before the window: its untimed lines are placed, outside it.
+    Before,
+    /// No line has a timestamp, and the run asked for a window: nothing places the file.
+    Unplaceable,
+}
+
+fn read_line(ctx: &Ctx, since: Option<&str>, t: &mut Tally, line: Line, window: Window) {
     let Some(session) = line.session_id.clone() else { return };
     let session = session.as_str();
+    // A line with no `cwd` follows its file, which the caller has settled; a line whose `cwd` is outside the
+    // repo is another folder's, with or without a timestamp.
+    if line.cwd.as_deref().is_some_and(|c| !within(c, &ctx.repo)) {
+        return;
+    }
     let Some(time) = line.timestamp.as_deref() else {
         // A line with no `timestamp` — Claude Code repeats some responses without one. It follows its
         // file: inside the window the session counts, and its calls and tokens with it (an id a
-        // timestamped line already counted counts once either way); outside it, the line cannot be
-        // placed, so it is counted and never kept.
-        if in_window {
-            t.saw_untimed(session);
-            figures(t, session, line);
-        } else {
-            t.skipped_lines += 1;
+        // timestamped line already counted counts once either way); before the window it is dropped like
+        // any line there; in a file nothing places, it is counted as skipped and never kept.
+        match window {
+            Window::In => {
+                t.saw_untimed(session);
+                figures(t, session, line);
+            }
+            Window::Before => {}
+            Window::Unplaceable => t.skipped_lines += 1,
         }
         return;
     };
     if since.is_some_and(|s| time < s) {
-        return;
-    }
-    // A line with no `cwd` follows its file, which the caller has settled.
-    if line.cwd.as_deref().is_some_and(|c| !within(c, &ctx.repo)) {
         return;
     }
     t.saw(session, time);

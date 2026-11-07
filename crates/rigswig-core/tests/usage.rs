@@ -257,7 +257,48 @@ fn an_untimed_line_follows_its_file() {
 
     let later = usage(&mixed, Some("2026-11-01"));
     assert_eq!(later.sessions, 0);
-    assert_eq!(later.skipped_lines, 2, "both files' untimed lines are counted as unplaceable");
+    assert_eq!(
+        later.skipped_lines, 1,
+        "s7's timestamps put its untimed line before the window, which is no fault; only s6's cannot be placed"
+    );
+}
+
+/// A session that moved folders: its file counts because a `cwd` line is inside the repo, a line with no `cwd`
+/// follows the file, and a line whose `cwd` is outside is excluded on its own — with or without a timestamp.
+#[test]
+fn a_mixed_cwd_file_counts_only_its_lines_inside() {
+    let elsewhere = |l: String| l.replace(&format!(r#""cwd":"{REPO}""#), r#""cwd":"/home/dev/elsewhere""#);
+    let fs = MemFs::new().dir(format!("{REPO}/.claude")).file(
+        format!("{LOGS}/s5.jsonl"),
+        log(&[
+            assistant("s5", "2026-10-20T09:00:00Z", "msg_50", &tool("call_50", "Skill", r#"{"skill":"deploy"}"#)),
+            elsewhere(assistant(
+                "s5",
+                "2026-10-20T09:01:00Z",
+                "msg_51",
+                &tool("call_51", "Skill", r#"{"skill":"outside-timed"}"#),
+            )),
+            elsewhere(format!(
+                r#"{{"type":"assistant","sessionId":"s5","cwd":"{REPO}","message":{{"id":"msg_52","content":[{{"type":"tool_use","id":"call_52","name":"Skill","input":{{"skill":"outside-untimed"}}}}]}}}}"#
+            )),
+            assistant(
+                "s5",
+                "2026-10-20T09:02:00Z",
+                "msg_53",
+                &tool("call_53", "Agent", r#"{"subagent_type":"reviewer"}"#),
+            )
+            .replace(&format!(r#","cwd":"{REPO}""#), ""),
+        ]),
+    );
+    for since in [None, Some("2026-10-01")] {
+        let u = usage(&fs, since);
+        assert_eq!(u.sessions, 1, "{since:?}");
+        assert_eq!(u.find("skill", "deploy").map(|i| i.calls), Some(1), "the line inside counts ({since:?})");
+        assert_eq!(u.find("agent", "reviewer").map(|i| i.calls), Some(1), "the cwd-less line follows ({since:?})");
+        assert!(u.find("skill", "outside-timed").is_none(), "a timed line outside is excluded ({since:?})");
+        assert!(u.find("skill", "outside-untimed").is_none(), "an untimed line outside is excluded ({since:?})");
+        assert_eq!(u.skipped_lines, 0, "{since:?}");
+    }
 }
 
 /// The guarantee: nothing of a message, a tool's input or result, or an attachment's content comes out — not in
