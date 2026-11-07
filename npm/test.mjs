@@ -194,7 +194,8 @@ test('npm and the editor extension carry one keyword list, with every harness an
   for (const k of build.crateMeta().keywords) assert.ok(kw.includes(k), `npm keeps crates.io's ${k}`);
   // One keyword per harness rigswig reads (docs/adapters/), so a new adapter cannot ship unsearchable.
   const harness = { 'claude-code': 'claude-code', codex: 'codex', copilot: 'copilot', cursor: 'cursor', 'deepseek-cli': 'deepseek',
-    devin: 'devin', dsh: 'deepseek', gemini: 'gemini-cli', hermes: 'hermes-agent', hf: 'huggingface', ollama: 'ollama' };
+    devin: 'devin', dsh: 'deepseek', gemini: 'gemini-cli', hermes: 'hermes-agent', hf: 'huggingface', ollama: 'ollama',
+    pi: 'pi-coding-agent' };
   for (const doc of readdirSync(join(ROOT, 'docs', 'adapters')).filter((f) => f.endsWith('.md'))) {
     const id = doc.replace(/\.md$/, '');
     assert.ok(harness[id], `docs/adapters/${doc}: add its harness to npm/keywords.json and to this map`);

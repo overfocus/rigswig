@@ -27,5 +27,6 @@
   "deepseek",
   "hermes-agent",
   "huggingface",
-  "ollama"
+  "ollama",
+  "pi-coding-agent"
 ]
