@@ -41,7 +41,8 @@ function parseStatus(text) {
 
 /**
  * A `rigswig audit --json` read, checked for the shape the findings read needs. The audit JSON is a parse
- * contract: `tool.id` and a `findings` list live in every version; a finding carries an optional `saving`.
+ * contract: `tool` is the harness id as a plain STRING (unlike `status --json`, whose `tool` is an object with
+ * an `id`), `findings` is a list, and a finding carries `severity` and an optional `saving.tokens`.
  *
  * @returns `{ tool, findings, high, medium, low, saveable }`, where `saveable` sums every saving's tokens.
  */

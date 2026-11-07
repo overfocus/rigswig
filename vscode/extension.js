@@ -63,17 +63,26 @@ function activate(context) {
     item.command = 'rigswig.openPage';
     context.subscriptions.push(item);
 
+    // Every trigger re-reads the bar; only a refresh or a folder change also drops the cached findings, so
+    // moving between files never re-runs the audit. A drop asked for survives a later editor move inside the
+    // same debounce.
     let timer = null;
-    const refresh = () => {
+    let drop = false;
+    const schedule = (dropFindings) => {
+        drop ||= dropFindings;
         clearTimeout(timer);
         timer = setTimeout(() => {
-            findings = { repo: null, value: null, error: null };
+            if (drop) {
+                findings = { repo: null, value: null, error: null };
+                drop = false;
+            }
             read(item);
         }, 200);
     };
+    const refresh = () => schedule(true);
     context.subscriptions.push(vscode.commands.registerCommand('rigswig.refresh', refresh));
     context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(refresh));
-    context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(refresh));
+    context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(() => schedule(false)));
 
     context.subscriptions.push(vscode.commands.registerCommand('rigswig.openPage', () => openPage(item)));
     context.subscriptions.push({ dispose: stopPage });
@@ -112,7 +121,7 @@ async function read(item) {
         state = { repo, parsed };
         if (findings.repo !== repo) {
             findings = { repo, value: null, error: null };
-            void readAudit(item, repo);
+            void readAudit(item, findings);
         }
         render(item);
     } catch (e) {
@@ -121,15 +130,20 @@ async function read(item) {
     }
 }
 
-/** The findings half of the read, away from the status bar's fast path. */
-async function readAudit(item, repo) {
+/**
+ * The findings half of the read, away from the status bar's fast path. `pending` is the cache entry this run
+ * fills: a result lands only while that exact entry is still the cache, so an audit a refresh superseded — even
+ * one for the same repo — can never overwrite a newer one, whichever finishes last.
+ */
+async function readAudit(item, pending) {
+    const { repo } = pending;
     try {
         const value = parseAudit(await run(bin(), auditArgs(repo), repo));
-        if (findings.repo === repo) {
+        if (findings === pending) {
             findings = { repo, value, error: null };
         }
     } catch (e) {
-        if (findings.repo === repo) {
+        if (findings === pending) {
             findings = { repo, value: null, error: e.message };
         }
     }
@@ -176,7 +190,9 @@ function render(item) {
     tip.appendMarkdown(
         `\n\nClick for the read-only page. **rigswig: Refresh** re-reads; **rigswig: Open the page** reopens this.`,
     );
-    tip.isTrusted = true;
+    // Not trusted: the tooltip links to nothing, and it carries the CLI's stderr and folder names, which are
+    // data — no command link in them may run.
+    tip.isTrusted = false;
     item.tooltip = tip;
     item.text = parts.join(' · ');
 }

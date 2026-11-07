@@ -72,7 +72,18 @@ assert.equal(aud.medium, 0);
 assert.equal(aud.low, 1);
 assert.equal(aud.saveable, 700, 'a finding without a saving does not count');
 assert.throws(() => parseAudit('not json at all'), TypeError);
-assert.throws(() => parseAudit('{"tool":{"id":"x"}}'), TypeError, 'no findings list');
+// Each check fails on its own: the status JSON's `tool` object is not an audit's, and a tool without a findings
+// list is not either. The message pins which check fired.
+assert.throws(() => parseAudit('{"tool":{"id":"x"},"findings":[]}'), /no tool/, 'a status-shaped tool is refused');
+assert.throws(() => parseAudit('{"tool":"claude-code"}'), /no findings list/, 'a missing findings list is refused');
+// The audit model's own names: a misnamed `saving.tokens` would sum to 0 against a repo with no savings, so pin
+// it on a fixture shaped like the Rust model's serialized `Saving` (`tokens`, `without`).
+assert.equal(
+    parseAudit(
+        JSON.stringify({ tool: 'claude-code', findings: [{ severity: 'medium', saving: { tokens: 42, without: ['x'] } }] }),
+    ).saveable,
+    42,
+);
 
 // The full non-editor flow: spawn the page, read its URL line, and fetch the page it serves.
 if (live) {

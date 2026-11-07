@@ -29,9 +29,9 @@ rigswig ui                 # all of it as a local page, with compare and write m
 `status` names the harness it detected and prints the bill:
 
 ```text
-claude-code in rigswig
+claude-code in my-app
   Context   ~2,915 tokens before you type (2,332..3,886, estimated from 11,657 characters)
-            + not measured: tool listings of 1 MCP server (pancake)
+            + not measured: tool listings of 1 MCP server (docs-search)
 ```
 
 `audit` turns that into a to-do list — user-scope agents and skills nothing here references, plugins on everywhere
