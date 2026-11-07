@@ -592,6 +592,15 @@ fn usage_reads_large_logs_as_metadata_only() {
     let audit = s.run(&["audit", "--repo", repo, "--usage", "--days", "all", "--json"]);
     assert!(audit.status.success());
     assert!(!String::from_utf8_lossy(&audit.stdout).contains("CANARY"));
+    // The audit's human output is held to the same bar as its JSON.
+    let audit_text = s.run(&["audit", "--repo", repo, "--usage", "--days", "all"]);
+    assert!(audit_text.status.success());
+    assert!(!String::from_utf8_lossy(&audit_text.stdout).contains("CANARY"));
+    // A `--days` older than the calendar begins is every log there is, not an overflow.
+    let huge = s.run(&["usage", "--repo", repo, "--days", "9223372036854775808", "--json"]);
+    assert!(huge.status.success(), "{}", String::from_utf8_lossy(&huge.stderr));
+    let hu: rigswig_core::usage::Usage = serde_json::from_str(&String::from_utf8_lossy(&huge.stdout)).unwrap();
+    assert_eq!(hu.sessions, 1);
 }
 
 #[test]

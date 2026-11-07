@@ -602,11 +602,18 @@ fn parse_days(v: &str) -> Result<Option<u64>, String> {
     v.parse().ok().filter(|d| *d > 0).map(Some).ok_or("--days needs a number of days, or all".into())
 }
 
-/// The window's start for the last `days` days, as an ISO 8601 date (UTC); `None` for every log there is.
+/// The window's start for the last `days` days, as an ISO 8601 date (UTC); `None` for every log there is. A
+/// `--days` older than the calendar begins is every log there is too, not an overflow.
 fn since(days: Option<u64>) -> Option<String> {
     let days = days?;
     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
-    let (y, m, d) = civil_from_days((now / 86_400) as i64 - days as i64);
+    // `--days` is any u64; a window it puts before the calendar begins is every log there is.
+    let start = ((now / 86_400) as i64).checked_sub(i64::try_from(days).unwrap_or(i64::MAX))?;
+    // 719_468 days before 1970-01-01 is the year 0 the calendar function starts at.
+    if start < -719_468 {
+        return None;
+    }
+    let (y, m, d) = civil_from_days(start);
     Some(format!("{y:04}-{m:02}-{d:02}"))
 }
 
@@ -990,5 +997,29 @@ fn main() -> ExitCode {
         Some("audit") => audit(&args[1..]),
         Some("usage") => usage_cmd(&args[1..]),
         Some(other) => fail(&format!("unknown or unimplemented command: {other}")),
+    }
+}
+
+#[cfg(test)]
+mod days {
+    use super::*;
+
+    #[test]
+    fn civil_from_days_matches_known_dates() {
+        assert_eq!(civil_from_days(0), (1970, 1, 1));
+        assert_eq!(civil_from_days(-1), (1969, 12, 31));
+        assert_eq!(civil_from_days(19_000), (2022, 1, 8));
+        assert_eq!(civil_from_days(100_000), (2243, 10, 17));
+        assert_eq!(civil_from_days(-719_162), (1, 1, 1));
+    }
+
+    /// A huge `--days` is every log there is — `since` must answer `None`, not overflow.
+    #[test]
+    fn a_window_older_than_the_calendar_is_none() {
+        assert_eq!(since(Some(u64::MAX)), None);
+        assert_eq!(since(Some(9_223_372_036_854_775_808)), None);
+        assert_eq!(since(Some(1_000_000)), None);
+        assert_eq!(since(Some(30)).map(|s| s.len()), Some(10), "an ordinary window still names a date");
+        assert_eq!(since(None), None);
     }
 }

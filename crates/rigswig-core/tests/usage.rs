@@ -127,13 +127,19 @@ fn logs() -> MemFs {
         )
         .file(
             "/home/dev/.claude/projects/-home-dev-work-shop-admin/s4.jsonl",
-            log(&[assistant(
-                "s4",
-                "2026-10-22T10:00:00Z",
-                "msg_40",
-                &tool("call_40", "Skill", r#"{"skill":"admin"}"#),
-            )
-            .replace(&format!(r#""cwd":"{REPO}""#), r#""cwd":"/home/dev/work/shop-admin""#)]),
+            log(&[
+                assistant("s4", "2026-10-22T10:00:00Z", "msg_40", &tool("call_40", "Skill", r#"{"skill":"admin"}"#))
+                    .replace(&format!(r#""cwd":"{REPO}""#), r#""cwd":"/home/dev/work/shop-admin""#),
+                // The sibling's own logs carry lines with no `cwd`, as real ones do: they follow the file,
+                // never this repo.
+                assistant(
+                    "s4",
+                    "2026-10-22T10:00:01Z",
+                    "msg_41",
+                    &tool("call_41", "Agent", r#"{"subagent_type":"sibling-agent"}"#),
+                )
+                .replace(&format!(r#","cwd":"{REPO}""#), ""),
+            ]),
         )
 }
 
@@ -162,6 +168,11 @@ fn counts_sessions_tokens_models_and_what_was_invoked() {
     assert_eq!(calls("skill", "release-notes"), Some((0, 1)), "listed as invoked: the session counts, no call");
     assert_eq!(calls("skill", "old"), None, "before the window");
     assert_eq!(calls("skill", "admin"), None, "another repo whose folder name starts the same");
+    assert_eq!(
+        calls("agent", "sibling-agent"),
+        None,
+        "another repo's call with no cwd line: it follows its file, not this repo"
+    );
     assert!(u.invoked.iter().all(|i| i.name != "Bash"), "built-in tools are not counted");
     assert_eq!(u.first.as_deref(), Some("2026-10-20T09:00:00Z"));
     assert!(!u.not_counted.is_empty());
@@ -169,6 +180,84 @@ fn counts_sessions_tokens_models_and_what_was_invoked() {
     let all = usage(&logs(), None);
     assert_eq!(all.sessions, 3);
     assert!(all.find("skill", "old").is_some());
+}
+
+/// A line with no `cwd` follows its file: a sibling's file is another repo's whole, and the repo's own files
+/// count theirs.
+#[test]
+fn a_cwdless_line_follows_its_file() {
+    // A sibling whose only line carries no `cwd` would otherwise count as this repo's session.
+    let sibling_only = MemFs::new().dir(format!("{REPO}/.claude")).file(
+        "/home/dev/.claude/projects/-home-dev-work-shop-admin/s9.jsonl",
+        log(&[assistant(
+            "s9",
+            "2026-11-01T10:00:00Z",
+            "msg_90",
+            &tool("call_90", "Agent", r#"{"subagent_type":"remote"}"#),
+        )
+        .replace(&format!(r#","cwd":"{REPO}""#), "")]),
+    );
+    let u = usage(&sibling_only, None);
+    assert_eq!(u.sessions, 0, "the sibling folder is not the repo's, however its lines are built");
+    assert!(u.find("agent", "remote").is_none());
+    assert_eq!(u.files, 1, "the file was opened, its lines are just not counted");
+
+    // In the repo's own folder a line with no `cwd` follows a file that runs in the repo.
+    let own = MemFs::new().dir(format!("{REPO}/.claude")).file(
+        format!("{LOGS}/s8.jsonl"),
+        log(&[
+            assistant("s8", "2026-10-20T09:00:00Z", "msg_80", &tool("call_80", "Skill", r#"{"skill":"deploy"}"#)),
+            assistant(
+                "s8",
+                "2026-10-20T09:00:01Z",
+                "msg_81",
+                &tool("call_81", "Agent", r#"{"subagent_type":"reviewer"}"#),
+            )
+            .replace(&format!(r#","cwd":"{REPO}""#), ""),
+        ]),
+    );
+    let u = usage(&own, None);
+    assert_eq!(u.sessions, 1);
+    assert_eq!(u.find("agent", "reviewer").map(|i| (i.calls, i.sessions)), Some((1, 1)));
+}
+
+/// A line with no `timestamp` follows its file: inside the window its session and its figures count; a file
+/// with no timestamps to place it loses nothing when the run asked for every log, and its lines count as
+/// skipped under a window.
+#[test]
+fn an_untimed_line_follows_its_file() {
+    let mixed = MemFs::new()
+        .dir(format!("{REPO}/.claude"))
+        .file(
+            format!("{LOGS}/s7.jsonl"),
+            log(&[
+                assistant("s7", "2026-10-20T09:00:00Z", "msg_70", &tool("call_70", "Skill", r#"{"skill":"deploy"}"#)),
+                format!(
+                    r#"{{"type":"assistant","sessionId":"s7","cwd":"{REPO}","message":{{"id":"msg_71","content":[{{"type":"tool_use","id":"call_71","name":"Agent","input":{{"subagent_type":"reviewer"}}}}]}}}}"#
+                ),
+            ]),
+        )
+        .file(
+            format!("{LOGS}/s6.jsonl"),
+            log(&[format!(
+                r#"{{"type":"assistant","sessionId":"s6","cwd":"{REPO}","message":{{"id":"msg_60","content":[{{"type":"tool_use","id":"call_60","name":"Skill","input":{{"skill":"lint"}}}}]}}}}"#
+            )]),
+        );
+    let u = usage(&mixed, None);
+    assert_eq!(u.sessions, 2, "both sessions, the all-untimed one included");
+    assert_eq!(u.first.as_deref(), Some("2026-10-20T09:00:00Z"), "untimed lines do not move the window");
+    assert_eq!(u.find("agent", "reviewer").map(|i| i.calls), Some(1), "the untimed line's call counts with its file");
+    assert_eq!(u.find("skill", "lint").map(|i| i.calls), Some(1), "every log there is includes the all-untimed file");
+    assert_eq!(u.skipped_lines, 0);
+
+    let w = usage(&mixed, Some("2026-10-01"));
+    assert_eq!(w.sessions, 1, "s7 is in the window; s6 has no timestamp to place it with");
+    assert!(w.find("skill", "lint").is_none(), "figures outside the window's reckoning are not counted");
+    assert_eq!(w.skipped_lines, 1, "the line s6 cannot place is counted, not kept");
+
+    let later = usage(&mixed, Some("2026-11-01"));
+    assert_eq!(later.sessions, 0);
+    assert_eq!(later.skipped_lines, 2, "both files' untimed lines are counted as unplaceable");
 }
 
 /// The guarantee: nothing of a message, a tool's input or result, or an attachment's content comes out — not in

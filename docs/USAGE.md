@@ -23,8 +23,14 @@ the page has no switch that turns it on.
 Claude Code writes one JSON Lines file per session under `~/.claude/projects/<project folder>/` (or under
 `$CLAUDE_CONFIG_DIR`), plus one file per subagent in `<session>/subagents/`. This is the same file a hook receives as
 `transcript_path` ([hooks](https://code.claude.com/docs/en/hooks.md)). rigswig opens the files in the repo's project
-folder and in the folders of subfolders inside the repo. It counts a line only when its working folder (`cwd`) is
-the repo or a folder inside it.
+folder and in the folders whose name starts with it (a subfolder's sessions, and a sibling repo whose name extends
+the repo's own). The `cwd` lines a file carries settle which repo it is: a file whose `cwd` lines all sit outside
+is another repo's whole file, even where some of its lines carry no `cwd`, and a file with no `cwd` at all counts
+only in the repo's own projects folder.
+
+Two naming corners in the MCP tool names (`mcp__<server>__<tool>`): a server whose own name contains `__` splits
+at the first `__`, and a server whose name ends with `_<another configured server's name>` would be credited to
+that other server. Both err towards "invoked", never towards calling something idle.
 
 From each line, the parser reads these fields and no others:
 
@@ -46,6 +52,9 @@ Two more limits:
 
 - **Size.** Logs are streamed, so memory holds one line at a time. Lines over 16 MB, and lines that are not UTF-8
   or not JSON, are skipped and counted.
+- **Lines without a timestamp.** Claude Code repeats some responses without their `timestamp`. Such a line
+  follows its file: the session counts when the file's own timestamps put it in the window (or the run asked for
+  every log), and its calls and tokens count with it; outside the window it is skipped and counted.
 - **No content in errors.** A file that cannot be read is counted. Neither the file nor any of its text is printed.
 
 ## What is not counted

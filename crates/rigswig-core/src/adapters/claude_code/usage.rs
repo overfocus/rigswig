@@ -5,6 +5,11 @@
 //! `<session>/subagents/` with its parent's `sessionId`. Claude Code deletes them after `cleanupPeriodDays`, 30 by
 //! default (<https://code.claude.com/docs/en/settings.md>). The line format itself is not documented: the shapes
 //! below are inferred from the files Claude Code writes, and a line in any other shape is skipped and counted.
+//!
+//! Two things the files themselves settle, because the folder name and the timestamp can both be missing: the
+//! `cwd` lines of a file say which repo it is (sibling repos share the folder-name prefix), and a line without
+//! its `timestamp` — Claude Code repeats some responses that way — follows its file, counting its session and
+//! its figures inside the window, landing in the skipped count outside it.
 
 use std::fmt;
 use std::path::{Path, PathBuf};
@@ -143,12 +148,16 @@ pub(crate) fn not_counted() -> Vec<String> {
     ]
 }
 
-/// The project folders Claude Code would have written for sessions in `repo` or a folder inside it: every character
-/// that is not a letter or a digit becomes `-`, so a folder inside the repo shares the repo's name as a prefix. A
-/// sibling with a longer name shares it too; the `cwd` of each line settles it.
+/// Claude Code's project-folder name for a path: every character that is not a letter or a digit becomes `-`.
+fn project_folder_name(path: &Path) -> String {
+    path.to_string_lossy().chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect()
+}
+
+/// The project folders Claude Code would have written for sessions in `repo` or a folder inside it, so a folder
+/// inside the repo shares the repo's name as a prefix. A sibling with a longer name shares it too; the `cwd`
+/// lines each file carries settle it.
 fn project_folders(ctx: &Ctx, projects: &Path) -> Vec<PathBuf> {
-    let base: String =
-        ctx.repo.to_string_lossy().chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect();
+    let base = project_folder_name(&ctx.repo);
     let Ok(entries) = ctx.fs.read_dir(projects) else { return Vec::new() };
     entries
         .into_iter()
@@ -189,6 +198,7 @@ pub(crate) fn usage(ctx: &Ctx, since: Option<&str>) -> Result<Usage, String> {
     if !ctx.fs.exists(&projects) {
         return Err(format!("no Claude Code session logs: {} does not exist", projects.display()));
     }
+    let own = project_folder_name(&ctx.repo);
     let mut t = Tally::default();
     for dir in project_folders(ctx, &projects) {
         for file in logs(ctx, &dir) {
@@ -204,8 +214,26 @@ pub(crate) fn usage(ctx: &Ctx, since: Option<&str>) -> Result<Usage, String> {
             }
             t.files += 1;
             t.skipped_lines += skipped;
+            // What the file settles for its own lines. Its `cwd` lines say whose log it is: a file whose
+            // `cwd` lines all sit outside is a sibling's whole file, even where some lines carry no `cwd`,
+            // and a file with no `cwd` at all can only be the repo's in the repo's own projects folder. Its
+            // timestamped lines say whether the session is inside the window.
+            let any_cwd = lines.iter().any(|l| l.cwd.is_some());
+            let cwd_inside = lines.iter().any(|l| l.cwd.as_deref().is_some_and(|c| within(c, &ctx.repo)));
+            let this_repo = if cwd_inside {
+                true
+            } else if any_cwd {
+                false
+            } else {
+                dir.file_name().is_some_and(|n| n.to_string_lossy() == own)
+            };
+            if !this_repo {
+                continue;
+            }
+            let in_window =
+                since.is_none_or(|s| lines.iter().any(|l| l.timestamp.as_deref().is_some_and(|time| time >= s)));
             for line in lines {
-                read_line(ctx, since, &mut t, line);
+                read_line(ctx, since, &mut t, line, in_window);
             }
         }
     }
@@ -213,12 +241,35 @@ pub(crate) fn usage(ctx: &Ctx, since: Option<&str>) -> Result<Usage, String> {
     Ok(t.finish(super::ID, &repo, since, not_counted()))
 }
 
-fn read_line(ctx: &Ctx, since: Option<&str>, t: &mut Tally, line: Line) {
-    let (Some(session), Some(time)) = (line.session_id.as_deref(), line.timestamp.as_deref()) else { return };
-    if since.is_some_and(|s| time < s) || line.cwd.as_deref().is_some_and(|c| !within(c, &ctx.repo)) {
+fn read_line(ctx: &Ctx, since: Option<&str>, t: &mut Tally, line: Line, in_window: bool) {
+    let Some(session) = line.session_id.clone() else { return };
+    let session = session.as_str();
+    let Some(time) = line.timestamp.as_deref() else {
+        // A line with no `timestamp` — Claude Code repeats some responses without one. It follows its
+        // file: inside the window the session counts, and its calls and tokens with it (an id a
+        // timestamped line already counted counts once either way); outside it, the line cannot be
+        // placed, so it is counted and never kept.
+        if in_window {
+            t.saw_untimed(session);
+            figures(t, session, line);
+        } else {
+            t.skipped_lines += 1;
+        }
+        return;
+    };
+    if since.is_some_and(|s| time < s) {
+        return;
+    }
+    // A line with no `cwd` follows its file, which the caller has settled.
+    if line.cwd.as_deref().is_some_and(|c| !within(c, &ctx.repo)) {
         return;
     }
     t.saw(session, time);
+    figures(t, session, line);
+}
+
+/// What a counted line shows: the response's tokens, the calls it carries, and what its log lists as invoked.
+fn figures(t: &mut Tally, session: &str, line: Line) {
     if let Some(m) = line.message {
         if let (Some(id), Some(u)) = (m.id.as_deref(), m.usage) {
             let tokens = Tokens {

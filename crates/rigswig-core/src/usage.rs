@@ -27,7 +27,8 @@ pub struct Usage {
     /// The window's start (an ISO 8601 date or time), or absent for every log there is.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub since: Option<String>,
-    /// Distinct sessions with at least one line in the window. A subagent's log counts with its parent session.
+    /// Distinct sessions with at least one line in the window. A subagent's log counts with its parent session,
+    /// and a session whose lines carry no timestamps counts when its file is in the window.
     pub sessions: u64,
     /// The earliest and latest timestamps seen in the window.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -41,7 +42,8 @@ pub struct Usage {
     /// Every agent, skill and MCP server the logs show invoked, most calls first.
     pub invoked: Vec<Invoked>,
     /// Log files read, log files that could not be (counted, not named), and lines that were not JSON, not UTF-8,
-    /// over the line limit, or not in a shape this reads (skipped, never printed).
+    /// over the line limit, not in a shape this reads, or without a timestamp the window cannot place (skipped,
+    /// never printed).
     pub files: u64,
     #[serde(default)]
     pub files_unread: u64,
@@ -114,6 +116,12 @@ impl Tally {
         if self.last.as_deref().is_none_or(|l| time > l) {
             self.last = Some(time.to_string());
         }
+    }
+
+    /// A line of `session` with no timestamp was seen (Claude Code repeats some responses that way): the session
+    /// counted, the window untouched.
+    pub fn saw_untimed(&mut self, session: &str) {
+        self.sessions.insert(session.to_string());
     }
 
     /// A model response `id`; its tokens count once however many lines repeat them.

@@ -141,13 +141,16 @@ Opt-in per run and metadata only. [USAGE.md](../USAGE.md) lists every field read
 - **Where they are:** one JSON Lines file per session under `<config>/projects/<project folder>/`, the file a hook
   receives as `transcript_path` ([hooks](https://code.claude.com/docs/en/hooks.md)), plus each session's
   `subagents/*.jsonl`. The folder name follows the same inferred rule as auto memory (non-alphanumerics become `-`).
-  Folders whose name starts with the repo's are read too, and a line counts only when its `cwd` is inside the repo.
+  Folders whose name starts with the repo's are read too, and the `cwd` lines a file carries settle which repo it
+  is (each line's `cwd` must be inside the repo, and a line with none follows its file).
 - **How long they last:** `cleanupPeriodDays` deletes them, 30 days by default
   ([settings](https://code.claude.com/docs/en/settings.md)).
 - **The line format is not documented.** These shapes are inferred from the files Claude Code writes:
   - a response's tokens are repeated on every line of that response, so they are counted once per `message.id`;
   - a resumed session writes calls again, so they are counted once per call id;
   - `Agent` (earlier `Task`) with no `subagent_type` is `general-purpose`;
-  - MCP tools are named `mcp__<server>__<tool>`, and a plugin's server arrives as `plugin_<plugin>_<server>`.
+  - MCP tools are named `mcp__<server>__<tool>`, and a plugin's server arrives as `plugin_<plugin>_<server>`;
+  - a line's `timestamp` can be absent (the response is repeated later with one); such a line follows its file's
+    window (`../USAGE.md` lists where it counts).
 - **Not modelled:** skills and commands typed as `/name` (they are in message text, which is not read), hook runs,
   and sessions whose working folder is outside the repo.
