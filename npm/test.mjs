@@ -115,9 +115,10 @@ test('release.yml keeps the npm packages off the GitHub release: two artifact se
   assert.equal(steps.length, 2, 'both download steps exist');
   for (const step of steps) {
     const around = downloads.slice(step, step + 6).join('\n');
+    // The quoted brace pattern is YAML for "one pattern with two names": the tarballs plus the vsix.
     assert.match(
       around,
-      /pattern: (binary-\*|npm-\*|\{binary-\*,vsix\})/,
+      /pattern: ?["']?(binary-\*|npm-\*|\{binary-\*,vsix\})["']?/,
       'every download pins its pattern (the release job: tarballs plus the vsix)',
     );
   }
