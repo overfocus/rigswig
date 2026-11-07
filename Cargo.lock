@@ -381,7 +381,7 @@ dependencies = [
 
 [[package]]
 name = "rigswig"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "flate2",
  "libc",
@@ -394,7 +394,7 @@ dependencies = [
 
 [[package]]
 name = "rigswig-core"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "schemars",
  "serde",
