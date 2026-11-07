@@ -487,16 +487,20 @@ fn a_bare_machine_lists_the_readers_instead_of_reading_anything() {
 #[test]
 fn a_machine_evidence_pick_says_so_and_lists_the_rest() {
     // A bare sandbox: only home/.claude (machine evidence) and an unconnected second install; the repo has
-    // no harness folders at all, so nothing repo-specific can claim it.
+    // no harness folders at all, so nothing repo-specific can claim it. The second install is hf, whose
+    // ~/.agents/skills root is the same on every OS (devin's is not: %APPDATA% on Windows).
     let s = Sandbox::bare("guess");
     std::fs::create_dir_all(s.0.join("home/.claude")).unwrap();
-    s.write("home/.config/devin/config.json", "{}");
+    s.write(
+        "home/.agents/skills/hf-cli/SKILL.md",
+        "---\nname: hf-cli\ndescription: The Hub CLI.\n---\n\nGenerated with `huggingface_hub v2.4.0`.",
+    );
     let out = s.status(&[]);
     assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
     let text = String::from_utf8_lossy(&out.stdout);
     assert!(text.contains("Picked by this machine's evidence"), "{text}");
     assert!(text.contains("claude-code"), "{text}");
-    assert!(text.contains("devin") && text.contains("reading this one"), "{text}");
+    assert!(text.contains("hf") && text.contains("reading this one"), "{text}");
     assert!(text.contains("claude-code in repo"), "the guess still reads aloud\n{text}");
     // The ranked list replaces the quiet pick's footer.
     assert!(!text.contains("Also configured here"), "{text}");
@@ -506,23 +510,30 @@ fn a_machine_evidence_pick_says_so_and_lists_the_rest() {
 fn a_repo_setup_keeps_the_quiet_pick() {
     let s = Sandbox::new("quiet");
     s.write("repo/CLAUDE.md", "Use the test suite.");
-    s.write("home/.config/devin/config.json", "{}"); // an installed other harness, named by the footer
+    // An installed other harness for the footer to name; hf's root is the same on every OS.
+    s.write(
+        "home/.agents/skills/hf-cli/SKILL.md",
+        "---\nname: hf-cli\ndescription: The Hub CLI.\n---\n\nGenerated with `huggingface_hub v2.4.0`.",
+    );
     let out = s.status(&[]);
     assert!(out.status.success());
     let text = String::from_utf8_lossy(&out.stdout);
     assert!(text.contains("claude-code in repo"));
     // Repo-evidence picks stay exactly as they have been.
     assert!(!text.contains("Picked by this machine's evidence"));
-    assert!(text.contains("Also configured here: devin"), "{text}\n");
+    assert!(text.contains("Also configured here: hf"), "{text}\n");
 }
 
 #[test]
 fn the_guess_is_silent_in_json_but_the_pick_is_stable() {
     let s = Sandbox::bare("bare-json");
-    s.write("home/.config/devin/config.json", "{}");
+    s.write(
+        "home/.agents/skills/hf-cli/SKILL.md",
+        "---\nname: hf-cli\ndescription: The Hub CLI.\n---\n\nGenerated with `huggingface_hub v2.4.0`.",
+    );
     let out = s.status(&["--json"]);
     assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
     let h: rigswig_core::model::Harness = serde_json::from_slice(&out.stdout).expect("valid harness JSON");
     assert_eq!(rigswig_core::check::contract_errors(&h), Vec::<String>::new());
-    assert_eq!(h.tool.id, "devin");
+    assert_eq!(h.tool.id, "hf");
 }
