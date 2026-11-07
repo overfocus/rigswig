@@ -24,7 +24,9 @@ Usage:
   rigswig status [--repo <path>] [--tool <id>] [--json]
                                             what a coding-agent session in a repo loads, and where each piece came from
                                             (--tool picks the harness; by default the one with the most evidence,
-                                            and on a tie the first of claude-code, codex)
+                                            and on a tie the first of claude-code, codex — when no repo
+                                            evidence picks one, the reading is shown as a machine guess and the
+                                            installed harnesses are listed)
   rigswig check [--repo <path>] [--tool <id>] [--max-tokens <n>] [--max-item-tokens <n>] [--no-warnings] [--json]
                                             for CI: exits 1 when a limit is passed (n may be 40000, 40k or 1m)
   rigswig audit [--repo <path>] [--tool <id>] [--json]
@@ -451,12 +453,49 @@ fn status(args: &[String], mode: Mode) -> ExitCode {
         };
     }
 
-    let chosen = match &tool {
-        Some(t) => match scored.iter().find(|(a, _)| a.id() == t) {
-            Some(s) => s,
-            None => return fail(&format!("no harness called {t} (see `rigswig tools`)")),
-        },
-        None => scored.iter().rev().max_by_key(|(_, d)| d.score).expect("at least one adapter"),
+    // The pick: `--tool` is explicit; otherwise the harness with the most evidence, ties to the first of
+    // `adapters::all()` (Claude Code). When the winner scores at most 50, nothing in the repo points at any
+    // harness we read — the pick is the machine's guess, and the human surface says so.
+    let (chosen, guess) = match &tool {
+        Some(t) => (
+            match scored.iter().find(|(a, _)| a.id() == t) {
+                Some(s) => s,
+                None => return fail(&format!("no harness called {t} (see `rigswig tools`)")),
+            },
+            false,
+        ),
+        None => {
+            let top = scored.iter().rev().max_by_key(|(_, d)| d.score).expect("at least one adapter");
+            let guess = top.1.score <= 50;
+            if guess && !json {
+                let read: Vec<_> = scored.iter().filter(|(_, d)| d.score > 0).collect();
+                if read.is_empty() {
+                    println!("Nothing points at a harness rigswig reads here.");
+                    println!(
+                        "rigswig status --tool <id> reads one directly: {}",
+                        scored.iter().map(|(a, _)| a.id()).collect::<Vec<_>>().join(", ")
+                    );
+                    return ExitCode::SUCCESS;
+                }
+                println!("Picked by this machine's evidence (the repo is set up for no harness we read):");
+                let mut ranked = read.clone();
+                ranked.sort_by_key(|(_, d)| std::cmp::Reverse(d.score));
+                for (a, d) in &ranked {
+                    let ev = if d.evidence.is_empty() {
+                        String::new()
+                    } else {
+                        d.evidence.iter().map(|e| printable(e)).collect::<Vec<_>>().join(", ")
+                    };
+                    if a.id() == top.0.id() {
+                        println!("   {:<11} {:>2}  {}  (reading this one)", a.id(), d.score, ev);
+                    } else {
+                        println!("   {:<11} {:>2}  {}", a.id(), d.score, ev);
+                    }
+                }
+                println!("Rerun with --tool <id> to read a different one.");
+            }
+            (top, guess)
+        }
     };
     let mut h = chosen.0.resolve(&ctx_for(chosen.0));
     if !removals.is_empty() {
@@ -472,9 +511,11 @@ fn status(args: &[String], mode: Mode) -> ExitCode {
         println!("{}", serde_json::to_string_pretty(&h).expect("the model serialises"));
     } else {
         print!("{}", render::text(&h));
+        // The guess case's ranked list already names every installed harness; the quiet pick's footer
+        // lists the others it edged out.
         let others: Vec<&str> =
             scored.iter().filter(|(a, d)| a.id() != chosen.0.id() && d.score > 0).map(|(a, _)| a.id()).collect();
-        if !others.is_empty() {
+        if !others.is_empty() && !guess {
             println!("  Also configured here: {} (rigswig status --tool <id>)", others.join(", "));
         }
     }
@@ -814,6 +855,12 @@ fn compare(args: &[String]) -> ExitCode {
 }
 
 fn main() -> ExitCode {
+    // A closed pipe ends the process here (exit 141), as on every unix CLI; std leaves SIGPIPE ignored, so a
+    // `rigswig ... | head` panics mid-print on the first full stdout buffer instead.
+    #[cfg(unix)]
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
         Some("--version" | "-V") => {
