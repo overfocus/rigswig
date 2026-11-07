@@ -9,11 +9,15 @@ cargo run -- --help           # the CLI
 cargo clippy --all-targets -- -D warnings
 cargo fmt --check             # rustfmt.toml: 120 columns
 RIGSWIG_BLESS=1 cargo test -p rigswig-core   # regenerate schema/ after changing the model
+node vscode/test.mjs         # the editor extension's logic (node >= 18, no deps)
 ```
 
 - `crates/rigswig-core`: the harness-neutral data model and the adapters. A library with no I/O of its own.
 - `crates/rigswig`: the binary: argument parsing, terminal output, and later the local page server (the page's HTML,
   CSS and JS embedded in the binary, so it is one file with nothing to install).
+- `vscode/`: a thin editor extension (VS Code and its forks): a status-bar context figure and the read-only page in
+  a webview. It spawns the CLI (`rigswig.executablePath`) and implements nothing twice; its page spawn carries
+  neither `--allow-writes` nor `--allow-github`, by test.
 
 Keep dependencies few and well known (serde, serde_json, toml, a YAML front-matter reader, schemars for the JSON
 Schema); every new crate needs a reason in its commit message.

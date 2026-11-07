@@ -1,0 +1,69 @@
+{
+  "name": "rigswig",
+  "displayName": "rigswig",
+  "description": "What a coding-agent session in this repo loads, and where each piece came from — the rigswig CLI in your editor.",
+  "version": "0.0.1",
+  "license": "Apache-2.0",
+  "publisher": "kftcda",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/overfocus/rigswig"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other",
+    "Visualization"
+  ],
+  "keywords": [
+    "ai",
+    "agents",
+    "context",
+    "claude",
+    "codex",
+    "copilot",
+    "cursor",
+    "gemini",
+    "harness",
+    "tokens"
+  ],
+  "main": "./extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "configuration": {
+      "title": "rigswig",
+      "properties": {
+        "rigswig.executablePath": {
+          "type": "string",
+          "default": "rigswig",
+          "description": "The rigswig binary to read with (on the PATH, or a full path). Install it with `cargo install rigswig`."
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "rigswig.openPage",
+        "title": "rigswig: Open the page",
+        "icon": "$(book)"
+      },
+      {
+        "command": "rigswig.refresh",
+        "title": "rigswig: Refresh context",
+        "icon": "$(refresh)"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "rigswig.openPage"
+        },
+        {
+          "command": "rigswig.refresh"
+        }
+      ]
+    }
+  }
+}

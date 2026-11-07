@@ -88,6 +88,9 @@ These are the point of the tool, and they will be enforced by tests:
 - **An MCP server.** `rigswig mcp` serves the five read-only surfaces as MCP tools over stdio, so a harness
   can ask rigswig about a checkout from inside its own session — Claude Code, Cursor, Gemini CLI, DeepSeek-CLI,
   VS Code and anything else that launches stdio servers ([the server and its registration](docs/MCP.md)).
+- **In your editor.** A thin VS Code / Cursor extension: the context bill in the status bar and the read-only page
+  in a panel. It spawns the CLI you already have; it starts nothing in write mode ([the extension](vscode/) and
+  [its logic tests](vscode/test.mjs)).
 - **No secrets.** MCP server `env`, `headers` and `args`, URL paths and inline hook code are never printed or served.
 - **No transcripts.** It never reads session history. (Claude Code's auto-memory index, `MEMORY.md`, is read and
   counted because it loads into every session; nothing else in that folder is.)
