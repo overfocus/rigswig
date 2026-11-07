@@ -3,7 +3,7 @@
 const vscode = require('vscode');
 const { spawn } = require('node:child_process');
 const { basename } = require('node:path');
-const { parseStatus, extractUiUrl, uiArgs, statusArgs } = require('./lib');
+const { parseStatus, extractUiUrl, uiArgs, statusArgs, pageHtml } = require('./lib');
 
 /** The rigswig binary to spawn: the setting `rigswig.executablePath`, default `rigswig` from the PATH. */
 function bin() {
@@ -149,11 +149,17 @@ async function openPage(item) {
             stopPage('the page stopped (idle); rerun **rigswig: Open the page** to start it again.');
         }
     });
+    // The URL as the editor presents it: identity on a desktop, the forwarded port on a remote host.
+    const shown = await vscode.env.asExternalUri(vscode.Uri.parse(start.url));
+    if (vscode.workspace.getConfiguration('rigswig').get('openInBrowser', false)) {
+        await vscode.env.openExternal(shown);
+        return;
+    }
     const panel = vscode.window.createWebviewPanel('rigswig', `rigswig — ${basename(repo)} (read-only)`, -1, {
         enableScripts: true,
         retainContextWhenHidden: false,
     });
-    panel.webview.html = pageHtml(panel.webview, start.url);
+    panel.webview.html = pageHtml(shown.toString());
     panel.onDidDispose(() => {
         if (page.panel === panel) {
             stopPage();
@@ -162,21 +168,6 @@ async function openPage(item) {
     page.panel = panel;
     item.command = 'rigswig.openPage';
     void item.show();
-}
-
-function pageHtml(webview, url) {
-    return `<!doctype html>
-<html>
-<head>
-<meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy"
-      content="default-src 'none'; frame-src http://127.0.0.1:* http://localhost:*; style-src 'unsafe-inline';">
-<style> html, body, iframe { inset: 0; margin: 0; padding: 0; width: 100%; height: 100vh; border: 0; position: fixed; } </style>
-</head>
-<body>
-<iframe src="${url}"></iframe>
-</body>
-</html>`;
 }
 
 function stopPage(message) {

@@ -66,4 +66,24 @@ function statusArgs(repo) {
     return ['status', '--json', '--repo', repo];
 }
 
-module.exports = { parseStatus, extractUiUrl, uiArgs, statusArgs };
+
+/**
+ * The webview document that hosts the page: the frame gets the exact URL, plus localhost's spellings, because
+ * editors refuse frames they do not find named in the CSP.
+ */
+function pageHtml(url) {
+    return `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'none'; frame-src ${url} http://127.0.0.1:* http://localhost:* http://[::1]:*; style-src 'unsafe-inline';">
+<style> html, body, iframe { inset: 0; margin: 0; padding: 0; width: 100%; height: 100vh; border: 0; position: fixed; } </style>
+</head>
+<body>
+<iframe src="${url}"></iframe>
+</body>
+</html>`;
+}
+
+module.exports = { parseStatus, extractUiUrl, uiArgs, statusArgs, pageHtml };

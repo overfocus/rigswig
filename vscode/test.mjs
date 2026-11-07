@@ -9,7 +9,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-const { parseStatus, extractUiUrl, uiArgs, statusArgs } = createRequire(import.meta.url)('./lib.js');
+const { parseStatus, extractUiUrl, uiArgs, statusArgs, pageHtml } = createRequire(import.meta.url)('./lib.js');
 
 const here = path.dirname(new URL(import.meta.url).pathname);
 
@@ -105,5 +105,12 @@ assert.deepEqual(
 assert.ok(uiArgs('/repo').every((a) => a !== '--allow-writes'), 'never write mode');
 assert.ok(uiArgs('/repo').every((a) => a !== '--allow-github'), 'never github');
 assert.deepEqual(statusArgs('/repo'), ['status', '--json', '--repo', '/repo']);
+
+// The hosting document names the frame exactly, so editors that check the CSP against the full URL pass it.
+const html = pageHtml('http://127.0.0.1:51327/');
+assert.ok(html.includes('<iframe src="http://127.0.0.1:51327/">'), 'the frame src is the page URL');
+assert.ok(html.includes('frame-src http://127.0.0.1:51327/ http://127.0.0.1:* '), 'the CSP names the frame exactly and the wildcard');
+assert.ok(html.includes('http://localhost:*') && html.includes('http://[::1]:*'), "every localhost spelling is allowed");
+assert.ok(html.includes("default-src 'none'"), 'the host document stays closed otherwise');
 
 console.log(`vscode: ${live ? 'live binary' : 'fixture'}, all logic checks pass`);

@@ -2,7 +2,7 @@
   "name": "rigswig",
   "displayName": "rigswig",
   "description": "What a coding-agent session in this repo loads, and where each piece came from — the rigswig CLI in your editor.",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "license": "Apache-2.0",
   "publisher": "kftcda",
   "repository": {
@@ -40,6 +40,11 @@
           "type": "string",
           "default": "rigswig",
           "description": "The rigswig binary to read with (on the PATH, or a full path). Install it with `cargo install rigswig`."
+        },
+        "rigswig.openInBrowser": {
+          "type": "boolean",
+          "default": false,
+          "description": "Open the read-only page in the system browser instead of an editor panel (some editors refuse localhost frames)."
         }
       }
     },
