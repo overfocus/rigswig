@@ -12,6 +12,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -180,6 +181,25 @@ test('crateMeta reads description, repository and keywords from Cargo.toml', () 
   assert.ok(toml.includes(meta.description), 'description must come from Cargo.toml');
   assert.match(meta.repository, /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+$/);
   assert.ok(meta.keywords.length > 0);
+});
+
+test('npm and the editor extension carry one keyword list, with every harness and within the Marketplace limit', () => {
+  const list = JSON.parse(readFileSync(join(ROOT, 'npm', 'keywords.json'), 'utf8'));
+  const ext = JSON.parse(readFileSync(join(ROOT, 'vscode', 'package.json'), 'utf8')).keywords;
+  assert.deepEqual(ext, list, 'vscode/package.json keywords must equal npm/keywords.json');
+  assert.ok(list.length <= 30, `${list.length} keywords; the VS Code Marketplace takes at most 30`);
+  assert.equal(new Set(list).size, list.length, 'no keyword twice');
+  for (const k of list) assert.match(k, /^[a-z0-9][a-z0-9-]*$/, k);
+  const kw = build.searchKeywords();
+  for (const k of build.crateMeta().keywords) assert.ok(kw.includes(k), `npm keeps crates.io's ${k}`);
+  // One keyword per harness rigswig reads (docs/adapters/), so a new adapter cannot ship unsearchable.
+  const harness = { 'claude-code': 'claude-code', codex: 'codex', copilot: 'copilot', cursor: 'cursor', 'deepseek-cli': 'deepseek',
+    devin: 'devin', dsh: 'deepseek', gemini: 'gemini-cli', hermes: 'hermes-agent', hf: 'huggingface', ollama: 'ollama' };
+  for (const doc of readdirSync(join(ROOT, 'docs', 'adapters')).filter((f) => f.endsWith('.md'))) {
+    const id = doc.replace(/\.md$/, '');
+    assert.ok(harness[id], `docs/adapters/${doc}: add its harness to npm/keywords.json and to this map`);
+    assert.ok(list.includes(harness[id]), `${harness[id]} missing from npm/keywords.json`);
+  }
 });
 
 // -- build.mjs: platform packages -------------------------------------------

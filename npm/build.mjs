@@ -65,6 +65,14 @@ export function crateMeta() {
   return { repository, description, keywords };
 }
 
+// The search keywords for npm and the editor extension: crates.io allows five (Cargo.toml's), these two take more.
+// One list, npm/keywords.json, covering every harness rigswig reads and what people search for; npm/test.mjs fails
+// when vscode/package.json's copy drifts from it, or when it passes the 30 the VS Code Marketplace accepts.
+export function searchKeywords() {
+  const list = JSON.parse(readFileSync(join(ROOT, 'npm', 'keywords.json'), 'utf8'));
+  return [...new Set([...crateMeta().keywords, ...list])];
+}
+
 function repositoryField() {
   const repository = crateMeta().repository;
   const url = /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+$/.test(repository) ? `git+${repository}.git` : repository;
@@ -150,7 +158,7 @@ export function buildPicker({ version, out }) {
     description: meta.description,
     license: 'Apache-2.0',
     repository: repositoryField(),
-    keywords: meta.keywords,
+    keywords: searchKeywords(),
     engines: { node: '>=18' },
     bin: { rigswig: 'bin/rigswig.js' },
     files: ['bin', 'README.md', 'LICENSE', 'NOTICE'],
