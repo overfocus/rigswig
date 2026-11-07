@@ -2,6 +2,9 @@
 
 See everything your coding agent loads before you type, and where each piece came from.
 
+**Start here: [getting started](docs/GETTING-STARTED.md) — install it, three commands, and what each one tells
+you.**
+
 ![rigswig's page for a repo: about 11.4k tokens load before you type, most of it AGENTS.md, with every kind of item as a tile](docs/images/overview.png)
 
 <table>
@@ -36,9 +39,8 @@ spread across user, project, local and managed scopes. rigswig reads all of it f
 there actually gets, which scope decided each setting, what is overridden, and roughly how much context it costs
 before you type a word.
 
-**Status: 0.1, pre-1.0.** `rigswig status`, `rigswig audit` and the local page, `rigswig ui`, work for Claude Code,
-Codex, Hermes Agent, Ollama, the Devin CLI, Cursor, Gemini CLI and the two DeepSeek CLIs. See
-[docs/ROADMAP.md](docs/ROADMAP.md).
+**Status: 0.2, pre-1.0.** `rigswig status`, `rigswig audit`, `rigswig usage` and the local page, `rigswig ui`,
+work for every harness in the table below. See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 rigswig is a single binary written in Rust. Install it with `cargo install rigswig`
 ([crates.io](https://crates.io/crates/rigswig); add `--no-default-features` for a build with no network code), with
@@ -59,6 +61,8 @@ cargo run -- audit --repo path/to/repo                          # ranked finding
 cargo run -- audit --repos '~/code/*'                           # fleet: each user-scope item against every repo
 cargo run -- audit --github owner/repo                          # a public GitHub repo, in memory, without your setup
 cargo run -- audit --archive repo.tar.gz                        # the same for an archive you downloaded, offline
+cargo run -- usage --repo path/to/repo                          # what past sessions here invoked, metadata only
+cargo run -- audit --repo path/to/repo --usage                  # findings that know what the sessions called
 ```
 
 `rigswig audit` turns the numbers into a to-do list: user-scope agents and skills that nothing in the repo references,
@@ -88,14 +92,15 @@ These are the point of the tool, and they will be enforced by tests:
 - **An MCP server.** `rigswig mcp` serves the five read-only surfaces as MCP tools over stdio, so a harness
   can ask rigswig about a checkout from inside its own session — Claude Code, Cursor, Gemini CLI, DeepSeek-CLI,
   VS Code and anything else that launches stdio servers ([the server and its registration](docs/MCP.md)).
-- **In your editor.** A thin VS Code / Cursor extension: the context bill in the status bar and the read-only page
-  in a panel. It spawns the CLI you already have; it starts nothing in write mode ([the extension](vscode/) and
+- **In your editor.** A thin VS Code / Cursor extension: the bill and the audit's findings in the status bar, a
+  refresh/open toolbar on the page panel, and the read-only page itself. It spawns the CLI you already have; it
+  starts nothing in write mode and never opts a run into session logs ([the extension](vscode/) and
   [its logic tests](vscode/test.mjs)).
 - **No secrets.** MCP server `env`, `headers` and `args`, URL paths and inline hook code are never printed or served.
 - **Session logs only when you ask, and only their metadata.** No command opens a session log unless the run asks
   for it: `rigswig usage` or `rigswig audit --usage`, never the page or the MCP server. Even then, rigswig reads
   only ids, times, the working folder, models, token counts, and the names of the agents, skills and MCP servers
-  that were called. It never reads or prints message text, thinking, tool inputs or tool results
+  that were called. It never keeps, prints or serves message text, thinking, tool inputs or tool results
   ([what is read, field by field](docs/USAGE.md)). This replaces the earlier "No transcripts" promise
   ([what changed](docs/USAGE.md#what-changed-in-the-guarantee)). (Claude Code's
   auto-memory index, `MEMORY.md`, is read and counted in every run because it loads into every session.)

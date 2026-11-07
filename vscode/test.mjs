@@ -9,7 +9,8 @@ import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-const { parseStatus, extractUiUrl, uiArgs, statusArgs, pageHtml } = createRequire(import.meta.url)('./lib.js');
+const { parseStatus, parseAudit, extractUiUrl, uiArgs, statusArgs, auditArgs, pageHtml } =
+    createRequire(import.meta.url)('./lib.js');
 
 const here = path.dirname(new URL(import.meta.url).pathname);
 
@@ -51,6 +52,28 @@ assert.ok(parsed.tokens.value >= parsed.tokens.low, `value below low: ${JSON.str
 assert.ok(parsed.tokens.low <= parsed.tokens.high, 'low above high');
 assert.ok(parsed.tokens.high >= parsed.tokens.value, 'high below value');
 
+// The audit read parses, and a finding without a `saving` adds nothing to the saveable total.
+const aud = parseAudit(
+    JSON.stringify({
+        tool: 'claude-code',
+        repo: 'repo',
+        tokens: 5,
+        findings: [
+            { code: 'a', severity: 'high', saving: { tokens: 700 } },
+            { code: 'b', severity: 'high' },
+            { code: 'c', severity: 'low' },
+        ],
+    }),
+);
+assert.equal(aud.tool, 'claude-code');
+assert.equal(aud.findings, 3);
+assert.equal(aud.high, 2);
+assert.equal(aud.medium, 0);
+assert.equal(aud.low, 1);
+assert.equal(aud.saveable, 700, 'a finding without a saving does not count');
+assert.throws(() => parseAudit('not json at all'), TypeError);
+assert.throws(() => parseAudit('{"tool":{"id":"x"}}'), TypeError, 'no findings list');
+
 // The full non-editor flow: spawn the page, read its URL line, and fetch the page it serves.
 if (live) {
     const root = path.join(here, '..');
@@ -81,6 +104,14 @@ if (live) {
     const body = await res.text();
     assert.ok(body.includes('<'), 'the page is html');
     url.done();
+
+    // The findings read against the real audit on this repo: the same harness status and audit agree on.
+    const auditOut = spawnSync(binPath, auditArgs(root), { cwd: here, encoding: 'utf8' });
+    assert.equal(auditOut.status, 0, `the CLI audit run: ${auditOut.stderr}`);
+    const liveAudit = parseAudit(auditOut.stdout);
+    assert.equal(liveAudit.tool, parsed.tool, 'the audit names the same harness status does');
+    assert.ok(liveAudit.high + liveAudit.medium + liveAudit.low <= liveAudit.findings, 'severities within the count');
+    assert.ok(liveAudit.saveable >= 0, 'saveable');
 }
 
 // Garbage is named, not half-read.
@@ -105,6 +136,25 @@ assert.deepEqual(
 assert.ok(uiArgs('/repo').every((a) => a !== '--allow-writes'), 'never write mode');
 assert.ok(uiArgs('/repo').every((a) => a !== '--allow-github'), 'never github');
 assert.deepEqual(statusArgs('/repo'), ['status', '--json', '--repo', '/repo']);
+// The findings spawn is the audit, and nothing else: never session logs (`--usage` is opt-in per run, and an
+// editor is not a run that opted in), and none of the write or download flags either.
+assert.deepEqual(auditArgs('/repo'), ['audit', '--json', '--repo', '/repo']);
+for (const banned of ['--usage', '--allow-writes', '--allow-github', '--github', '--archive']) {
+    assert.ok(auditArgs('/repo').every((a) => a !== banned), `the extension's audit never passes ${banned}`);
+}
+
+// The panel toolbar: refresh and the page are editor-title buttons on the rigswig webview, each with an icon.
+const manifest = JSON.parse(fs.readFileSync(path.join(here, 'package.json'), 'utf8'));
+const title = manifest.contributes?.menus?.['editor/title'] ?? [];
+assert.ok(
+    title.some((m) => m.command === 'rigswig.refresh' && m.when === "activeWebviewPanelId == 'rigswig'"),
+    'the panel toolbar has refresh',
+);
+assert.ok(title.some((m) => m.command === 'rigswig.openPage'), 'the panel toolbar opens the page');
+for (const m of title) {
+    const cmd = manifest.contributes.commands.find((c) => c.command === m.command);
+    assert.ok(cmd?.icon, `${m.command} carries an icon for the toolbar`);
+}
 
 // The hosting document names the frame exactly, so editors that check the CSP against the full URL pass it.
 const html = pageHtml('http://127.0.0.1:51327/');

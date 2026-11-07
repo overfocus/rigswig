@@ -40,6 +40,37 @@ function parseStatus(text) {
 }
 
 /**
+ * A `rigswig audit --json` read, checked for the shape the findings read needs. The audit JSON is a parse
+ * contract: `tool.id` and a `findings` list live in every version; a finding carries an optional `saving`.
+ *
+ * @returns `{ tool, findings, high, medium, low, saveable }`, where `saveable` sums every saving's tokens.
+ */
+function parseAudit(text) {
+    let a;
+    try {
+        a = JSON.parse(text);
+    } catch {
+        throw new TypeError('not a rigswig audit JSON');
+    }
+    if (typeof a !== 'object' || a === null || typeof a.tool !== 'string' || a.tool.length === 0) {
+        throw new TypeError('not a rigswig audit JSON: no tool');
+    }
+    if (!Array.isArray(a.findings)) {
+        throw new TypeError('not a rigswig audit JSON: no findings list');
+    }
+    const count = (severity) => a.findings.filter((f) => f && f.severity === severity).length;
+    const saveable = a.findings.reduce((n, f) => n + (typeof f?.saving?.tokens === 'number' ? f.saving.tokens : 0), 0);
+    return {
+        tool: a.tool,
+        findings: a.findings.length,
+        high: count('high'),
+        medium: count('medium'),
+        low: count('low'),
+        saveable,
+    };
+}
+
+/**
  * The URL the page prints on stdout once it listens (`rigswig ui (read-only, local only): <url>`).
  *
  * @returns the first http URL on the rigswig ui line, or null when the process printed none yet.
@@ -66,6 +97,14 @@ function statusArgs(repo) {
     return ['status', '--json', '--repo', repo];
 }
 
+/**
+ * The arguments for `rigswig audit --json` on one repo: the findings read, and nothing else. Never `--usage`
+ * (session logs are opt-in per run, and a click in an editor is not that), never any write or download flag.
+ */
+function auditArgs(repo) {
+    return ['audit', '--json', '--repo', repo];
+}
+
 
 /**
  * The webview document that hosts the page: the frame gets the exact URL, plus localhost's spellings, because
@@ -86,4 +125,4 @@ function pageHtml(url) {
 </html>`;
 }
 
-module.exports = { parseStatus, extractUiUrl, uiArgs, statusArgs, pageHtml };
+module.exports = { parseStatus, parseAudit, extractUiUrl, uiArgs, statusArgs, auditArgs, pageHtml };

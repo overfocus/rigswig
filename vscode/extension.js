@@ -3,7 +3,7 @@
 const vscode = require('vscode');
 const { spawn } = require('node:child_process');
 const { basename } = require('node:path');
-const { parseStatus, extractUiUrl, uiArgs, statusArgs, pageHtml } = require('./lib');
+const { parseStatus, parseAudit, extractUiUrl, uiArgs, statusArgs, auditArgs, pageHtml } = require('./lib');
 
 /** The rigswig binary to spawn: the setting `rigswig.executablePath`, default `rigswig` from the PATH. */
 function bin() {
@@ -59,14 +59,17 @@ function until(binPath, args, cwd, match, deadlineMs) {
 function activate(context) {
     const item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
     item.text = '$(beaker) rigswig';
-    item.tooltip = 'What this repo loads for a coding-agent session. Click for the read-only page.';
+    item.tooltip = 'What this repo loads for a coding-agent session, and what the audit finds. Click for the read-only page.';
     item.command = 'rigswig.openPage';
     context.subscriptions.push(item);
 
     let timer = null;
     const refresh = () => {
         clearTimeout(timer);
-        timer = setTimeout(() => read(item), 200);
+        timer = setTimeout(() => {
+            findings = { repo: null, value: null, error: null };
+            read(item);
+        }, 200);
     };
     context.subscriptions.push(vscode.commands.registerCommand('rigswig.refresh', refresh));
     context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(refresh));
@@ -89,6 +92,12 @@ function repoOf() {
     return folder?.uri.fsPath ?? null;
 }
 
+// The two reads behind the bar, shared across refreshes: the harness read of the current repo, and the
+// audit's findings for it, so an active file moving does not re-run the audit — only a folder change or a
+// refresh does.
+let state = null; // { repo, parsed }
+let findings = { repo: null, value: null, error: null };
+
 async function read(item) {
     const repo = repoOf();
     if (!repo) {
@@ -100,26 +109,76 @@ async function read(item) {
     item.tooltip = 'Reading…';
     try {
         const parsed = parseStatus(await run(bin(), statusArgs(repo), repo));
-        const t = parsed.tokens;
-        item.text =
-            `$(beaker) ~${t.value.toLocaleString()} tok ${t.low.toLocaleString()}..${t.high.toLocaleString()}`;
-        const tip = new vscode.MarkdownString(
-            [
-                `**${parsed.tool}** in \`${basename(repo)}\`:`,
-                ``,
-                `- ${parsed.chars.toLocaleString()} characters of startup items`,
-                `- estimated with \`${t.method}\` (\`~${t.value.toLocaleString()} tok\`, \`${t.low.toLocaleString()}..${t.high.toLocaleString()}\`)`,
-                `- ${parsed.notMeasured} fixed costs the tool adds (system prompt, built-in tools)`,
-                ``,
-                `Click for the read-only page. **rigswig: Refresh** re-reads; **rigswig: Open the page** reopens this.`,
-            ].join('\n'),
-        );
-        tip.isTrusted = true;
-        item.tooltip = tip;
+        state = { repo, parsed };
+        if (findings.repo !== repo) {
+            findings = { repo, value: null, error: null };
+            void readAudit(item, repo);
+        }
+        render(item);
     } catch (e) {
         item.text = '$(beaker) rigswig?';
         item.tooltip = `rigswig could not read this folder: ${e.message}\n\nSet \`rigswig.executablePath\`, or install the CLI (\`cargo install rigswig\`).`;
     }
+}
+
+/** The findings half of the read, away from the status bar's fast path. */
+async function readAudit(item, repo) {
+    try {
+        const value = parseAudit(await run(bin(), auditArgs(repo), repo));
+        if (findings.repo === repo) {
+            findings = { repo, value, error: null };
+        }
+    } catch (e) {
+        if (findings.repo === repo) {
+            findings = { repo, value: null, error: e.message };
+        }
+    }
+    if (state?.repo === repo) {
+        render(item);
+    }
+}
+
+const fmt = (n) => n.toLocaleString();
+
+/** The status bar and its tooltip, from what has landed: the harness read first, then the findings. */
+function render(item) {
+    const { repo, parsed } = state;
+    const t = parsed.tokens;
+    const f = findings.repo === repo ? findings : { value: null, error: null };
+    const tip = new vscode.MarkdownString(
+        [
+            `**${parsed.tool}** in \`${basename(repo)}\`:`,
+            ``,
+            `- ~${fmt(t.value)} tokens load before you type (${t.method}: \`${t.low.toLocaleString()}..${t.high.toLocaleString()}\` from ${fmt(parsed.chars)} characters)`,
+            `- ${parsed.notMeasured} fixed costs the tool adds (system prompt, built-in tools)`,
+        ].join('\n'),
+    );
+    const parts = [`$(beaker) ${parsed.tool}`, `~${fmt(t.value)} tok`];
+    if (f.value) {
+        const by = [f.value.high, f.value.medium, f.value.low]
+            .map((n, i) => (n > 0 ? `${n} ${['high', 'medium', 'low'][i]}` : null))
+            .filter(Boolean)
+            .join(', ');
+        const save =
+            f.value.saveable > 0 ? ` — about ${fmt(f.value.saveable)} tokens a session the fixes could save` : '';
+        tip.appendMarkdown(
+            `\n\n- ${f.value.findings === 0 ? 'no findings' : `${f.value.findings} findings (${by})`}${save}; the read-only page shows each one.`,
+        );
+        parts.push(f.value.findings === 0 ? 'no findings' : `${f.value.findings} findings`);
+        if (f.value.saveable > 0) {
+            parts.push(`~${fmt(f.value.saveable)} saveable`);
+        }
+    } else if (f.error) {
+        tip.appendMarkdown(`\n\n- findings could not be read: ${f.error} — **rigswig: Refresh** tries again.`);
+    } else {
+        tip.appendMarkdown(`\n\n- the findings read is running; **rigswig: Refresh** re-runs it with the numbers.`);
+    }
+    tip.appendMarkdown(
+        `\n\nClick for the read-only page. **rigswig: Refresh** re-reads; **rigswig: Open the page** reopens this.`,
+    );
+    tip.isTrusted = true;
+    item.tooltip = tip;
+    item.text = parts.join(' · ');
 }
 
 let page = { child: null, url: null, panel: null, repo: null };

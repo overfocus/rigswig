@@ -13,7 +13,10 @@ Nothing is public until a maintainer publishes the draft and approves the crates
 
 ## Steps
 
-1. Set the version in `Cargo.toml` (`[workspace.package] version`), run `cargo test`, and commit.
+1. Set the version in `Cargo.toml` (`[workspace.package] version`) and move the binary's pin on the library to the
+   same version (`rigswig-core = { path = ..., version = "X.Y.Z" }` in `crates/rigswig/Cargo.toml`: the caret
+   refuses a new minor). Run `cargo check` without `--locked` so `Cargo.lock` carries both, then `cargo test
+   --locked`, and commit.
 2. Tag and push: `git tag v0.1.0 && git push origin v0.1.0`.
 3. When the builds finish, read the draft release (notes, assets, checksums) and publish it.
 4. Approve the `crates-io` job (the release run on GitHub, "Review deployments"); it publishes `rigswig-core`, then

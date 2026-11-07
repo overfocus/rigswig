@@ -51,6 +51,14 @@ GitHub repos (done; [GITHUB.md](GITHUB.md)): `audit` and `status` take `--github
 one host, the archive unpacked into memory, an empty home) or `--archive <file>` (offline). On the page with
 `ui --allow-github`. Left: private repos (a token from the environment), and a counts-only output for sharing.
 
+Usage from session logs (done; [USAGE.md](USAGE.md)): `rigswig usage` and `audit --usage` read Claude Code's session
+logs opt-in per run, metadata only, and `not-invoked` names what loads but no session called. Codex and the other
+harnesses refuse for now, and the page and the MCP server stay out of it.
+
+The extension (done: [vscode/](../vscode/)): the status bar carries the harness, the token bill and the audit's
+findings with the tokens they could save, the page panel has a refresh/open toolbar, and everything stays read-only
+— the findings spawn never passes `--usage`.
+
 ## Later
 
 - Write mode for Codex (`config.toml` with comments kept) and for more kinds (skills, hooks) where the tool
