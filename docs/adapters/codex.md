@@ -44,8 +44,8 @@ ignores them there, and rigswig warns.
 
 ## Settings
 
-`model`, `model_provider` (reported as `provider`), `model_reasoning_effort`, `approval_policy`, `sandbox_mode` and
-`project_doc_max_bytes`, each with the trail of layers that set it. When `requirements.toml`'s
+`model`, `model_provider` (reported as `provider`), `model_reasoning_effort`, `model_context_window` (the page uses it as
+the session's window), `approval_policy`, `sandbox_mode` and `project_doc_max_bytes`, each with the trail of layers that set it. When `requirements.toml`'s
 `allowed_approval_policies` or `allowed_sandbox_modes` excludes the resolved value, the trail says so and rigswig warns:
 Codex falls back to an allowed value. `projectTrust` is reported as a setting too.
 

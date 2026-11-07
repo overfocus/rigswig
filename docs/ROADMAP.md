@@ -22,8 +22,9 @@
    [adapters/codex.md](adapters/codex.md)). Trust, layered `config.toml`, the shared `AGENTS.md` budget, skills,
    prompts, TOML agents, hooks, MCP servers, requirements, installed plugins.
 5. **The page** (done: `rigswig ui`, `crates/rigswig/src/ui.rs` and `assets/ui.html`). The headline is a context budget: one bar on the model's context-window scale, split by kind and
-   then by source, the unmeasured part marked, with a ranked list underneath. Compare (done): `rigswig compare` for two repos or two harnesses, and on the page (`compare with`) two bars on
-   one scale with what only one side has and what both have differently.
+   then by source, the unmeasured part marked, with a ranked list underneath. Compare (done): `rigswig compare` for two repos or two harnesses, and on the page (the A/B harness picker) two bars on
+   one scale, each against its own window (from the model each resolves to, or the reader's pick), with what only one side has and what both have
+   differently.
 
 **Reference behaviour.** The adapter was checked against the earlier JavaScript explorer it replaces, on a real setup:
 the same agents, skills, commands, hook scripts, MCP servers and plugins, name for name, and the same context total.
