@@ -9,6 +9,7 @@ use super::{ClaudeCode, Paths};
 use crate::adapter::{Adapter, Ctx};
 use crate::change::{Change, Plan, Scope, diff_lines};
 use crate::fs::{EntryKind, OverlayFs};
+use crate::jsonedit;
 use crate::model::{Harness, ItemDetail, McpState};
 use crate::read::redact::sha256_hex;
 
@@ -25,6 +26,24 @@ fn set_list(obj: &mut Map<String, Value>, key: &str, name: &str, present: bool) 
     if arr.is_empty() {
         obj.remove(key);
     }
+}
+
+/// The change made to `text` itself, kept only when it reads back as exactly `want`.
+fn edit_in_place(text: &str, change: &Change, orig: &Map<String, Value>, want: &Map<String, Value>) -> Option<String> {
+    let edited = match change {
+        Change::Plugin { id, on, .. } => jsonedit::set_nested(text, "enabledPlugins", id, &Value::Bool(*on))?,
+        Change::McpJson { .. } => {
+            let mut t = text.to_string();
+            for key in ["disabledMcpjsonServers", "enabledMcpjsonServers"] {
+                if orig.get(key) != want.get(key) {
+                    t = jsonedit::set_top(&t, key, want.get(key))?;
+                }
+            }
+            t
+        }
+    };
+    let back = serde_json::from_str::<Value>(edited.strip_prefix('\u{feff}').unwrap_or(&edited)).ok()?;
+    (back == Value::Object(want.clone())).then_some(edited)
 }
 
 fn mcp_state(h: &Harness, name: &str) -> Option<McpState> {
@@ -73,7 +92,7 @@ pub(crate) fn plan(ctx: &Ctx, change: &Change) -> Result<Plan, String> {
         Err(_) if !fs.exists(&path) => (None, true),
         Err(_) => return Err("that settings file cannot be read".into()),
     };
-    let mut obj: Map<String, Value> = match &text {
+    let orig: Map<String, Value> = match &text {
         None => Map::new(),
         Some(t) => match serde_json::from_str::<Value>(t.strip_prefix('\u{feff}').unwrap_or(t)) {
             Ok(Value::Object(o)) => o,
@@ -82,6 +101,7 @@ pub(crate) fn plan(ctx: &Ctx, change: &Change) -> Result<Plan, String> {
         },
     };
 
+    let mut obj = orig.clone();
     match change {
         Change::Plugin { id, on, .. } => {
             let en = obj.entry("enabledPlugins").or_insert_with(|| Value::Object(Map::new()));
@@ -95,10 +115,25 @@ pub(crate) fn plan(ctx: &Ctx, change: &Change) -> Result<Plan, String> {
             set_list(&mut obj, "enabledMcpjsonServers", name, *on);
         }
     }
-    let after = serde_json::to_string_pretty(&Value::Object(obj)).expect("JSON serialises") + "\n";
-    if text.as_deref() == Some(after.as_str()) {
+    if obj == orig && text.is_some() {
         return Err("that file already says so; nothing to change".into());
     }
+    let mut notes = vec![
+        "Takes effect in the next Claude Code session (or after /reload-plugins), not in running ones.".to_string(),
+    ];
+    // The file as its owner wrote it, with only the changed member edited; a file that edit cannot place safely (or
+    // a new one) is written whole, and the page says so.
+    let in_place = text.as_deref().and_then(|t| edit_in_place(t, change, &orig, &obj));
+    let after = match in_place {
+        Some(t) => t,
+        None => {
+            if text.is_some() {
+                notes
+                    .push("rigswig rewrites this file whole, so its layout changes; the settings in it do not.".into());
+            }
+            serde_json::to_string_pretty(&Value::Object(obj)).expect("JSON serialises") + "\n"
+        }
+    };
 
     // The setup after the change, resolved exactly.
     let overlay = OverlayFs { base: fs, files: BTreeMap::from([(path.clone(), after.clone())]) };
@@ -106,9 +141,6 @@ pub(crate) fn plan(ctx: &Ctx, change: &Change) -> Result<Plan, String> {
         Ctx { fs: &overlay, env: ctx.env.clone(), home: ctx.home.clone(), repo: ctx.repo.clone(), os: ctx.os };
     let later = ClaudeCode.resolve(&after_ctx);
 
-    let mut notes = vec![
-        "Takes effect in the next Claude Code session (or after /reload-plugins), not in running ones.".to_string(),
-    ];
     match scope {
         Scope::Project => {
             notes.push("Project settings are committed with the repo, so this changes it for everyone.".into())

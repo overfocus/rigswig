@@ -19,6 +19,10 @@ hand first). Codex is read-only for now: its `config.toml` needs an editor that 
 1. **Plan** (`rigswig-core`, which has no way to write): the change is applied to a copy of the file in memory, and the
    whole setup is resolved again over that copy, so the page shows the exact file, the diff, the context budget before
    and after, and whether the change takes effect at all (a higher layer may still decide, and the page says so).
+   The file keeps its own layout: only the member that changes is edited in the text (its value replaced, or a member
+   added after the last one with the separators the object already uses, or removed with its comma), and the edit is
+   kept only if the result reads back as exactly the intended settings. A file it cannot edit that way (a key written
+   twice, say) is written whole, pretty-printed, and the plan says its layout will change. A new file is pretty-printed.
 2. **Apply** (the binary): only if the file is byte for byte what the plan saw. The old file is saved to
    `~/.rigswig/backups/`, the new one is written to a temporary file beside it and renamed over it, so a crash leaves
    either the old file or the new one, never half of each.
