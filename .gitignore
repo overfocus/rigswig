@@ -3,3 +3,4 @@ planning/
 .DS_Store
 *.log
 vscode/*.vsix
+.env

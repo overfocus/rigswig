@@ -1,0 +1,63 @@
+name: extension-publish
+
+# The editor extension (vscode/) to its two registries: by hand, or when a release is published with a new
+# extension version. Neither the Marketplace nor Open VSX supports trusted publishing - each registry uses a
+# stored personal access token in its own environment (docs/EDITOR-REGISTRIES.md).
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  marketplace:
+    if: github.repository == 'overfocus/rigswig'
+    runs-on: ubuntu-latest
+    environment: marketplace
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: node vscode/test.mjs
+      - name: Publish (nothing to do when the manifest's version is already there)
+        run: |
+          cd vscode
+          if out="$(npx -y @vscode/vsce publish -p "$VSCE_PAT" 2>&1)"; then
+            echo "$out"
+          else
+            echo "$out"
+            echo "$out" | grep -qi "already" || exit 1
+            echo "already on the marketplace: nothing to do"
+          fi
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+
+  openvsx:
+    # The Open VSX token is the maintainer step still pending (docs/EDITOR-REGISTRIES.md step 2): this job
+    # starts publishing the day the OVSX_TOKEN secret lands.
+    if: ${{ secrets.OVSX_TOKEN != '' }}
+    runs-on: ubuntu-latest
+    environment: openvsx
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: node vscode/test.mjs
+      - name: Publish (the namespace exists after the first run)
+        run: |
+          cd vscode
+          npx -y ovsx create-namespace kftcda --pat "$OVSX_TOKEN" || true
+          if out="$(npx -y ovsx publish --pat "$OVSX_TOKEN" 2>&1)"; then
+            echo "$out"
+          else
+            echo "$out"
+            echo "$out" | grep -qi "already" || exit 1
+            echo "already on open vsx: nothing to do"
+          fi
+        env:
+          OVSX_TOKEN: ${{ secrets.OVSX_TOKEN }}

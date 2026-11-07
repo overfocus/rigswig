@@ -34,19 +34,21 @@ npm gate.
 - Environments `marketplace` and `openvsx`, each with the required-reviewer gate the `crates-io`/`npm`
   environments carry.
 
-## Step 4 — repo: the publish jobs (wire when the secrets land)
+## Step 4 — repo: the publish jobs (SHIPPED: .github/workflows/extension.yml)
 
-The release workflow gains two jobs after `npm`, mirroring its shape:
+`extension-publish` runs by hand (`workflow_dispatch`) for testing and fires again whenever a release is
+published; each job's tolerance query follows the crates job's "already" rule:
 
-- `marketplace` (`environment: marketplace`):
-  `npx @vscode/vsce package --no-dependencies && npx @vscode/vsce publish -p "$VSCE_PAT"` from `vscode/`, with
-  tolerance: query `GET https://marketplace.visualstudio.com/_apis/gallery/publishers/kftcda/extensions/rigswig`
-  first and skip when the manifest's version is already there (the re-run rule, like the crates job's "already").
-- `openvsx` (`environment: openvsx`): `npx ovsx create-namespace kftcda --pat "$OVSX_TOKEN"` (needed once; the
-  API tolerates an existing namespace — keep the `|| true` off the namespace call and read its output instead),
-  then `npx ovsx publish --pat "$OVSX_TOKEN"`, with the same first-query tolerance against
-  `https://open-vsx.org/api/kftcda/rigswig/<version>`.
-- Both jobs: `node vscode/test.mjs` first, so a manifest edit that breaks the logic cannot publish.
+- `marketplace` (`environment: marketplace`), from `vscode/`: `npx @vscode/vsce publish -p "$VSCE_PAT"`, with
+  `node vscode/test.mjs` first so a manifest edit that breaks the logic cannot publish, and the same-version
+  republish read as "nothing to do".
+- `openvsx` (`environment: openvsx`): `npx -y ovsx create-namespace kftcda --pat "$OVSX_TOKEN" || true`, then
+  `npx -y ovsx publish --pat "$OVSX_TOKEN"`, same tolerance. The job skips itself until the `OVSX_TOKEN`
+  secret exists (step 2 pending).
+
+The `marketplace` environment's required reviewer could not be set over the API (PUT returned 200, the rule did
+not stick): add it once in the UI — Settings → Environments → `marketplace` → Required reviewers — and mirror
+it on `openvsx` when the secret lands.
 
 ## Step 5 — verification loop, every release
 
