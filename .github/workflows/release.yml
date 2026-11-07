@@ -67,6 +67,24 @@ jobs:
           name: npm-${{ matrix.target }}
           path: npm-stage
 
+  # The editor extension: packaged from the manifest, the tag's release carries it as an asset.
+  # Publishing it to the Marketplace and Open VSX stays a maintainer step (docs/EDITOR-REGISTRIES.md).
+  vsix:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: node vscode/test.mjs
+      - name: Package the VSIX
+        run: cd vscode && npx -y @vscode/vsce package --no-dependencies && mv rigswig-*.vsix ../rigswig-vscode-"$GITHUB_REF_NAME".vsix
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vsix
+          path: rigswig-vscode-*.vsix
+
   release:
     needs: build
     runs-on: ubuntu-latest
@@ -75,8 +93,8 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          # Only the release tarballs: the npm packages are the `npm` job's to publish.
-          pattern: binary-*
+          # Only the release tarballs and the extension: the npm packages are the `npm` job's to publish.
+          pattern: "{binary-*,vsix}"
           path: dist
           merge-multiple: true
       - name: Checksums
