@@ -236,7 +236,7 @@ fn audit_returns_findings_and_tools_lists_the_harnesses() {
         .expect("the harness list");
     let ids: Vec<&str> = list.iter().map(|t| t["id"].as_str().unwrap_or_default()).collect();
     assert!(ids.contains(&"claude-code"));
-    assert!(ids.contains(&"pi"), "the newest adapter rides along");
+    assert!(ids.contains(&"omp"), "the newest adapter rides along");
 }
 
 #[test]

@@ -1,7 +1,6 @@
 [
   "ai",
   "ai-agents",
-  "agents",
   "coding-agent",
   "llm",
   "context",
@@ -28,5 +27,6 @@
   "hermes-agent",
   "huggingface",
   "ollama",
-  "pi-coding-agent"
+  "pi-coding-agent",
+  "oh-my-pi"
 ]
