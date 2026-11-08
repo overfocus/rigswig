@@ -45,7 +45,7 @@ if (!live) {
 
 // The status read parses and keeps the numbers the status bar shows.
 const parsed = parseStatus(text);
-assert.ok(['claude-code', 'codex', 'copilot', 'cursor', 'gemini', 'hf', 'hermes', 'ollama', 'devin', 'dsh', 'deepseek', 'pi'].includes(parsed.tool), parsed.tool);
+assert.ok(['claude-code', 'codex', 'copilot', 'cursor', 'gemini', 'hf', 'hermes', 'ollama', 'devin', 'dsh', 'deepseek', 'pi', 'omp'].includes(parsed.tool), parsed.tool);
 assert.ok(typeof parsed.chars === 'number' && parsed.chars >= 0, 'chars');
 assert.equal(typeof parsed.tokens.method, 'string');
 assert.ok(parsed.tokens.value >= parsed.tokens.low, `value below low: ${JSON.stringify(parsed.tokens)}`);

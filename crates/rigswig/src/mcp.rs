@@ -201,7 +201,7 @@ fn tools_list() -> Value {
       "description": "What a coding-agent session in a repo loads before you type: instructions, skills, agents, hooks and MCP servers with their sizes and origins, for one harness (default: the one with the most evidence here). Full JSON detail.",
       "inputSchema": { "type": "object", "properties": {
           "repo": { "type": "string", "description": "The repo folder (default: the process's working directory)" },
-          "tool": { "type": "string", "description": "The harness id, e.g. claude-code, codex, cursor, gemini, hermes, ollama, devin, dsh, deepseek, pi" },
+          "tool": { "type": "string", "description": "The harness id, e.g. claude-code, codex, cursor, gemini, hermes, ollama, devin, dsh, deepseek, pi, omp" },
           "without": { "type": "array", "items": { "type": "string" }, "description": "What to take out before totalling: a plugin (name@marketplace), a layer (layer:user), a kind and name (skill:deploy) or an item id" }
       }, "required": [] } },
     { "name": "check",

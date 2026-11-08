@@ -195,7 +195,7 @@ test('npm and the editor extension carry one keyword list, with every harness an
   // One keyword per harness rigswig reads (docs/adapters/), so a new adapter cannot ship unsearchable.
   const harness = { 'claude-code': 'claude-code', codex: 'codex', copilot: 'copilot', cursor: 'cursor', 'deepseek-cli': 'deepseek',
     devin: 'devin', dsh: 'deepseek', gemini: 'gemini-cli', hermes: 'hermes-agent', hf: 'huggingface', ollama: 'ollama',
-    pi: 'pi-coding-agent' };
+    pi: 'pi-coding-agent', omp: 'oh-my-pi' };
   for (const doc of readdirSync(join(ROOT, 'docs', 'adapters')).filter((f) => f.endsWith('.md'))) {
     const id = doc.replace(/\.md$/, '');
     assert.ok(harness[id], `docs/adapters/${doc}: add its harness to npm/keywords.json and to this map`);
