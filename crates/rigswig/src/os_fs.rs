@@ -89,6 +89,10 @@ impl Fs for OsFs {
     fn canonicalize(&self, path: &Path) -> io::Result<PathBuf> {
         std::fs::canonicalize(path)
     }
+
+    fn modified(&self, path: &Path) -> io::Result<std::time::SystemTime> {
+        std::fs::metadata(path)?.modified()
+    }
 }
 
 fn emit(line: &[u8], too_long: bool, each: &mut dyn FnMut(Option<&str>)) {

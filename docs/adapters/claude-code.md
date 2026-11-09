@@ -154,3 +154,14 @@ Opt-in per run and metadata only. [USAGE.md](../USAGE.md) lists every field read
     window (`../USAGE.md` lists where it counts).
 - **Not modelled:** skills and commands typed as `/name` (they are in message text, which is not read), hook runs,
   and sessions whose working folder is outside the repo.
+
+## Live sessions (the default pick)
+
+Claude Code writes each session's log into `~/.claude/projects/<repo folder>/`, named after the working folder:
+every character that is not an ASCII letter or digit becomes `-` (**inferred**: the folder names the tool writes;
+the docs never say). A session running right now keeps rewriting its log, so the pick counts the `.jsonl` files in
+the repo's folder — by modification time, within 15 minutes — and one dash in front of the repo's name (a
+subfolder's sessions, and `<session>`/ and `<session>/subagents/` below those), reading folder names, kinds and
+times only, never a file opened. A sibling whose name merely extends the repo's (`repo2` after `repo`) is not
+counted, so the claim errs towards "not this repo". The same folder the [usage reader](../USAGE.md) opens; the
+pick touches none of it.

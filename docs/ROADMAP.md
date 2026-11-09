@@ -112,6 +112,15 @@ and docs) asked whether the other harnesses can be read to the same bar as [USAG
 Until a harness has its reader, `usage` keeps refusing it. Ollama and the Hugging Face CLI will refuse with a clearer
 reason: they keep no sessions.
 
+## Next: session detection from more harnesses
+
+The default picker knows a live session for Claude Code (its session folder names the repo) and Hermes (the
+daemon's home is active — machine-wide only, since its session database never leaves the home). The mechanism, the
+pick rules and what each harness can prove from file names, kinds and modification times alone are scoped in the
+2026-11-09 assessment. The remaining waves: gemini-cli and dsh (their folders also name the repo), codex and
+copilot (machine-wide), and the decision on Hermes' database read. Later: a heartbeat file each harness's hooks can
+append to, for exact per-repo claims on the machine-only ones.
+
 ## Later
 
 - Write mode for Codex (`config.toml` with comments kept) and for more kinds (skills, hooks) where the tool
@@ -124,6 +133,9 @@ reason: they keep no sessions.
 
 ## Not in scope
 
-Session monitoring, reading session content (`usage` reads metadata only: [USAGE.md](USAGE.md)), writing or
+Watching a running agent (processes, ports, activity streams), reading session content (`usage` reads metadata
+only: [USAGE.md](USAGE.md); the one exception is the default picker's is-a-session-live look, which reads session
+folders' file names, kinds and modification times and never a file — adapter pages carry each harness's artifacts,
+and `--no-session` switches it off), writing or
 syncing configuration, testing MCP servers, any network call other than
 the opt-in `--github` download.

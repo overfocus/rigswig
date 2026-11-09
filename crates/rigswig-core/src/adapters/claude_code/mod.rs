@@ -10,9 +10,10 @@ mod usage;
 
 use std::path::{Path, PathBuf};
 
-use crate::adapter::{Adapter, Ctx, Detection};
+use crate::adapter::{Adapter, Ctx, Detection, SessionClaim};
 use crate::adapters::build::Build;
-use crate::model::{Harness, NotMeasured, Os};
+use crate::fs::EntryKind;
+use crate::model::{Harness, NotMeasured, Os, SessionScope};
 
 pub const ID: &str = "claude-code";
 pub const ADAPTER_VERSION: &str = "0.1.0";
@@ -34,6 +35,49 @@ pub fn system_dir(os: Os) -> PathBuf {
         Os::Windows => PathBuf::from(r"C:\Program Files\ClaudeCode"),
         Os::Linux | Os::Other => PathBuf::from("/etc/claude-code"),
     }
+}
+
+/// The projects-folder name of a working directory: every character that is not an ASCII letter or digit becomes
+/// `-` (**inferred** — the folder names Claude Code writes; the docs never say). `/Users/me/my repo` becomes
+/// `-Users-me-my-repo`.
+pub fn project_slug(path: &Path) -> String {
+    path.to_string_lossy().chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect()
+}
+
+/// Whether a projects-folder entry is this repo's sessions: the repo's slug itself, or the slug with one more
+/// dash in front (a subfolder's sessions). A sibling whose name extends the repo's (`my-repo2` after `my-repo`)
+/// is not matched, so a claim always errs towards "not this repo".
+fn folder_is_repo(folder: &str, slug: &str) -> bool {
+    match folder.strip_prefix(slug) {
+        Some("") => true,
+        Some(rest) => rest.starts_with('-'),
+        None => false,
+    }
+}
+
+/// The newest `.jsonl` under one session folder, down to two subfolder levels (<session>/<subfolder>/file is the
+/// real shape: a session's log beside its `subagents/`), and how many there are. Only names, kinds and
+/// modification times: no file is opened.
+fn jsonl_activity(fs: &dyn crate::fs::Fs, root: &Path) -> (Option<std::time::SystemTime>, usize) {
+    let mut latest = None;
+    let mut n = 0;
+    let mut stack = vec![(root.to_path_buf(), 0u8)];
+    while let Some((dir, depth)) = stack.pop() {
+        for e in fs.read_dir(&dir).unwrap_or_default() {
+            let p = dir.join(&e.name);
+            match e.kind {
+                EntryKind::File if e.name.ends_with(".jsonl") => {
+                    n += 1;
+                    if let Ok(t) = fs.modified(&p) {
+                        latest = latest.max(Some(t));
+                    }
+                }
+                EntryKind::Dir if depth < 2 => stack.push((p, depth + 1)),
+                _ => {}
+            }
+        }
+    }
+    (latest, n)
 }
 
 impl Paths {
@@ -75,6 +119,35 @@ impl Adapter for ClaudeCode {
             }
         }
         Detection { score, evidence }
+    }
+
+    /// The session look: the session-log files under the config's `projects/` folder (`docs/USAGE.md`, "What is
+    /// read"). Claude Code names a session folder after the repo it runs in and rewrites the logs as a session
+    /// works, so a fresh `.jsonl` under this repo's folder (or a subfolder's — one dash in front) is a
+    /// repo-scoped claim. Metadata only: no file is ever opened.
+    fn session(&self, ctx: &Ctx) -> Option<SessionClaim> {
+        let p = Paths::new(ctx);
+        let projects = p.cfg.join("projects");
+        if !ctx.fs.exists(&projects) {
+            return None;
+        }
+        let slug = project_slug(&ctx.repo);
+        let mut latest = None;
+        let mut files = 0;
+        for e in ctx.fs.read_dir(&projects).unwrap_or_default() {
+            if e.kind != EntryKind::Dir || !folder_is_repo(&e.name, &slug) {
+                continue;
+            }
+            let (l, n) = jsonl_activity(ctx.fs, &projects.join(&e.name));
+            latest = latest.max(l);
+            files += n;
+        }
+        latest?;
+        Some(SessionClaim {
+            scope: SessionScope::Repo,
+            latest: Some(latest.unwrap()),
+            evidence: vec![format!("projects/{slug}: {files} session file{}", if files == 1 { "" } else { "s" })],
+        })
     }
 
     fn plan(&self, ctx: &Ctx, change: &crate::change::Change) -> Result<crate::change::Plan, String> {

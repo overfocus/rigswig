@@ -32,6 +32,17 @@ function parseStatus(text) {
     if (typeof h !== 'object' || h === null || !h.tool || typeof h.tool.id !== 'string') {
         throw new TypeError('not a rigswig harness JSON: no tool.id');
     }
+    // The live-session claim, when the run followed one. Read when present, skipped when malformed — like every
+    // optional member here: scope is 'repo' or 'machine', evidence is string labels.
+    const raw = h.tool.session ?? null;
+    const session =
+        raw !== null &&
+        typeof raw === 'object' &&
+        (raw.scope === 'repo' || raw.scope === 'machine') &&
+        Array.isArray(raw.evidence) &&
+        raw.evidence.every((e) => typeof e === 'string' && e.length > 0)
+            ? { scope: raw.scope, evidence: raw.evidence }
+            : null;
     const chars = h.context?.chars?.value;
     const tokens = h.context?.tokens ?? null;
     if (typeof chars !== 'number' || chars < 0) {
@@ -66,7 +77,7 @@ function parseStatus(text) {
     const warnings = (Array.isArray(h.warnings) ? h.warnings : [])
         .filter((w) => w && typeof w.message === 'string')
         .map((w) => ({ code: str(w.code) ?? '', message: w.message }));
-    return { tool: h.tool.id, chars, tokens, notMeasured, items, layerFiles, warnings };
+    return { tool: h.tool.id, session, chars, tokens, notMeasured, items, layerFiles, warnings };
 }
 
 const SEVERITIES = ['high', 'medium', 'low'];

@@ -68,8 +68,8 @@
         },
         "rigswig.openInBrowser": {
           "type": "boolean",
-          "default": false,
-          "description": "Open the read-only page in the system browser instead of an editor panel (some editors refuse localhost frames)."
+          "default": true,
+          "description": "The read-only page opens in the system browser. Turn this off to open it in an editor panel instead (some editors refuse localhost frames)."
         },
         "rigswig.autoRefresh": {
           "type": "boolean",

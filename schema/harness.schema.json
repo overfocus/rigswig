@@ -94,12 +94,59 @@
             "type": "string"
           },
           "default": []
+        },
+        "session": {
+          "description": "The live session this reading follows, when the default pick preferred one. Absent unless the pick\nfollowed a live session (`--no-session` keeps every pick evidence-only), and always absent on remote\nreadings, which carry nothing from this machine.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Session"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "additionalProperties": false,
       "required": [
         "id",
         "adapterVersion"
+      ]
+    },
+    "Session": {
+      "description": "The live session a reading follows. Labels only, never a session id or a log's text: scope and what was seen.",
+      "type": "object",
+      "properties": {
+        "scope": {
+          "$ref": "#/$defs/SessionScope"
+        },
+        "evidence": {
+          "description": "What the look at session artifacts saw, as short labels.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "scope",
+        "evidence"
+      ]
+    },
+    "SessionScope": {
+      "description": "Where a live session's activity was seen: an artifact that names this repo, or anything on this machine.",
+      "oneOf": [
+        {
+          "description": "The harness's session artifacts name this repo, freshly touched inside the freshness window.",
+          "type": "string",
+          "const": "repo"
+        },
+        {
+          "description": "The harness shows activity on this machine, but its artifacts cannot say which repo.",
+          "type": "string",
+          "const": "machine"
+        }
       ]
     },
     "Target": {
@@ -910,5 +957,5 @@
     }
   },
   "$id": "https://github.com/overfocus/rigswig/blob/main/schema/harness.schema.json",
-  "$comment": "schemaVersion 0.1.0"
+  "$comment": "schemaVersion 0.2.0"
 }

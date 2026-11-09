@@ -105,7 +105,10 @@ These are the point of the tool, and they will be enforced by tests:
   that were called. It never keeps, prints or serves message text, thinking, tool inputs or tool results
   ([what is read, field by field](docs/USAGE.md)). This replaces the earlier "No transcripts" promise
   ([what changed](docs/USAGE.md#what-changed-in-the-guarantee)). (Claude Code's
-  auto-memory index, `MEMORY.md`, is read and counted in every run because it loads into every session.)
+  auto-memory index, `MEMORY.md`, is read and counted in every run because it loads into every session.) The one
+  look a run makes without asking is the default picker's is-a-session-live check: file names, kinds and
+  modification times of a session folder and the harness home, never a file's contents (`--no-session` keeps every
+  pick evidence-only, and a remote reading carries none of it — it has nothing from this machine).
 - **Private folders stay private.** List them in `~/.rigswig/private.json` (`{"private": ["~/notes"]}`): rigswig
   refuses them as a repo, and `audit --repos` skips them.
 

@@ -24,10 +24,10 @@ nothing twice.
     its file. Items that are overridden or turned off are counted, not listed.
 - **The toolbar**: an open-page button on the editor's title bar whenever a file a harness reads is open
   (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `.mcp.json`, a `SKILL.md`, anything under `.claude/`, `.codex/`,
-  `.cursor/`…), next to refresh and open on the rigswig view and on the page panel itself.
+  `.cursor/`…), next to refresh and open on the rigswig view (and on the page panel, when the page opens in one).
 - **The Problems panel**: each finding on the files inside the open folders it names (`rigswig.problems`).
-- **The page**: the same local page `rigswig ui` serves, in a panel (or in a browser with `rigswig.openInBrowser`),
-  compare included, always read-only.
+- **The page**: the same local page `rigswig ui` serves, in the system browser by default (an editor panel with
+  `rigswig.openInBrowser` off), compare included, always read-only.
 
 It keeps itself current: creating, changing or deleting a file the harness reads (`CLAUDE.md`, `AGENTS.md`,
 `.claude/`, `.codex/`, a skill, a settings file in your home folder…) re-reads the bill and re-runs the audit,
@@ -52,7 +52,7 @@ log** shows every CLI run with its exit code and time.
 | `rigswig.autoRefresh` | `true` | Re-read when a file the harness loads changes. |
 | `rigswig.problems` | `workspace` | Findings in the Problems panel: on files in the open folders, on `all` files they name, or `off`. |
 | `rigswig.statusBar` | `true` | Show the bill in the status bar. |
-| `rigswig.openInBrowser` | `false` | Open the page in the system browser instead of a panel (some editors refuse localhost frames). |
+| `rigswig.openInBrowser` | `true` | The page opens in the system browser; turn off to open it in an editor panel instead (some editors refuse localhost frames). |
 
 ## How it reads, and what it never does
 

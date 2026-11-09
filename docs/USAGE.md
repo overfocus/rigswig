@@ -15,6 +15,12 @@ this page says exactly what is read and what is not.
 | rigswig never opens session logs. | rigswig opens a repo's session logs only in a run that asks for them: `rigswig usage`, or `rigswig audit --usage`. Every other command (`status`, `check`, a plain `audit`, `compare`, `tools`, `ui`, `mcp`) does not, by test. |
 | | From those logs it keeps metadata only. It never keeps, prints or serves message text, thinking, tool inputs or tool results. |
 
+One look happens without a run asking, and it reads no log: the default harness picker checks a session folder's
+and the harness home's file names, kinds and modification times to see whether a harness is live — 15 minutes of
+recency, a claim that names the repo outranking one that only names the machine. `status --no-session` keeps every
+pick evidence-only, and a remote reading carries none of it. Which artifacts each harness keeps is in its adapter
+page (`docs/adapters/<id>.md`).
+
 Neither the page nor the MCP server reads session logs. An agent connected to `rigswig mcp` cannot ask for them, and
 the page has no switch that turns it on.
 

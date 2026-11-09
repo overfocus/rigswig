@@ -50,7 +50,7 @@ this row shows the server like any other MCP server, tool listings unmeasured.
 | `check` | whether a checkout passes CI limits; `passed` is the verdict | `repo`, `tool`, `maxTokens`, `maxItemTokens`, `noWarnings`, `without` |
 | `audit` | ranked findings, each with a saving and a fix | `repo`, `tool` |
 | `compare` | what differs: two repos with one harness (`repo`, `repoB`, `tool`), or two harnesses on one repo (`repo`, `tools`) | |
-| `tools` | the harnesses rigswig knows, with detection score and evidence | `repo` |
+| `tools` | the harnesses rigswig knows, with detection score, evidence, and any fresh live-session claim | `repo` |
 
 Every result is the tool's JSON, serialised as the content text; a failure inside the tool (a repo that does not
 exist, an unknown harness) is `isError: true` with the message, not a protocol error. Protocol errors are the

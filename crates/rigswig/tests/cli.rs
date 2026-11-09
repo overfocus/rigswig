@@ -628,3 +628,107 @@ fn usage_flags_are_refused_where_they_do_not_belong() {
     let plain = s.run(&["audit", "--repo", repo]);
     assert!(!String::from_utf8_lossy(&plain.stderr).contains("session logs"));
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// The live-session pick: status/audit/check default to what is actually running, and the probe that finds it
+// is metadata only — folder names, kinds and modification times, never an opened file.
+
+use std::time::{Duration, SystemTime};
+
+/// Stamp an existing file with a modification time `ago` seconds before now (fresh when ago is small).
+fn stamp_ago(path: &std::path::Path, ago: u64) {
+    let f = std::fs::OpenOptions::new().append(true).open(path).expect("reopen for set_times");
+    f.set_times(std::fs::FileTimes::new().set_modified(SystemTime::now() - Duration::from_secs(ago)))
+        .expect("set_times");
+}
+
+/// One fresh Hermes-home artifact set: the daemon is up and a session is talking to it.
+fn hermes_home_active(s: &Sandbox, ago: u64) {
+    s.write("home/.hermes/state.db-wal", "");
+    s.write("home/.hermes/gateway_state.json", "{}");
+    stamp_ago(&s.0.join("home/.hermes/state.db-wal"), ago);
+    stamp_ago(&s.0.join("home/.hermes/gateway_state.json"), ago);
+}
+
+/// The projects-folder name of a repo path, the way Claude Code writes it: every character that is not an ASCII
+/// letter or digit becomes `-` (docs/adapters/claude-code.md, **inferred**).
+fn claude_slug(repo: &std::path::Path) -> String {
+    repo.to_string_lossy().chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect()
+}
+
+/// One fresh Claude Code session log in the repo's own projects folder. The slug comes from the canonicalized
+/// repo path (the CLI resolves a repo through its symlinks first).
+fn claude_session_in_repo(s: &Sandbox, ago: u64) {
+    let repo = std::fs::canonicalize(s.0.join("repo")).unwrap();
+    let slug = claude_slug(&repo);
+    let rel = format!("home/.claude/projects/{slug}/live.jsonl");
+    s.write(&rel, r#"not a log the probe may ever open: PLANTED-CONTENT-CANARY"#);
+    stamp_ago(&s.0.join(&rel), ago);
+}
+
+#[test]
+fn a_live_session_moves_the_default_pick() {
+    let s = Sandbox::new("session");
+    s.write("repo/CLAUDE.md", "the repo is set up for claude-code");
+    hermes_home_active(&s, 30);
+    let out = s.status(&[]);
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(text.contains("hermes in repo"), "first line bills the live session: {text}");
+    assert!(text.contains("Session   active on this machine"), "the annotation says the pick followed it: {text}");
+    assert!(!text.contains("claude-code in repo"), "{text}");
+    // --no-session puts the evidence-only pick back.
+    let plain = s.status(&["--no-session"]);
+    let text = String::from_utf8_lossy(&plain.stdout);
+    assert!(text.contains("claude-code in repo"), "--no-session restores the repo's own evidence: {text}");
+    assert!(!text.contains("Session   "), "{text}");
+}
+
+#[test]
+fn a_stale_session_does_not_move_anything() {
+    let s = Sandbox::new("session-stale");
+    s.write("repo/CLAUDE.md", "claude-code's");
+    hermes_home_active(&s, 16 * 60); // outside the 15-minute window
+    let out = s.status(&[]);
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(text.contains("claude-code in repo"), "{text}");
+    assert!(text.contains("hermes"), "the run still lists what it edged out: {text}");
+}
+
+#[test]
+fn the_extension_reads_the_same_pick_in_json() {
+    let s = Sandbox::new("session-json");
+    s.write("repo/CLAUDE.md", "claude-code's own file");
+    hermes_home_active(&s, 30);
+    let out = s.status(&["--json"]);
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let h: rigswig_core::model::Harness = serde_json::from_slice(&out.stdout).expect("valid harness JSON");
+    assert_eq!(rigswig_core::check::contract_errors(&h), Vec::<String>::new());
+    assert_eq!(h.tool.id, "hermes");
+    let session = h.tool.session.expect("the JSON carries the claim the pick followed");
+    assert_eq!(session.scope, rigswig_core::model::SessionScope::Machine);
+    assert!(!session.evidence.is_empty());
+    // An explicit --tool never carries a claim.
+    let out = s.status(&["--json", "--tool", "claude-code"]);
+    let h: rigswig_core::model::Harness = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(h.tool.id, "claude-code");
+    assert!(h.tool.session.is_none());
+}
+
+#[test]
+fn a_session_log_below_the_repo_claims_the_repo() {
+    let s = Sandbox::new("session-repo");
+    hermes_home_active(&s, 30);
+    claude_session_in_repo(&s, 30);
+    let out = s.status(&["--json"]);
+    let h: rigswig_core::model::Harness = serde_json::from_slice(&out.stdout).expect("valid harness JSON");
+    assert_eq!(h.tool.id, "claude-code", "repo-scoped beats machine-scoped");
+    let session = h.tool.session.expect("the claim rides along");
+    assert_eq!(session.scope, rigswig_core::model::SessionScope::Repo);
+    assert!(session.evidence.iter().any(|e| e.ends_with("session file")), "have {:#?}", session.evidence);
+    // And the planted content still never reaches anything rigswig prints or keeps.
+    let text = s.status(&[]);
+    assert!(text.status.success());
+    let all = [&text.stdout[..], &text.stderr[..]].concat();
+    assert!(!String::from_utf8_lossy(&all).contains("PLANTED-CONTENT-CANARY"), "session-log text never prints");
+}

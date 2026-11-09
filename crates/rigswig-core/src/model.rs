@@ -14,7 +14,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// The version of the JSON contract (`schema/harness.schema.json`), not of the crate.
-pub const SCHEMA_VERSION: &str = "0.1.0";
+pub const SCHEMA_VERSION: &str = "0.2.0";
 
 /// A layer's id, unique within one [`Harness`] (e.g. `user`, `project`, `plugin:formatter@example-market`).
 pub type LayerId = String;
@@ -58,6 +58,30 @@ pub struct Tool {
     /// Why the adapter thinks this tool is in use here (files found), as short labels.
     #[serde(default)]
     pub detected_by: Vec<String>,
+    /// The live session this reading follows, when the default pick preferred one. Absent unless the pick
+    /// followed a live session (`--no-session` keeps every pick evidence-only), and always absent on remote
+    /// readings, which carry nothing from this machine.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session: Option<Session>,
+}
+
+/// Where a live session's activity was seen: an artifact that names this repo, or anything on this machine.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum SessionScope {
+    /// The harness's session artifacts name this repo, freshly touched inside the freshness window.
+    Repo,
+    /// The harness shows activity on this machine, but its artifacts cannot say which repo.
+    Machine,
+}
+
+/// The live session a reading follows. Labels only, never a session id or a log's text: scope and what was seen.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct Session {
+    pub scope: SessionScope,
+    /// What the look at session artifacts saw, as short labels.
+    pub evidence: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]

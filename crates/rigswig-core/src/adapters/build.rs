@@ -325,6 +325,7 @@ impl<'a> Build<'a> {
         Harness {
             schema_version: SCHEMA_VERSION.into(),
             tool: Tool {
+                session: None,
                 id: self.tool.into(),
                 adapter_version: adapter_version.into(),
                 tool_version_assumed: tool_version_assumed.map(String::from),

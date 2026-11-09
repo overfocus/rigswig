@@ -16,10 +16,11 @@ use crate::{Remote, expand, home, load_remote, private_folders, real_path, this_
 pub fn repo(
     path: &Path,
     tool: Option<&str>,
+    session: bool,
     usage: Option<Option<&str>>,
     progress: &mut dyn FnMut(Progress),
 ) -> Result<(Audit, u8), String> {
-    with_harness(path, tool, |a, ctx, score| {
+    let ((out, score), _) = with_harness(path, tool, session, |a, ctx, score| {
         progress(Progress { stage: "Reading the harness".into(), fraction: 0.0 });
         let (signals, note) = audit::user_signals(ctx);
         let h = a.resolve(ctx);
@@ -33,7 +34,8 @@ pub fn repo(
         });
         out.notes.extend(notes);
         (out, score)
-    })
+    })?;
+    Ok((out, score))
 }
 
 /// Audit a repo that is not here (GitHub or an archive file): in memory, with an empty home and no environment. The
@@ -122,7 +124,9 @@ pub fn fleet(patterns: &[String], tool: Option<&str>, progress: &mut dyn FnMut(P
                 fraction: (i as f64 + x.fraction) / n as f64,
             })
         };
-        match repo(p, tool, None, &mut each) {
+        // A fleet reads many repos at once: the pick stays with each repo's own files, however live a session is
+        // (repo-scoped claims could follow, but machine-scoped ones cannot say which repo they ran in).
+        match repo(p, tool, false, None, &mut each) {
             // A repo is a git checkout or a folder with the harness's own files; the user config folder alone (which
             // every folder sees) does not make one.
             Ok((a, score)) if score > 50 || p.join(".git").exists() => audits.push(a),
@@ -329,7 +333,8 @@ fn repo_json(repo: &Path, tool: &str, progress: &mut dyn FnMut(Progress)) -> Res
 }
 
 fn repo_audit(repo: &Path, tool: &str, progress: &mut dyn FnMut(Progress)) -> Result<Audit, String> {
-    self::repo(repo, Some(tool), None, progress).map(|(a, _)| a)
+    // The page's audit is the same read the status bar does: it follows the default pick's live-session claim.
+    self::repo(repo, Some(tool), true, None, progress).map(|(a, _)| a)
 }
 
 #[cfg(test)]

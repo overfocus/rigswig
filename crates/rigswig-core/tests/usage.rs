@@ -335,6 +335,10 @@ struct Recording<'a> {
 }
 
 impl Fs for Recording<'_> {
+    fn modified(&self, path: &Path) -> std::io::Result<std::time::SystemTime> {
+        self.inner.modified(path)
+    }
+
     fn read_to_string(&self, path: &Path) -> io::Result<String> {
         self.seen.borrow_mut().push(path.into());
         self.inner.read_to_string(path)

@@ -52,6 +52,33 @@ assert.ok(parsed.tokens.value >= parsed.tokens.low, `value below low: ${JSON.str
 assert.ok(parsed.tokens.low <= parsed.tokens.high, 'low above high');
 assert.ok(parsed.tokens.high >= parsed.tokens.value, 'high below value');
 
+// The live-session claim, when the run followed one: a valid shape, or null.
+if (parsed.session) {
+    assert.ok(parsed.session.scope === 'repo' || parsed.session.scope === 'machine', String(parsed.session.scope));
+    assert.ok(parsed.session.evidence.length > 0, JSON.stringify(parsed.session));
+}
+
+// The session claim rides `tool.session` when the pick followed one; malformed and absent are both null.
+const harnessWith = (tool) =>
+    JSON.stringify({
+        schema_version: '1.2.3',
+        tool,
+        target: { repo: 'repo' },
+        context: { chars: { value: 40, confidence: 'exact' }, tokens: { method: 'chars/4', value: 10, low: 8, high: 12 } },
+    });
+const liveRead = parseStatus(
+    harnessWith({ id: 'hermes', adapterVersion: '9.9.9', session: { scope: 'machine', evidence: ['Hermes home: state.db-wal'] } }),
+);
+assert.deepEqual(liveRead.session, { scope: 'machine', evidence: ['Hermes home: state.db-wal'] });
+assert.deepEqual(
+    parseStatus(harnessWith({ id: 'hermes', session: { scope: 'repo', evidence: ['projects/x: 1 session file'] } })).session,
+    { scope: 'repo', evidence: ['projects/x: 1 session file'] },
+);
+assert.equal(parseStatus(harnessWith({ id: 'hermes', session: { scope: 'weird', evidence: [] } })).session, null);
+assert.equal(parseStatus(harnessWith({ id: 'hermes', session: { scope: 'machine' } })).session, null);
+assert.equal(parseStatus(harnessWith({ id: 'hermes', session: 'yes' })).session, null);
+assert.equal(parseStatus(harnessWith({ id: 'hermes' })).session, null);
+
 // The audit read parses, and a finding without a `saving` adds nothing to the saveable total.
 const aud = parseAudit(
     JSON.stringify({
