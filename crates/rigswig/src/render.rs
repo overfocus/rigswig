@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 use std::fmt::Write;
 
-use rigswig_core::model::{Harness, ItemDetail, LoadWhen, McpState};
+use rigswig_core::model::{Harness, ItemDetail, LoadWhen, McpState, SessionScope};
 use rigswig_core::read::redact::printable;
 
 const KINDS: &[(&str, &str)] = &[
@@ -43,6 +43,14 @@ pub fn text(h: &Harness) -> String {
     };
     let model = set_by("model").unwrap_or_else(|| "the tool's default (nothing sets it)".into());
     let _ = writeln!(o, "  Model     {model}");
+    if let Some(s) = &h.tool.session {
+        let scope = match s.scope {
+            SessionScope::Repo => "this repo",
+            SessionScope::Machine => "this machine",
+        };
+        let ev = s.evidence.iter().map(|e| p(e)).collect::<Vec<_>>().join(", ");
+        let _ = writeln!(o, "  Session   active on {scope} ({ev}) — this reading follows the live session");
+    }
     if let Some(provider) = set_by("provider") {
         let _ = writeln!(o, "  Provider  {provider}");
     }

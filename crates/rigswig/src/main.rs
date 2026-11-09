@@ -12,8 +12,8 @@ use serde_json::Value;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use rigswig_core::adapter::{Adapter, Ctx};
-use rigswig_core::model::Os;
+use rigswig_core::adapter::{Adapter, Ctx, PickReason};
+use rigswig_core::model::{Os, SessionScope};
 use rigswig_core::read::redact::printable;
 
 fn usage() -> String {
@@ -21,15 +21,16 @@ fn usage() -> String {
         "rigswig {}
 
 Usage:
-  rigswig status [--repo <path>] [--tool <id>] [--json]
+  rigswig status [--repo <path>] [--tool <id>] [--no-session] [--json]
                                             what a coding-agent session in a repo loads, and where each piece came from
-                                            (--tool picks the harness; by default the one with the most evidence,
-                                            and on a tie the first of claude-code, codex — when no repo
-                                            evidence picks one, the reading is shown as a machine guess and the
-                                            installed harnesses are listed)
-  rigswig check [--repo <path>] [--tool <id>] [--max-tokens <n>] [--max-item-tokens <n>] [--no-warnings] [--json]
+                                            (--tool picks the harness; by default the one with the most evidence, unless
+                                            a live session claims this machine: a claim naming this repo beats one naming
+                                            only the machine, and both beat the repo's files; --no-session keeps every
+                                            pick evidence-only; when no repo evidence picks one, the reading is shown as
+                                            a machine guess and the installed harnesses are listed)
+  rigswig check [--repo <path>] [--tool <id>] [--no-session] [--max-tokens <n>] [--max-item-tokens <n>] [--no-warnings] [--json]
                                             for CI: exits 1 when a limit is passed (n may be 40000, 40k or 1m)
-  rigswig audit [--repo <path>] [--tool <id>] [--json]
+  rigswig audit [--repo <path>] [--tool <id>] [--no-session] [--json]
                                             ranked findings: what costs context and nothing here references, plugins the
                                             repo's files do not call for, instruction files over budget, repeated text,
                                             dead references and piled-up permission rules; each with a saving and a fix
@@ -53,7 +54,7 @@ Usage:
   rigswig tools [--repo <path>]             the harnesses rigswig knows, and the evidence for each in this repo
   rigswig schema                            the JSON Schema of `status --json`
 
-  rigswig ui [--repo <path>] [--tool <id>] [--port <n>] [--idle <minutes>] [--allow-writes] [--allow-github]
+  rigswig ui [--repo <path>] [--tool <id>] [--no-session] [--port <n>] [--idle <minutes>] [--allow-writes] [--allow-github]
                                             the same as a local page (stops after --idle minutes, default 30); read-only
                                             unless --allow-writes, which lets it turn plugins and project MCP servers on
                                             and off, with a preview, a backup and undo; --allow-github lets the
@@ -243,11 +244,13 @@ fn status(args: &[String], mode: Mode) -> ExitCode {
     let mut removals: Vec<String> = Vec::new();
     let mut allow_writes = false;
     let mut allow_github = false;
+    let mut no_session = false;
     let mut remote: Option<Remote> = None;
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
             "--json" => json = true,
+            "--no-session" => no_session = true,
             "--repo" => match it.next() {
                 Some(p) if !p.starts_with("--") => repo = Some(PathBuf::from(p)),
                 _ => return fail("--repo needs a path"),
@@ -327,9 +330,20 @@ fn status(args: &[String], mode: Mode) -> ExitCode {
     if mode == Mode::Tools {
         match detections(&repo) {
             Ok(list) => {
-                for (id, score, evidence) in list {
-                    let ev = if evidence.is_empty() { "no sign of it here".into() } else { evidence.join(", ") };
-                    println!("{:<12} {:>3}  {}", id, score, ev);
+                for row in list {
+                    let ev =
+                        if row.evidence.is_empty() { "no sign of it here".into() } else { row.evidence.join(", ") };
+                    let live = row
+                        .session
+                        .map(|c| {
+                            let scope = match c.scope {
+                                SessionScope::Repo => "live session (this repo)",
+                                SessionScope::Machine => "live session (this machine)",
+                            };
+                            format!("  · {scope}")
+                        })
+                        .unwrap_or_default();
+                    println!("{:<12} {:>3}  {}{}", row.id, row.score, ev, printable(&live));
                 }
             }
             Err(e) => return fail(&e),
@@ -337,15 +351,28 @@ fn status(args: &[String], mode: Mode) -> ExitCode {
         return ExitCode::SUCCESS;
     }
 
+    // The default pick, shared by the page and the reading: `--tool` is explicit; otherwise the harness with the
+    // most evidence — unless a live session claims this run (a repo-scoped claim beats a machine-scoped one, and
+    // both beat the repo's own files; `--no-session` keeps the evidence-only order).
+    let pick = match rigswig_core::adapter::pick(
+        &scored,
+        &rigswig_core::adapter::PickCtx { fs: &os_fs::OsFs, home: home.clone(), repo: repo.clone(), os: this_os() },
+        &env_of,
+        tool.as_deref(),
+        !no_session,
+        std::time::SystemTime::now(),
+    ) {
+        Ok(p) => p,
+        Err(e) => return fail(&e),
+    };
+
     if mode == Mode::Ui {
         if let Some(t) = &tool {
             if !scored.iter().any(|(a, _)| a.id() == t) {
                 return fail(&format!("no harness called {t} (see `rigswig tools`)"));
             }
         }
-        let default = tool.clone().unwrap_or_else(|| {
-            scored.iter().rev().max_by_key(|(_, d)| d.score).expect("an adapter").0.id().to_string()
-        });
+        let default = tool.clone().unwrap_or_else(|| pick.adapter.id().to_string());
         let choices: Vec<ui::ToolChoice> = scored
             .iter()
             .map(|(a, d)| ui::ToolChoice {
@@ -357,7 +384,12 @@ fn status(args: &[String], mode: Mode) -> ExitCode {
         let render = |t: Option<&str>, vs: Option<&str>| {
             let find = |id: &str| scored.iter().find(|(a, _)| a.id() == id).map(|(a, _)| *a);
             let a = find(t.unwrap_or(&default))?;
-            let h = a.resolve(&ctx_for(a));
+            let mut h = a.resolve(&ctx_for(a));
+            // The page's default harness follows the same pick the status bar would; the claim rides along only
+            // when the pick followed a live session, never on an explicitly named tool.
+            if t.is_none() {
+                h = with_session(h, pick.session.as_ref());
+            }
             let other = match vs {
                 Some(v) => Some(find(v)?).map(|b| b.resolve(&ctx_for(b))),
                 None => None,
@@ -462,51 +494,38 @@ fn status(args: &[String], mode: Mode) -> ExitCode {
         };
     }
 
-    // The pick: `--tool` is explicit; otherwise the harness with the most evidence, ties to the first of
-    // `adapters::all()` (Claude Code). When the winner scores at most 50, nothing in the repo points at any
-    // harness we read — the pick is the machine's guess, and the human surface says so.
-    let (chosen, guess) = match &tool {
-        Some(t) => (
-            match scored.iter().find(|(a, _)| a.id() == t) {
-                Some(s) => s,
-                None => return fail(&format!("no harness called {t} (see `rigswig tools`)")),
-            },
-            false,
-        ),
-        None => {
-            let top = scored.iter().rev().max_by_key(|(_, d)| d.score).expect("at least one adapter");
-            let guess = top.1.score <= 50;
-            if guess && !json {
-                let read: Vec<_> = scored.iter().filter(|(_, d)| d.score > 0).collect();
-                if read.is_empty() {
-                    println!("Nothing points at a harness rigswig reads here.");
-                    println!(
-                        "rigswig status --tool <id> reads one directly: {}",
-                        scored.iter().map(|(a, _)| a.id()).collect::<Vec<_>>().join(", ")
-                    );
-                    return ExitCode::SUCCESS;
-                }
-                println!("Picked by this machine's evidence (the repo is set up for no harness we read):");
-                let mut ranked = read.clone();
-                ranked.sort_by_key(|(_, d)| std::cmp::Reverse(d.score));
-                for (a, d) in &ranked {
-                    let ev = if d.evidence.is_empty() {
-                        String::new()
-                    } else {
-                        d.evidence.iter().map(|e| printable(e)).collect::<Vec<_>>().join(", ")
-                    };
-                    if a.id() == top.0.id() {
-                        println!("   {:<11} {:>2}  {}  (reading this one)", a.id(), d.score, ev);
-                    } else {
-                        println!("   {:<11} {:>2}  {}", a.id(), d.score, ev);
-                    }
-                }
-                println!("Rerun with --tool <id> to read a different one.");
-            }
-            (top, guess)
+    // The pick is made; the reading explains why. `--tool` is explicit; the machine-guess case (nothing in the
+    // repo points at any harness we read) prints the ranked evidence before the reading.
+    let guess = pick.reason == PickReason::Guess;
+    if guess && !json {
+        let read: Vec<_> = scored.iter().filter(|(_, d)| d.score > 0).collect();
+        if read.is_empty() {
+            println!("Nothing points at a harness rigswig reads here.");
+            println!(
+                "rigswig status --tool <id> reads one directly: {}",
+                scored.iter().map(|(a, _)| a.id()).collect::<Vec<_>>().join(", ")
+            );
+            return ExitCode::SUCCESS;
         }
-    };
-    let mut h = chosen.0.resolve(&ctx_for(chosen.0));
+        println!("Picked by this machine's evidence (the repo is set up for no harness we read):");
+        let mut ranked = read.clone();
+        ranked.sort_by_key(|(_, d)| std::cmp::Reverse(d.score));
+        for (a, d) in &ranked {
+            let ev = if d.evidence.is_empty() {
+                String::new()
+            } else {
+                d.evidence.iter().map(|e| printable(e)).collect::<Vec<_>>().join(", ")
+            };
+            if a.id() == pick.adapter.id() {
+                println!("   {:<11} {:>2}  {}  (reading this one)", a.id(), d.score, ev);
+            } else {
+                println!("   {:<11} {:>2}  {}", a.id(), d.score, ev);
+            }
+        }
+        println!("Rerun with --tool <id> to read a different one.");
+    }
+    let mut h = pick.adapter.resolve(&ctx_for(pick.adapter));
+    h = with_session(h, pick.session.as_ref());
     if !removals.is_empty() {
         let (w, counts) = rigswig_core::whatif::without(&h, &removals);
         for (pattern, n) in counts {
@@ -523,7 +542,7 @@ fn status(args: &[String], mode: Mode) -> ExitCode {
         // The guess case's ranked list already names every installed harness; the quiet pick's footer
         // lists the others it edged out.
         let others: Vec<&str> =
-            scored.iter().filter(|(a, d)| a.id() != chosen.0.id() && d.score > 0).map(|(a, _)| a.id()).collect();
+            scored.iter().filter(|(a, d)| a.id() != pick.adapter.id() && d.score > 0).map(|(a, _)| a.id()).collect();
         if !others.is_empty() && !guess {
             println!("  Also configured here: {} (rigswig status --tool <id>)", others.join(", "));
         }
@@ -534,13 +553,14 @@ fn status(args: &[String], mode: Mode) -> ExitCode {
 // Picking a harness: the one with the most evidence; on a tie, the first in `adapters::all()` (Claude Code, then
 // Codex). `max_by_key` keeps the last of equal maximums, so every pick runs over the list reversed.
 
-/// Run `f` with `tool` (or the adapter with the most evidence) and its context for `repo`. `f` also gets the
-/// adapter's detection score.
+/// Run `f` with `tool` (or the default pick) and its context for `repo`. `f` also gets the adapter's detection
+/// score. `session`: whether a live session's claim moves the default pick (never an explicit `--tool`).
 fn with_harness<R>(
     repo: &std::path::Path,
     tool: Option<&str>,
+    session: bool,
     f: impl FnOnce(&dyn Adapter, &Ctx, u8) -> R,
-) -> Result<R, String> {
+) -> Result<(R, Option<rigswig_core::adapter::SessionClaim>), String> {
     let repo = real_path(repo).map_err(|_| format!("no such folder: {}", repo.display()))?;
     let home = home().ok_or("the home folder is not set")?;
     refuse_private(&repo, &home)?;
@@ -549,20 +569,37 @@ fn with_harness<R>(
         let env = a.env_vars().iter().filter_map(|k| std::env::var(k).ok().map(|v| ((*k).to_string(), v))).collect();
         Ctx { fs: &os_fs::OsFs, env, home: home.clone(), repo: repo.clone(), os: this_os() }
     };
-    let a = match tool {
-        Some(t) => {
-            adapters.iter().find(|a| a.id() == t).ok_or(format!("no harness called {t} (see `rigswig tools`)"))?
-        }
-        None => adapters.iter().rev().max_by_key(|a| a.detect(&ctx_for(a.as_ref())).score).expect("an adapter"),
-    };
-    let ctx = ctx_for(a.as_ref());
-    let score = a.detect(&ctx).score;
-    Ok(f(a.as_ref(), &ctx, score))
+    let scored: Vec<(&dyn Adapter, rigswig_core::adapter::Detection)> =
+        adapters.iter().map(|a| (a.as_ref(), a.detect(&ctx_for(a.as_ref())))).collect();
+    let base =
+        rigswig_core::adapter::PickCtx { fs: &os_fs::OsFs, home: home.clone(), repo: repo.clone(), os: this_os() };
+    let pick = rigswig_core::adapter::pick(&scored, &base, &env_of, tool, session, std::time::SystemTime::now())?;
+    let ctx = ctx_for(pick.adapter);
+    let r = f(pick.adapter, &ctx, pick.score);
+    Ok((r, pick.session))
 }
 
-/// Resolve `tool` (or the adapter with the most evidence) for `repo`.
-fn resolve(repo: &std::path::Path, tool: Option<&str>) -> Result<rigswig_core::model::Harness, String> {
-    with_harness(repo, tool, |a, ctx, _| a.resolve(ctx))
+/// The environment one adapter's probe reads, filtered exactly as its resolver's is.
+fn env_of(a: &dyn Adapter) -> std::collections::BTreeMap<String, String> {
+    a.env_vars().iter().filter_map(|k| std::env::var(k).ok().map(|v| ((*k).to_string(), v))).collect()
+}
+
+/// Put a live-session claim on a harness — only the one the default pick followed, never an explicit `--tool`.
+fn with_session(
+    mut h: rigswig_core::model::Harness,
+    session: Option<&rigswig_core::adapter::SessionClaim>,
+) -> rigswig_core::model::Harness {
+    if let Some(c) = session {
+        h.tool.session = Some(rigswig_core::model::Session { scope: c.scope, evidence: c.evidence.clone() });
+    }
+    h
+}
+
+/// Resolve `tool` (or the default pick) for `repo`; the result carries the live-session claim when the pick
+/// followed one.
+fn resolve(repo: &std::path::Path, tool: Option<&str>, session: bool) -> Result<rigswig_core::model::Harness, String> {
+    let (h, claim) = with_harness(repo, tool, session, |a, ctx, _| a.resolve(ctx))?;
+    Ok(with_session(h, claim.as_ref()))
 }
 
 /// `~/x` and `*` in the last part of a path: `~/code/*` is every folder in `~/code`.
@@ -667,9 +704,9 @@ fn usage_cmd(args: &[String]) -> ExitCode {
     let here = repo.unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
     let since = since(days);
     say_usage(since.as_deref());
-    let u = match with_harness(&here, tool.as_deref(), |a, ctx, _| a.usage(ctx, since.as_deref())) {
-        Ok(Ok(u)) => u,
-        Ok(Err(e)) | Err(e) => return fail(&e),
+    let u = match with_harness(&here, tool.as_deref(), false, |a, ctx, _| a.usage(ctx, since.as_deref())) {
+        Ok((Ok(u), _)) => u,
+        Ok((Err(e), _)) | Err(e) => return fail(&e),
     };
     if json {
         println!("{}", serde_json::to_string_pretty(&u).expect("serialises"));
@@ -687,12 +724,14 @@ fn audit(args: &[String]) -> ExitCode {
     let mut with_usage = false;
     let mut days: Option<u64> = Some(30);
     let mut remote: Option<Remote> = None;
+    let mut no_session = false;
     let mut it = args.iter();
     while let Some(a) = it.next() {
         let mut value =
             |name: &str| it.next().filter(|v| !v.starts_with("--")).cloned().ok_or(format!("{name} needs a value"));
         match a.as_str() {
             "--json" => json = true,
+            "--no-session" => no_session = true,
             "--repo" => match value("--repo") {
                 Ok(v) => repo = Some(PathBuf::from(v)),
                 Err(e) => return fail(&e),
@@ -754,7 +793,7 @@ fn audit(args: &[String]) -> ExitCode {
         if with_usage {
             say_usage(since.as_deref());
         }
-        let a = match audits::repo(&here, tool.as_deref(), with_usage.then_some(since.as_deref()), quiet) {
+        let a = match audits::repo(&here, tool.as_deref(), !no_session, with_usage.then_some(since.as_deref()), quiet) {
             Ok((a, _)) => a,
             Err(e) => return fail(&e),
         };
@@ -840,8 +879,16 @@ pub(crate) fn check_json(
     serde_json::json!({ "tool": h.tool.id, "repo": h.target.repo, "passed": passed, "checks": rows })
 }
 
+/// One row of the `tools` surface: the detection for one harness, and any fresh live-session claim it makes.
+pub(crate) struct ToolRow {
+    pub id: String,
+    pub score: u8,
+    pub evidence: Vec<String>,
+    pub session: Option<rigswig_core::adapter::SessionClaim>,
+}
+
 /// Every harness with its detection for one repo: the `rigswig tools` surface, text and MCP alike.
-pub(crate) fn detections(repo: &std::path::Path) -> Result<Vec<(String, u8, Vec<String>)>, String> {
+pub(crate) fn detections(repo: &std::path::Path) -> Result<Vec<ToolRow>, String> {
     let repo = real_path(repo).map_err(|_| format!("no such folder: {}", repo.display()))?;
     let home = home().ok_or("the home folder is not set")?;
     refuse_private(&repo, &home)?;
@@ -853,8 +900,16 @@ pub(crate) fn detections(repo: &std::path::Path) -> Result<Vec<(String, u8, Vec<
     Ok(adapters
         .iter()
         .map(|a| {
-            let d = a.detect(&ctx_for(a.as_ref()));
-            (a.id().to_string(), d.score, d.evidence.iter().map(|e| printable(e)).collect())
+            let ctx = ctx_for(a.as_ref());
+            let d = a.detect(&ctx);
+            let now = std::time::SystemTime::now();
+            let session = a.session(&ctx).filter(|c| c.fresh(now));
+            ToolRow {
+                id: a.id().to_string(),
+                score: d.score,
+                evidence: d.evidence.iter().map(|e| printable(e)).collect(),
+                session,
+            }
         })
         .collect())
 }
@@ -866,6 +921,7 @@ fn check(args: &[String]) -> ExitCode {
     let mut max_tokens: Option<u64> = None;
     let mut max_item: Option<u64> = None;
     let mut no_warnings = false;
+    let mut no_session = false;
     let mut json = false;
     let mut removals: Vec<String> = Vec::new();
     let mut it = args.iter();
@@ -875,6 +931,7 @@ fn check(args: &[String]) -> ExitCode {
         match a.as_str() {
             "--json" => json = true,
             "--no-warnings" => no_warnings = true,
+            "--no-session" => no_session = true,
             "--repo" => match value("--repo") {
                 Ok(v) => repo = Some(PathBuf::from(v)),
                 Err(e) => return fail(&e),
@@ -898,7 +955,7 @@ fn check(args: &[String]) -> ExitCode {
         }
     }
     let here = repo.unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
-    let mut h = match resolve(&here, tool.as_deref()) {
+    let mut h = match resolve(&here, tool.as_deref(), !no_session) {
         Ok(h) => h,
         Err(e) => return fail(&e),
     };
@@ -946,12 +1003,12 @@ fn compare(args: &[String]) -> ExitCode {
         }
     }
     let (a, b) = match (paths.as_slice(), &tools) {
-        ([one], Some((x, y))) => (resolve(one, Some(x)), resolve(one, Some(y))),
+        ([one], Some((x, y))) => (resolve(one, Some(x), false), resolve(one, Some(y), false)),
         ([], Some((x, y))) => {
             let here = std::env::current_dir().unwrap_or_default();
-            (resolve(&here, Some(x)), resolve(&here, Some(y)))
+            (resolve(&here, Some(x), false), resolve(&here, Some(y), false))
         }
-        ([one, two], None) => (resolve(one, tool.as_deref()), resolve(two, tool.as_deref())),
+        ([one, two], None) => (resolve(one, tool.as_deref(), false), resolve(two, tool.as_deref(), false)),
         _ => return fail("compare needs two repos, or one repo and --tools <a>,<b>"),
     };
     let (a, b) = match (a, b) {

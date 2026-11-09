@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{Map, Value};
 
-use crate::adapter::{Adapter, Ctx, Detection};
+use crate::adapter::{Adapter, Ctx, Detection, SessionClaim};
 use crate::adapters::build::{Build, calc, char_len, unknown};
 use crate::fs::Fs;
 use crate::model::*;
@@ -271,6 +271,39 @@ impl Adapter for Hermes {
             }
         }
         Detection { score, evidence }
+    }
+
+    /// The session look: the Hermes home's own activity files (`docs/adapters/hermes.md`, "Live sessions").
+    /// Metadata only — the one place a session's repo is named (`state.db`) is never opened, so the claim is
+    /// machine-scoped: it cannot say which repo a live session sits in.
+    fn session(&self, ctx: &Ctx) -> Option<SessionClaim> {
+        let p = Paths::new(ctx);
+        let mut latest = None;
+        let mut seen: Vec<String> = Vec::new();
+        let mut look = |dir: &Path, tag: &str| {
+            let mut names = Vec::new();
+            for name in ["state.db-wal", "state.db", "gateway_state.json", ".hermes_history"] {
+                let f = dir.join(name);
+                if !ctx.fs.exists(&f) {
+                    continue;
+                }
+                names.push(name);
+                if let Ok(t) = ctx.fs.modified(&f) {
+                    latest = latest.max(Some(t));
+                }
+            }
+            if !names.is_empty() {
+                seen.push(format!("{tag}: {}", names.join(", ")));
+            }
+        };
+        look(p.hermes_home.as_path(), "Hermes home");
+        if p.active != p.hermes_home {
+            look(p.active.as_path(), "Hermes home (profile)");
+        }
+        if seen.is_empty() {
+            return None;
+        }
+        Some(SessionClaim { scope: SessionScope::Machine, latest, evidence: seen })
     }
 
     fn resolve(&self, ctx: &Ctx) -> Harness {

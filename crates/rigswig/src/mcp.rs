@@ -7,6 +7,7 @@
 use std::io::{BufRead, Write};
 use std::path::PathBuf;
 
+use rigswig_core::model::SessionScope;
 use rigswig_core::read::redact::printable;
 use serde_json::{Map, Value, json};
 
@@ -104,7 +105,7 @@ fn send_err(id: Option<Value>, code: i32, message: String) {
 
 /// `status`: the full harness JSON for a repo (its tool, or the one with the most evidence).
 fn status(args: &Map<String, Value>) -> Result<Value, String> {
-    let mut h = crate::resolve(&arg_repo(args)?, arg_tool(args).as_deref())?;
+    let mut h = crate::resolve(&arg_repo(args)?, arg_tool(args).as_deref(), true)?;
     let without = strs(args, "without");
     if !without.is_empty() {
         h = rigswig_core::whatif::without(&h, &without).0;
@@ -114,7 +115,7 @@ fn status(args: &Map<String, Value>) -> Result<Value, String> {
 
 /// `check`: the CI limits as one object, with `passed` for the whole row set.
 fn check(args: &Map<String, Value>) -> Result<Value, String> {
-    let mut h = crate::resolve(&arg_repo(args)?, arg_tool(args).as_deref())?;
+    let mut h = crate::resolve(&arg_repo(args)?, arg_tool(args).as_deref(), true)?;
     let without = strs(args, "without");
     if !without.is_empty() {
         h = rigswig_core::whatif::without(&h, &without).0;
@@ -128,7 +129,7 @@ fn check(args: &Map<String, Value>) -> Result<Value, String> {
 /// `audit`: the ranked findings for one repo.
 fn audit(args: &Map<String, Value>) -> Result<Value, String> {
     let quiet = &mut |_: rigswig_core::audit::Progress| {};
-    let (a, _) = crate::audits::repo(&arg_repo(args)?, arg_tool(args).as_deref(), None, quiet)?;
+    let (a, _) = crate::audits::repo(&arg_repo(args)?, arg_tool(args).as_deref(), true, None, quiet)?;
     Ok(serde_json::to_value(&a).expect("serialises"))
 }
 
@@ -139,14 +140,17 @@ fn compare(args: &Map<String, Value>) -> Result<Value, String> {
     let (a, b) = match (x, y) {
         (Some(x), Some(y)) => {
             let repo = arg_repo(args)?;
-            (crate::resolve(&repo, Some(x.as_str()))?, crate::resolve(&repo, Some(y.as_str()))?)
+            (crate::resolve(&repo, Some(x.as_str()), false)?, crate::resolve(&repo, Some(y.as_str()), false)?)
         }
         _ => {
             let tool = arg_tool(args);
             let Some(rb) = args.get("repoB").and_then(Value::as_str) else {
                 return Err("compare needs two tools on one repo, or both repos".into());
             };
-            (crate::resolve(&arg_repo(args)?, tool.as_deref())?, crate::resolve(&PathBuf::from(rb), tool.as_deref())?)
+            (
+                crate::resolve(&arg_repo(args)?, tool.as_deref(), false)?,
+                crate::resolve(&PathBuf::from(rb), tool.as_deref(), false)?,
+            )
         }
     };
     Ok(serde_json::to_value(rigswig_core::compare::compare(&a, &b)).expect("serialises"))
@@ -157,8 +161,16 @@ fn tools(args: &Map<String, Value>) -> Result<Value, String> {
     let list = crate::detections(&arg_repo(args)?)?;
     let rows: Vec<Value> = list
         .iter()
-        .map(|(id, score, evidence)| {
-            json!({ "id": id, "score": score, "evidence": evidence.iter().map(|e| printable(e)).collect::<Vec<_>>() })
+        .map(|row| {
+            json!({
+                "id": row.id,
+                "score": row.score,
+                "evidence": row.evidence.iter().map(|e| printable(e)).collect::<Vec<_>>(),
+                "session": row.session.as_ref().map(|c| json!({
+                    "scope": match c.scope { SessionScope::Repo => "repo", SessionScope::Machine => "machine" },
+                    "evidence": c.evidence.iter().map(|e| printable(e)).collect::<Vec<_>>(),
+                })),
+            })
         })
         .collect();
     Ok(json!({ "tools": rows }))
@@ -229,7 +241,7 @@ fn tools_list() -> Value {
           "tools": { "type": "array", "items": { "type": "string" }, "description": "Two harness ids on one repo, e.g. [\"claude-code\", \"codex\"]" }
       }, "required": [] } },
     { "name": "tools",
-      "description": "The harnesses rigswig knows, and for each the detection score and the evidence found in the repo.",
+      "description": "The harnesses rigswig knows, and for each the detection score, the evidence found in the repo, and any fresh live-session claim.",
       "inputSchema": { "type": "object", "properties": {
           "repo": { "type": "string", "description": "The repo folder (default: the process's working directory)" }
       }, "required": [] } },

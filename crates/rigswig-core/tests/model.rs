@@ -140,6 +140,7 @@ fn example() -> Harness {
             adapter_version: "0.0.0".into(),
             tool_version_assumed: None,
             detected_by: vec!["AGENTS.md".into()],
+            session: None,
         },
         target: Target { repo: "example-repo".into(), os: Os::Linux },
         layers: vec![
@@ -223,6 +224,9 @@ fn broken_copies_fail() {
         ("not in its trail", |h| h.settings.get_mut("model").unwrap().source = Some("managed".into())),
         ("outside their range", |h| h.context.tokens.value = h.context.tokens.high + 1),
         ("add up to", |h| h.context.chars.value += 1),
+        ("tool.session is set but says nothing", |h| {
+            h.tool.session = Some(Session { scope: SessionScope::Machine, evidence: Vec::new() })
+        }),
     ];
     for (expect, breaks) in cases {
         let mut h = example();

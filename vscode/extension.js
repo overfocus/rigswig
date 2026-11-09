@@ -319,8 +319,12 @@ const status = {
         tip.appendText(
             `- ~${fmt(t.value)} tokens load before you type (${t.method}: ${fmt(t.low)}..${fmt(t.high)} from ${fmt(parsed.chars)} characters)\n`,
         );
+        if (parsed.session) {
+            tip.appendText(`- picked for a live session (${parsed.session.scope}): ${parsed.session.evidence.join(', ')}\n`);
+        }
         tip.appendText(`- ${parsed.notMeasured} fixed costs the tool adds that no file shows (system prompt, built-in tools)\n`);
-        const parts = [`$(beaker) ${parsed.tool}`, `~${short(t.value)} tok`];
+        const live = parsed.session ? ' (session)' : '';
+        const parts = [`$(beaker) ${parsed.tool}${live}`, `~${short(t.value)} tok`];
         if (f.value) {
             const by = lib.SEVERITIES.map((s) => (f.value[s] > 0 ? `${f.value[s]} ${s}` : null))
                 .filter(Boolean)
@@ -655,7 +659,7 @@ async function openPage() {
     });
     // The URL as the editor presents it: identity on a desktop, the forwarded port on a remote host.
     const shown = await vscode.env.asExternalUri(vscode.Uri.parse(started.url));
-    if (config().get('openInBrowser', false)) {
+    if (config().get('openInBrowser', true)) {
         await vscode.env.openExternal(shown);
         return;
     }

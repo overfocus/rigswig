@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::io;
 use std::path::{Component, Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EntryKind {
@@ -29,6 +30,9 @@ pub trait Fs {
     fn kind(&self, path: &Path) -> io::Result<EntryKind>;
     /// The path with every symlink resolved, so a caller can check it stays inside a root.
     fn canonicalize(&self, path: &Path) -> io::Result<PathBuf>;
+    /// When `path` was last modified, so a caller can freshness-check session artifacts. Metadata only: never a
+    /// file's contents. `Ok` for anything the file system can stat, whatever its time.
+    fn modified(&self, path: &Path) -> io::Result<SystemTime>;
 
     fn exists(&self, path: &Path) -> bool {
         self.kind(path).is_ok()
@@ -65,6 +69,9 @@ enum Node {
 #[derive(Debug, Clone, Default)]
 pub struct MemFs {
     nodes: BTreeMap<PathBuf, Node>,
+    /// Modification times the tree was stamped with. Anything unstamped reports the Unix epoch, which no
+    /// freshness window ever counts as recent — tests only stamp what liveness is meant to see.
+    mtimes: BTreeMap<PathBuf, SystemTime>,
 }
 
 const MAX_LINKS: usize = 40;
@@ -115,6 +122,41 @@ impl MemFs {
         self.add_parents(&p);
         self.nodes.insert(p, Node::Dir);
         self
+    }
+
+    /// Add a file stamped with a modification time (session-freshness fixtures; [`MemFs::file`] implies a time
+    /// that is never fresh).
+    pub fn file_at(mut self, path: impl AsRef<Path>, content: impl Into<String>, modified: SystemTime) -> Self {
+        let p = normalize(path.as_ref());
+        self.mtimes.insert(p.clone(), modified);
+        self.file(p, content)
+    }
+
+    /// Add an empty directory stamped with a modification time.
+    pub fn dir_at(mut self, path: impl AsRef<Path>, modified: SystemTime) -> Self {
+        let p = normalize(path.as_ref());
+        self.mtimes.insert(p.clone(), modified);
+        self.dir(p)
+    }
+
+    /// Put another file into an already-built tree — the builders move, so a fixture shared by a test needs
+    /// this and [`MemFs::stamp`] when the tree does not belong to the test that built it.
+    pub fn add_file(&mut self, path: impl AsRef<Path>, content: impl Into<String>) {
+        let p = normalize(path.as_ref());
+        self.add_parents(&p);
+        self.nodes.insert(p, Node::File(content.into()));
+    }
+
+    /// Put another empty directory into an already-built tree.
+    pub fn add_dir(&mut self, path: impl AsRef<Path>) {
+        let p = normalize(path.as_ref());
+        self.add_parents(&p);
+        self.nodes.insert(p, Node::Dir);
+    }
+
+    /// Stamp an existing path with a modification time.
+    pub fn stamp(&mut self, path: impl AsRef<Path>, modified: SystemTime) {
+        self.mtimes.insert(normalize(path.as_ref()), modified);
     }
 
     /// Add a symlink at `path` pointing to `target` (absolute, or relative to the link's folder).
@@ -230,6 +272,10 @@ impl Fs for MemFs {
         }
         Ok(real)
     }
+
+    fn modified(&self, path: &Path) -> io::Result<SystemTime> {
+        Ok(self.mtimes.get(&normalize(path)).copied().unwrap_or(UNIX_EPOCH))
+    }
 }
 
 /// Another file system with some files replaced (or added): what the setup would look like after a planned change,
@@ -287,5 +333,9 @@ impl Fs for OverlayFs<'_> {
             return Ok(normalize(path));
         }
         self.base.canonicalize(path)
+    }
+
+    fn modified(&self, path: &Path) -> io::Result<SystemTime> {
+        self.base.modified(path)
     }
 }

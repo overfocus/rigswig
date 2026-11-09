@@ -105,5 +105,11 @@ pub fn contract_errors(h: &Harness) -> Vec<String> {
         ));
     }
 
+    if let Some(s) = &h.tool.session {
+        if s.evidence.is_empty() {
+            errs.push("tool.session is set but says nothing: its evidence is empty".into());
+        }
+    }
+
     errs
 }
