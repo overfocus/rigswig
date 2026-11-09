@@ -656,10 +656,20 @@ fn claude_slug(repo: &std::path::Path) -> String {
     repo.to_string_lossy().chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect()
 }
 
-/// One fresh Claude Code session log in the repo's own projects folder. The slug comes from the canonicalized
-/// repo path (the CLI resolves a repo through its symlinks first).
+/// One fresh Claude Code session log in the repo's own projects folder. The slug comes from the repo path as the
+/// CLI sees it: canonicalized, and on Windows with the verbatim `\\?\C:\` prefix stripped (the same rule the
+/// binary's `real_path` applies), since that is the cwd shape a working Claude session writes its folder from.
 fn claude_session_in_repo(s: &Sandbox, ago: u64) {
-    let repo = std::fs::canonicalize(s.0.join("repo")).unwrap();
+    let mut repo = std::fs::canonicalize(s.0.join("repo")).unwrap();
+    if cfg!(windows) {
+        let text = repo.to_string_lossy().into_owned();
+        if let Some(rest) = text.strip_prefix(r"\\?\") {
+            let b = rest.as_bytes();
+            if b.len() >= 2 && b[0].is_ascii_alphabetic() && b[1] == b':' {
+                repo = std::path::PathBuf::from(rest);
+            }
+        }
+    }
     let slug = claude_slug(&repo);
     let rel = format!("home/.claude/projects/{slug}/live.jsonl");
     s.write(&rel, r#"not a log the probe may ever open: PLANTED-CONTENT-CANARY"#);
