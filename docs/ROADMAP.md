@@ -32,9 +32,11 @@ number of adapters or findings. Token estimates remain explicitly secondary to s
   have no local manifest ([Ollama](adapters/ollama.md), [Hermes](adapters/hermes.md)).
 - Version every public JSON surface (`status`, `audit`, `compare`, `fleet`, `usage` and `check`) with generated
   schemas, compatibility tests and consistent adapter/coverage provenance. Expose structured MCP results and schemas.
-- Add versioned baselines, `check --baseline`, a no-new-debt ratchet, repository policy with explained suppressions,
-  and SARIF output. The key question is "did this change make the harness worse?", not only "is it under a fixed
-  budget?".
+- [x] Add versioned check baselines, `check --baseline`, and a no-new-debt ratchet which carries existing warnings
+  and failures, rejects new debt, reports fixes, and refuses to drop a previously failing check
+  ([BASELINES.md](BASELINES.md)).
+- Add repository policy with explained suppressions and SARIF output. The key question is "did this change make the
+  harness worse?", not only "is it under a fixed budget?".
 - Separate finding impact, confidence, effort and remediation safety. Distinguish referenced, invoked, manually
   invoked but unobservable, unknown because scanning was incomplete, and supported negative evidence. Truncation or
   unsupported invocation types must produce `unknown`, never proof that an item is unnecessary.

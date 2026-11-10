@@ -28,11 +28,12 @@ Usage:
                                             evidence-only; machine-wide activity never moves it; when no repo evidence
                                             picks one, the reading is shown as a machine guess and installed harnesses
                                             are listed)
-  rigswig check [--repo <path>] [--tool <id>] [--strict] [--max-tokens <n>] [--max-item-tokens <n>] [--no-warnings] [--json]
+  rigswig check [--repo <path>] [--tool <id>] [--strict] [--max-tokens <n>] [--max-item-tokens <n>] [--no-warnings] [--baseline <file>] [--json]
                                             for CI: exits 1 when a limit is passed (n may be 40000, 40k or 1m);
                                             --strict also fails on incomplete reads or ambiguous resolution, and
                                             refuses an adapter without that completeness contract; ordinary advisory
-                                            warnings need --no-warnings to fail; always uses repository evidence
+                                            warnings need --no-warnings to fail; --baseline allows existing debt but
+                                            fails on new warnings or newly failing checks; always uses repository evidence
   rigswig audit [--repo <path>] [--tool <id>] [--json]
                                             ranked findings: what costs context and nothing here references, plugins the
                                             repo's files do not call for, instruction files over budget, repeated text,
@@ -910,7 +911,143 @@ pub(crate) fn check_json(
     let passed = results.iter().all(|(_, ok, _)| *ok);
     let rows: Vec<Value> =
         results.iter().map(|(n, ok, d)| serde_json::json!({ "check": n, "passed": ok, "detail": d })).collect();
-    serde_json::json!({ "tool": h.tool.id, "repo": h.target.repo, "passed": passed, "checks": rows })
+    let warnings: Vec<Value> = h
+        .warnings
+        .iter()
+        .filter(|w| w.code != "what-if")
+        .map(|w| {
+            serde_json::json!({
+                "code": printable(&w.code),
+                "message": printable(&w.message),
+                "file": w.file.as_deref().map(printable),
+            })
+        })
+        .collect();
+    serde_json::json!({
+        "baselineVersion": 1,
+        "tool": h.tool.id,
+        "adapterVersion": h.tool.adapter_version,
+        "toolVersionAssumed": h.tool.tool_version_assumed,
+        "repo": h.target.repo,
+        "passed": passed,
+        "checks": rows,
+        "warnings": warnings,
+    })
+}
+
+fn read_baseline(path: &std::path::Path) -> Result<Value, String> {
+    let text = std::fs::read_to_string(path).map_err(|e| format!("cannot read baseline {}: {e}", path.display()))?;
+    serde_json::from_str(&text).map_err(|e| format!("cannot parse baseline {}: {e}", path.display()))
+}
+
+/// The identity of a warning for ratcheting. Message wording may change between adapter versions without creating
+/// debt; repeated warnings with the same code and file still count separately.
+fn baseline_warning_key(w: &Value) -> Result<(String, String), String> {
+    let code = w["code"].as_str().ok_or("invalid baseline: every warning needs a code")?;
+    let file = match &w["file"] {
+        Value::String(file) => file.clone(),
+        Value::Null => String::new(),
+        _ => return Err("invalid baseline: warning file must be a string or null".into()),
+    };
+    Ok((code.to_string(), file))
+}
+
+/// Apply a no-new-debt baseline to a fresh check result. Existing debt is reported but allowed; a new warning or a
+/// newly failing check fails the run. Dropping a check which failed in the baseline is refused, not a way to escape it.
+fn apply_baseline(out: &mut Value, baseline: &Value) -> Result<(), String> {
+    if baseline["baselineVersion"].as_u64() != Some(1) {
+        return Err(format!(
+            "unsupported baselineVersion {}; expected 1",
+            baseline["baselineVersion"].as_u64().map_or_else(|| "missing".into(), |v| v.to_string())
+        ));
+    }
+    if baseline["tool"] != out["tool"] {
+        return Err(format!(
+            "baseline is for a different harness: {}, not {}",
+            baseline["tool"].as_str().unwrap_or("unknown"),
+            out["tool"].as_str().unwrap_or("unknown")
+        ));
+    }
+    let old_rows = baseline["checks"].as_array().ok_or("invalid baseline: checks is not a list")?;
+    let old_warnings = baseline["warnings"].as_array().ok_or("invalid baseline: warnings is not a list")?;
+    let rows = out["checks"].as_array().cloned().ok_or("invalid current check rows")?;
+    let warnings = out["warnings"].as_array().cloned().ok_or("invalid current warnings")?;
+
+    let mut old_failed = std::collections::BTreeSet::new();
+    for row in old_rows {
+        let name = row["check"].as_str().ok_or("invalid baseline: every check needs a name")?;
+        let passed = row["passed"].as_bool().ok_or("invalid baseline: every check needs passed")?;
+        if !passed && name != "baseline" {
+            old_failed.insert(name.to_string());
+        }
+    }
+    let current: std::collections::BTreeMap<String, bool> = rows
+        .iter()
+        .map(|row| {
+            row["check"]
+                .as_str()
+                .and_then(|name| row["passed"].as_bool().map(|passed| (name.to_string(), passed)))
+                .ok_or_else(|| "invalid current check row".to_string())
+        })
+        .collect::<Result<_, _>>()?;
+    for name in &old_failed {
+        if !current.contains_key(name) {
+            return Err(format!("baseline's failing check {name} is missing; keep the same check options"));
+        }
+    }
+    let new_failures: Vec<String> = current
+        .iter()
+        .filter(|(name, passed)| !*passed && !old_failed.contains(*name))
+        .map(|(n, _)| n.clone())
+        .collect();
+    let carried_failures: Vec<String> =
+        old_failed.iter().filter(|name| current.get(*name) == Some(&false)).cloned().collect();
+    let fixed_failures: Vec<String> =
+        old_failed.iter().filter(|name| current.get(*name) == Some(&true)).cloned().collect();
+
+    let mut remaining = std::collections::BTreeMap::<(String, String), usize>::new();
+    for warning in old_warnings {
+        *remaining.entry(baseline_warning_key(warning)?).or_default() += 1;
+    }
+    let old_warning_count = old_warnings.len();
+    let mut carried_warnings = 0usize;
+    let mut new_warnings = Vec::new();
+    for warning in warnings {
+        let key = baseline_warning_key(&warning)?;
+        if let Some(left) = remaining.get_mut(&key).filter(|left| **left > 0) {
+            *left -= 1;
+            carried_warnings += 1;
+        } else {
+            new_warnings.push(warning);
+        }
+    }
+    let fixed_warnings = old_warning_count - carried_warnings;
+    let passed = new_failures.is_empty() && new_warnings.is_empty();
+    let detail = if passed {
+        format!(
+            "no new debt: {carried_warnings} warning(s) and {} failing check(s) carried; {fixed_warnings} warning(s) and {} failure(s) fixed",
+            carried_failures.len(),
+            fixed_failures.len()
+        )
+    } else {
+        format!("new debt: {} warning(s) and {} failing check(s)", new_warnings.len(), new_failures.len())
+    };
+    out["baseline"] = serde_json::json!({
+        "version": 1,
+        "newWarnings": new_warnings,
+        "newFailures": new_failures,
+        "carriedWarnings": carried_warnings,
+        "carriedFailures": carried_failures,
+        "fixedWarnings": fixed_warnings,
+        "fixedFailures": fixed_failures,
+    });
+    out["checks"].as_array_mut().expect("checked above").push(serde_json::json!({
+        "check": "baseline",
+        "passed": passed,
+        "detail": detail,
+    }));
+    out["passed"] = Value::Bool(passed);
+    Ok(())
 }
 
 /// One row of the `tools` surface: the detection for one harness, and any fresh live-session claim it makes.
@@ -956,6 +1093,7 @@ fn check(args: &[String]) -> ExitCode {
     let mut max_item: Option<u64> = None;
     let mut no_warnings = false;
     let mut strict = false;
+    let mut baseline: Option<PathBuf> = None;
     let mut json = false;
     let mut removals: Vec<String> = Vec::new();
     let mut it = args.iter();
@@ -966,6 +1104,11 @@ fn check(args: &[String]) -> ExitCode {
             "--json" => json = true,
             "--no-warnings" => no_warnings = true,
             "--strict" => strict = true,
+            "--baseline" => match value("--baseline") {
+                Ok(v) if baseline.is_none() => baseline = Some(PathBuf::from(v)),
+                Ok(_) => return fail("one --baseline per check"),
+                Err(e) => return fail(&e),
+            },
             "--no-session" => {} // retained for compatibility: checks always ignore session activity
             "--repo" => match value("--repo") {
                 Ok(v) => repo = Some(PathBuf::from(v)),
@@ -998,7 +1141,13 @@ fn check(args: &[String]) -> ExitCode {
         h = rigswig_core::whatif::without(&h, &removals).0;
     }
 
-    let out = check_json(&h, max_tokens, max_item, no_warnings, strict);
+    let mut out = check_json(&h, max_tokens, max_item, no_warnings, strict);
+    if let Some(path) = baseline {
+        match read_baseline(&path).and_then(|baseline| apply_baseline(&mut out, &baseline)) {
+            Ok(()) => {}
+            Err(e) => return fail(&e),
+        }
+    }
     let passed = out["passed"].as_bool().unwrap_or(false);
     if json {
         println!("{}", serde_json::to_string_pretty(&out).expect("serialises"));

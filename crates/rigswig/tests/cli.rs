@@ -226,6 +226,90 @@ fn strict_check_fails_on_incomplete_reads_not_advisories() {
     assert!(row["detail"].as_str().unwrap().contains("incomplete-malformed-json"), "{row}");
 }
 
+#[test]
+fn baseline_ratchet_carries_old_debt_and_rejects_only_new_debt() {
+    let s = Sandbox::new("baseline-ratchet");
+    s.write("repo/CLAUDE.md", &"x".repeat(4_000));
+    s.write("home/.claude/agents/a.md", "---\ndescription: helps\n---\n");
+    let repo = s.real_repo();
+    let baseline = s.0.join("baseline.json");
+    let baseline_arg = baseline.to_str().unwrap().to_string();
+    let run = |extra: &[&str]| {
+        let mut args = vec!["check", "--repo", &repo, "--tool", "claude-code"];
+        args.extend(extra);
+        s.run(&args)
+    };
+
+    let initial = run(&["--max-tokens", "900", "--no-warnings", "--json"]);
+    assert_eq!(initial.status.code(), Some(1));
+    let snapshot: serde_json::Value = serde_json::from_slice(&initial.stdout).unwrap();
+    assert_eq!(snapshot["baselineVersion"], 1);
+    assert!(snapshot["adapterVersion"].as_str().is_some_and(|v| !v.is_empty()));
+    assert!(snapshot["warnings"].as_array().unwrap().iter().any(|w| w["code"] == "agent-all-tools"));
+    std::fs::write(&baseline, &initial.stdout).unwrap();
+
+    let carried = run(&["--max-tokens", "900", "--no-warnings", "--baseline", &baseline_arg, "--json"]);
+    assert!(carried.status.success(), "{}", String::from_utf8_lossy(&carried.stderr));
+    let out: serde_json::Value = serde_json::from_slice(&carried.stdout).unwrap();
+    assert_eq!(out["passed"], true);
+    assert_eq!(out["baseline"]["newWarnings"].as_array().unwrap().len(), 0);
+    assert_eq!(out["baseline"]["newFailures"].as_array().unwrap().len(), 0);
+    assert!(out["baseline"]["carriedWarnings"].as_u64().unwrap() >= 1);
+    assert!(out["baseline"]["carriedFailures"].as_array().unwrap().contains(&serde_json::json!("max-tokens")));
+
+    let improved = run(&["--max-tokens", "2k", "--no-warnings", "--baseline", &baseline_arg, "--json"]);
+    assert!(improved.status.success());
+    let out: serde_json::Value = serde_json::from_slice(&improved.stdout).unwrap();
+    assert!(out["baseline"]["fixedFailures"].as_array().unwrap().contains(&serde_json::json!("max-tokens")));
+
+    let new_failure = run(&[
+        "--max-tokens",
+        "900",
+        "--max-item-tokens",
+        "500",
+        "--no-warnings",
+        "--baseline",
+        &baseline_arg,
+        "--json",
+    ]);
+    assert_eq!(new_failure.status.code(), Some(1));
+    let out: serde_json::Value = serde_json::from_slice(&new_failure.stdout).unwrap();
+    assert!(out["baseline"]["newFailures"].as_array().unwrap().contains(&serde_json::json!("max-item-tokens")));
+
+    let dropped_check = run(&["--baseline", &baseline_arg]);
+    assert_eq!(dropped_check.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&dropped_check.stderr).contains("failing check"));
+
+    s.write("repo/.claude/settings.json", "{not json");
+    let new_warning = run(&["--max-tokens", "900", "--no-warnings", "--baseline", &baseline_arg, "--json"]);
+    assert_eq!(new_warning.status.code(), Some(1));
+    let out: serde_json::Value = serde_json::from_slice(&new_warning.stdout).unwrap();
+    assert!(
+        out["baseline"]["newWarnings"].as_array().unwrap().iter().any(|w| w["code"] == "incomplete-malformed-json")
+    );
+}
+
+#[test]
+fn baseline_rejects_a_different_harness_or_an_unknown_format() {
+    let s = Sandbox::new("baseline-validation");
+    s.write("repo/CLAUDE.md", "Use the tests.");
+    let repo = s.real_repo();
+    let baseline = s.0.join("baseline.json");
+    let run = || s.run(&["check", "--repo", &repo, "--tool", "claude-code", "--baseline", baseline.to_str().unwrap()]);
+    s.write("baseline.json", r#"{"baselineVersion":1,"tool":"codex","checks":[],"warnings":[]}"#);
+    let mismatch = run();
+    assert_eq!(mismatch.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&mismatch.stderr).contains("different harness"));
+    s.write("baseline.json", r#"{"baselineVersion":999,"tool":"claude-code","checks":[],"warnings":[]}"#);
+    let unknown = run();
+    assert_eq!(unknown.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&unknown.stderr).contains("unsupported baselineVersion"));
+    std::fs::remove_file(&baseline).unwrap();
+    let missing = run();
+    assert_eq!(missing.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&missing.stderr).contains("cannot read baseline"));
+}
+
 /// A tiny HTTP client for the end-to-end test: one request, the status and the body.
 fn http(port: u16, method: &str, path: &str, headers: &str, body: &str) -> (u16, String) {
     use std::io::{Read, Write};

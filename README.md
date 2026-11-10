@@ -59,6 +59,7 @@ cargo run -- compare repo-a repo-b               # what differs between two repo
 cargo run -- compare path/to/repo --tools claude-code,codex   # or between two harnesses on one repo
 cargo run -- check --repo path/to/repo --max-tokens 40k        # for CI: exit 1 when the budget is passed
 cargo run -- check --repo path/to/repo --strict               # or when the reading was incomplete/ambiguous
+cargo run -- check --repo path/to/repo --baseline rigswig-baseline.json   # only new warnings/failures are debt
 cargo run -- status --repo path/to/repo --without layer:user   # what-if: the totals without some items
 cargo run -- audit --repo path/to/repo                          # ranked findings, each with a saving and a fix
 cargo run -- audit --repos '~/code/*'                           # fleet: each user-scope item against every repo
@@ -67,6 +68,10 @@ cargo run -- audit --archive repo.tar.gz                        # the same for a
 cargo run -- usage --repo path/to/repo                          # what past sessions here invoked, metadata only
 cargo run -- audit --repo path/to/repo --usage                  # findings that know what the sessions called
 ```
+
+`check --json` is a versioned baseline file. Save and review one, then add `--baseline <file>` to carry existing
+warnings and failing checks while rejecting only new debt; fixed debt is reported and dropping a previously failing
+check is refused. rigswig reads but never writes the baseline. See [docs/BASELINES.md](docs/BASELINES.md).
 
 `rigswig audit` turns the numbers into a to-do list: user-scope agents and skills that nothing in the repo references,
 plugins switched on everywhere that the repo's files don't call for, instruction files over budget, sentences repeated

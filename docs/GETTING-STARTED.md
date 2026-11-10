@@ -49,6 +49,7 @@ hour idle. In the editor there is an extension: the bill and the audit's finding
 | You want to... | Run | Read |
 |---|---|---|
 | Require complete, unambiguous resolution in CI | `rigswig check --strict` (exit 1 on an incomplete read; unsupported adapters refuse) | [strict checks](STRICT.md) |
+| Carry existing CI debt but reject regressions | `rigswig check --baseline rigswig-baseline.json` | [check baselines](BASELINES.md) |
 | Cut startup tokens in CI | `rigswig check --max-tokens 40k` (exit 1 when the budget is passed) | `rigswig --help` |
 | See another harness beside this one | `rigswig compare . --tools claude-code,codex` | the harnesses table in [README](../README.md#harnesses) |
 | Ask what past sessions here actually invoked | `rigswig usage` (findings: `rigswig audit --usage`) | [USAGE.md](USAGE.md) |
@@ -67,6 +68,7 @@ harness from repository evidence alone, so live activity elsewhere cannot change
 - [README.md](../README.md) — what rigswig is, the guarantees, every harness.
 - [docs/AUDIT.md](AUDIT.md) — the findings and fleet mode.
 - [docs/STRICT.md](STRICT.md) — incomplete-read checking, adapter readiness and exit behavior.
+- [docs/BASELINES.md](BASELINES.md) — versioned check baselines and the no-new-debt CI ratchet.
 - [docs/USAGE.md](USAGE.md) — session-log usage, metadata only, and what changed in the guarantee.
 - [docs/adapters/](adapters) — the rules modelled per harness, each with its doc sources.
 - [docs/ROADMAP.md](ROADMAP.md) — what is done and what is deliberately not.
