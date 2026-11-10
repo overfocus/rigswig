@@ -79,6 +79,40 @@ assert.equal(parseStatus(harnessWith({ id: 'hermes', session: { scope: 'machine'
 assert.equal(parseStatus(harnessWith({ id: 'hermes', session: 'yes' })).session, null);
 assert.equal(parseStatus(harnessWith({ id: 'hermes' })).session, null);
 
+// The provider, when the harness's `settings` name one (`ollama-launch` on an ollama-launch-ed hermes): read when
+// its value is a non-empty string, `source` kept when present; malformed in any other way is skipped, and absent
+// `settings` (an older CLI) leave it null — a 0.2.0-era read still parses.
+const withProvider = (settings) =>
+    parseStatus(
+        JSON.stringify({
+            schema_version: '1.2.3',
+            tool: { id: 'hermes', adapterVersion: '9.9.9' },
+            target: { repo: 'repo' },
+            settings,
+            context: { chars: { value: 40, confidence: 'exact' }, tokens: { method: 'chars/4', value: 10, low: 8, high: 12 } },
+        }),
+    ).provider;
+assert.deepEqual(withProvider({ provider: { value: 'ollama-launch', source: 'user', trail: [{ layer: 'user', value: 'ollama-launch' }] } }), {
+    value: 'ollama-launch',
+    source: 'user',
+});
+assert.deepEqual(withProvider({ provider: { value: 'custom' } }), { value: 'custom', source: null });
+assert.deepEqual(withProvider({ provider: { value: 'custom', source: '' } }), { value: 'custom', source: null });
+assert.equal(withProvider({ provider: { trail: [] } }), null, 'a setting without a value has no line');
+assert.equal(withProvider({ provider: { value: '' } }), null);
+assert.equal(withProvider({ provider: { value: 42 } }), null, 'a non-string value is skipped');
+assert.deepEqual(withProvider({ provider: { value: 'x', source: 7 } }), { value: 'x', source: null }, 'a non-string source degrades, like an item field read when shaped');
+assert.equal(withProvider({ provider: 'yes' }), null);
+assert.equal(withProvider({}), null);
+assert.equal(withProvider(undefined), null, 'a status JSON without settings still parses');
+assert.equal(parseStatus(harnessWith({ id: 'hermes', settings: 'yes' })).provider, null, 'non-object settings are skipped');
+
+// The provider, when the read names one: a value string and, when present, a source string.
+if (parsed.provider) {
+    assert.ok(typeof parsed.provider.value === 'string' && parsed.provider.value.length > 0, JSON.stringify(parsed.provider));
+    assert.ok(parsed.provider.source === null || (typeof parsed.provider.source === 'string' && parsed.provider.source.length > 0), JSON.stringify(parsed.provider));
+}
+
 // The audit read parses, and a finding without a `saving` adds nothing to the saveable total.
 const aud = parseAudit(
     JSON.stringify({

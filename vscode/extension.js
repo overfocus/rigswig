@@ -316,6 +316,12 @@ const status = {
         tip.supportThemeIcons = false;
         tip.appendMarkdown('**').appendText(parsed.tool).appendMarkdown('** in `').appendText(basename(repo));
         tip.appendMarkdown('`:\n\n');
+        // The provider, when the harness names one: which backend this bill runs against (`ollama-launch` on a
+        // `ollama launch`-ed setup, say). The CLI's own bill prints the setting; the tooltip mirrors it.
+        if (parsed.provider) {
+            const by = parsed.provider.source ? ` (set by ${parsed.provider.source})` : '';
+            tip.appendText(`- provider ${parsed.provider.value}${by}\n`);
+        }
         tip.appendText(
             `- ~${fmt(t.value)} estimated tokens from startup files (${t.method}: ${fmt(t.low)}..${fmt(t.high)} from ${fmt(parsed.chars)} characters)\n`,
         );

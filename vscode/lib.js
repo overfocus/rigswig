@@ -14,13 +14,25 @@ const str = (v) => (typeof v === 'string' ? v : null);
 const strs = (v) => (Array.isArray(v) ? v.filter((s) => typeof s === 'string') : []);
 
 /**
+ * One entry of the status JSON's `settings`, read when present and malformed-safe: a setting is an object with a
+ * non-empty string `value`, and an optional string `source` (the layer that set it). Anything else is null — no
+ * value, no line.
+ */
+const readSetting = (settings, id) => {
+    const e = settings !== null && typeof settings === 'object' ? settings[id] : null;
+    if (e === null || typeof e !== 'object' || typeof e.value !== 'string' || e.value.length === 0) return null;
+    const source = typeof e.source === 'string' && e.source.length > 0 ? e.source : null;
+    return { value: e.value, source };
+};
+
+/**
  * A `rigswig status --json` read, checked for the shape the status bar and the views need.
  * The harness JSON is a parse contract: tool, context.chars.value and context.tokens live in every version; items,
- * layers and warnings are read when present and skipped entry by entry when malformed.
+ * layers, warnings and settings are read when present and skipped entry by entry when malformed.
  *
- * @returns `{ tool, chars, tokens, notMeasured, items, layerFiles, warnings }`, where `tokens` is
- * `{ method, value, low, high }` and each item is `{ id, kind, name, layer, package, file, line, effective, when,
- * chars }`.
+ * @returns `{ tool, provider, chars, tokens, notMeasured, items, layerFiles, warnings }`, where `tokens` is
+ * `{ method, value, low, high }`, `provider` is `{ value, source }` when the harness names one (null otherwise) and
+ * each item is `{ id, kind, name, layer, package, file, line, effective, when, chars }`.
  */
 function parseStatus(text) {
     let h;
@@ -77,7 +89,7 @@ function parseStatus(text) {
     const warnings = (Array.isArray(h.warnings) ? h.warnings : [])
         .filter((w) => w && typeof w.message === 'string')
         .map((w) => ({ code: str(w.code) ?? '', message: w.message }));
-    return { tool: h.tool.id, session, chars, tokens, notMeasured, items, layerFiles, warnings };
+    return { tool: h.tool.id, provider: readSetting(h.settings, 'provider'), session, chars, tokens, notMeasured, items, layerFiles, warnings };
 }
 
 const SEVERITIES = ['high', 'medium', 'low'];

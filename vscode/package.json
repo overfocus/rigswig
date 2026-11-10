@@ -2,7 +2,7 @@
   "name": "rigswig",
   "displayName": "rigswig",
   "description": "What a coding-agent session in this repo loads, and where each piece came from — the rigswig CLI in your editor.",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "license": "Apache-2.0",
   "publisher": "kftcda",
   "icon": "media/icon.png",
