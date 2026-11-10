@@ -83,6 +83,27 @@ fn the_managed_scope_pins_a_key_over_everything() {
 }
 
 #[test]
+fn ollama_launch_models_carry_their_execution_not_just_their_local_endpoint() {
+    for (model, execution) in
+        [("gemma4:31b", "local"), ("kimi-k3.1-pro:cloud", "cloud"), ("gpt-oss:120b-cloud", "cloud")]
+    {
+        let fs = user_config(&format!(
+            "model:\n  default: {model}\n  provider: ollama-launch\n  base_url: http://127.0.0.1:11434/v1\n"
+        ));
+        let h = run(&fs);
+        assert_eq!(h.settings["provider"].value, "ollama-launch");
+        assert_eq!(h.settings["modelBaseUrl"].value, "http://127.0.0.1");
+        assert_eq!(h.settings["modelExecution"].value, execution);
+        assert_eq!(h.settings["modelExecution"].source.as_deref(), Some("user"));
+    }
+
+    let custom = run(&user_config(
+        "model:\n  default: kimi-k3.1-pro:cloud\n  provider: custom\n  base_url: http://127.0.0.1:11434/v1\n",
+    ));
+    assert!(!custom.settings.contains_key("modelExecution"), "a custom endpoint does not prove Ollama Launch");
+}
+
+#[test]
 fn the_environment_overrides_the_user_config_without_a_managed_pin() {
     let fs = user_config("model:\n  default: user-model\n");
     let h = run_env(&[("HERMES_MODEL", "shell-model")], &fs);

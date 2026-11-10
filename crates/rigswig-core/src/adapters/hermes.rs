@@ -6,6 +6,7 @@ use serde_json::{Map, Value};
 
 use crate::adapter::{Adapter, Ctx, Detection, SessionClaim};
 use crate::adapters::build::{Build, calc, char_len, unknown};
+use crate::adapters::shared;
 use crate::fs::Fs;
 use crate::model::*;
 use crate::read::frontmatter;
@@ -375,6 +376,7 @@ impl Adapter for Hermes {
             "cron jobs, loops, heartbeats, kanban and webhooks (they drive runs; they load nothing before your first message)",
             "context-file read timeouts: a file too slow to read is reported absent, exactly as Hermes would show nothing for it",
             "memory providers other than the built-in files (when memory.provider names one)",
+            "modelExecution is inferred only for provider ollama-launch from the model's :cloud/-cloud name; custom endpoints and fallback-provider routing are not resolved",
         ] {
             run.b.note_not_modelled(note);
         }
@@ -496,6 +498,19 @@ impl Run<'_, '_> {
                 continue;
             };
             self.b.settings.insert(set.name.into(), Decision { value, source: Some(first.layer.clone()), trail });
+        }
+        let launch =
+            match (self.b.settings.get("provider").and_then(|d| d.value.as_str()), self.b.settings.get("model")) {
+                (Some("ollama-launch"), Some(model)) => model
+                    .value
+                    .as_str()
+                    .map(|name| (shared::ollama_model_execution(name), model.source.clone(), model.trail.clone())),
+                _ => None,
+            };
+        if let Some((execution, source, trail)) = launch {
+            self.b
+                .settings
+                .insert("modelExecution".into(), Decision { value: Value::String(execution.into()), source, trail });
         }
     }
 

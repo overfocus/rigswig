@@ -38,6 +38,11 @@ host), `contextLength` (`model.context_length`), `approvalMode` (`approvals.mode
 the trail of layers that set it. Only non-secret keys: secrets live in `.env`, which this adapter never opens, and
 `model.api_key` is not read.
 
+For `provider: ollama-launch`, `modelExecution` is derived as `cloud` for a model with a `:cloud` tag or `-cloud`
+suffix, and `local` otherwise ([Ollama's Hermes integration](https://docs.ollama.com/integrations/hermes)). The
+local endpoint is only the router and does not determine execution. Custom endpoints and fallback-provider routing
+do not receive this inference.
+
 ## Context files
 
 ([Context Files](https://hermes-agent.nousresearch.com/docs/user-guide/features/context-files),

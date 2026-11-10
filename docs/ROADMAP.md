@@ -27,6 +27,9 @@ number of adapters or findings. Token estimates remain explicitly secondary to s
 
 ### 0.3: regression prevention and confidence
 
+- [x] Model Ollama Launch integrations and Hermes setups launched to local or cloud models. Preserve the selected
+  models, infer execution from Ollama's cloud naming rather than the local endpoint, and include cloud models which
+  have no local manifest ([Ollama](adapters/ollama.md), [Hermes](adapters/hermes.md)).
 - Version every public JSON surface (`status`, `audit`, `compare`, `fleet`, `usage` and `check`) with generated
   schemas, compatibility tests and consistent adapter/coverage provenance. Expose structured MCP results and schemas.
 - Add versioned baselines, `check --baseline`, a no-new-debt ratchet, repository policy with explained suppressions,

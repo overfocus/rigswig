@@ -2,19 +2,19 @@
 
 use std::path::{Path, PathBuf};
 
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 use crate::adapter::{Adapter, Ctx, Detection};
-use crate::adapters::build::{Build, calc, char_len};
+use crate::adapters::build::{Build, calc, char_len, unknown};
 use crate::fs::Fs;
 use crate::model::*;
 use crate::read::json::read_json;
 use crate::read::redact::{printable, sha256_hex};
 
 pub const ID: &str = "ollama";
-pub const ADAPTER_VERSION: &str = "0.1.0";
-/// The Ollama release whose documents this adapter follows (read 2026-11-06).
-const TOOL_VERSION: &str = "0.40.13";
+pub const ADAPTER_VERSION: &str = "0.2.0";
+/// The Ollama release whose documents this adapter follows (read 2026-11-10).
+const TOOL_VERSION: &str = "0.40.16";
 const SYSTEM_MEDIA_TYPE: &str = "application/vnd.ollama.image.system";
 
 pub struct Ollama;
@@ -141,6 +141,7 @@ impl Adapter for Ollama {
         let mut run = Run { b: &mut b, p };
         run.settings();
         run.models();
+        run.launch_integrations();
 
         // Nothing of Ollama's own loads before your first line: what a session carries is the chosen model's
         // System text (an on-invoke item), assembled by its template.
@@ -153,8 +154,8 @@ impl Adapter for Ollama {
             "each model's parameters (the params blobs, num_ctx among them) and the GGUF-side context-window defaults",
             "the chat templates' directives and variables (only the System directive's text is measured)",
             "models under an OLLAMA_HOST server elsewhere (rigswig reads only the local model store; the default context window without OLLAMA_CONTEXT_LENGTH is 4096 tokens)",
-            "Ollama's integrations config (config.json, which models each integration is onboarded to) and its cloud models",
-            "the settings each `ollama launch <harness>` integration writes (they configure other harnesses; a launched harness is audited by its own adapter)",
+            "integration keys other than integrations.<harness>.models/onboarded, any launch/<name> provider or web-search settings, and model metadata not stored in config.json",
+            "execution is inferred from Ollama's :cloud/-cloud model naming, never from the local endpoint; custom-endpoint and fallback-provider routing is the client harness's own configuration",
             "the tool schemas and system prompt of whatever client harness is pointed at the server",
             "server.json keys other than disable_ollama_cloud",
         ] {
@@ -237,6 +238,99 @@ impl Run<'_, '_> {
             let source = trail.first().map(|t| t.layer.clone());
             self.b.settings.insert("cloud".into(), Decision { value: Value::String(state.into()), source, trail });
         } // nothing turns it either way: the tool's default applies
+    }
+
+    /// `ollama launch` integrations: the harnesses onboarded in config.json and every local or cloud model selected
+    /// for them. Selected models without a local manifest are listed too; a cloud model needs no local blob.
+    fn launch_integrations(&mut self) {
+        let path = self.p.ollama_home.join("config.json");
+        let file = self.b.json(&path);
+        let Some(raw) = file.value().and_then(|v| v.get("integrations")) else { return };
+        let Some(integrations) = raw.as_object().cloned() else {
+            self.b.warn("launch-model", "integrations is not an object, skipped", Some(&path));
+            return;
+        };
+        let mut normalized = Map::new();
+        let mut selected = Vec::new();
+        for (harness, cfg) in integrations {
+            let Some(cfg) = cfg.as_object() else {
+                self.b.warn("launch-model", format!("integration {harness} is not an object, skipped"), Some(&path));
+                continue;
+            };
+            let mut models = Vec::new();
+            match cfg.get("models") {
+                Some(Value::Array(raw)) => {
+                    for model in raw {
+                        if let Some(name) = model.as_str().filter(|s| !s.is_empty()) {
+                            models.push(serde_json::json!({
+                                "name": name,
+                                "execution": crate::adapters::shared::ollama_model_execution(name),
+                            }));
+                            selected.push(name.to_string());
+                        } else {
+                            self.b.warn(
+                                "launch-model",
+                                format!("integration {harness} has a model entry which is not a name, skipped"),
+                                Some(&path),
+                            );
+                        }
+                    }
+                }
+                Some(_) => self.b.warn(
+                    "launch-model",
+                    format!("integration {harness} has models which is not a list, skipped"),
+                    Some(&path),
+                ),
+                None => {}
+            }
+            let onboarded = match cfg.get("onboarded") {
+                Some(Value::Bool(value)) => *value,
+                Some(_) => {
+                    self.b.warn(
+                        "launch-model",
+                        format!("integration {harness} has onboarded which is not a boolean"),
+                        Some(&path),
+                    );
+                    false
+                }
+                None => false,
+            };
+            normalized.insert(harness, serde_json::json!({ "models": models, "onboarded": onboarded }));
+        }
+        if normalized.is_empty() {
+            return;
+        }
+        let value = Value::Object(normalized);
+        self.b.settings.insert(
+            "integrations".into(),
+            Decision {
+                value: value.clone(),
+                source: Some("user".into()),
+                trail: vec![TrailStep {
+                    layer: "user".into(),
+                    value,
+                    note: Some(
+                        "config.json integrations; execution is inferred from the model's :cloud/-cloud name".into(),
+                    ),
+                }],
+            },
+        );
+        selected.sort();
+        selected.dedup();
+        for name in selected {
+            if self.b.items.iter().any(|i| i.name == name) {
+                continue;
+            }
+            let mut it = self.b.item(
+                "user",
+                &name,
+                ItemDetail::Instruction(InstructionAttrs::default()),
+                LoadWhen::OnInvoke,
+                unknown(),
+            );
+            it.origin.file = Some(self.b.display(&path));
+            self.b.push(it);
+        }
     }
 
     /// One item per local model whose manifest sits in the model store: its System directive, measured.

@@ -74,6 +74,7 @@ impl<'a> Build<'a> {
                     | "external-dir-unresolvable"
                     | "mcp-bundle"
                     | "mcp-server-transport"
+                    | "launch-model"
                     | "package-unreadable"
                     | "plugin-missing"
                     | "profile-unresolved"

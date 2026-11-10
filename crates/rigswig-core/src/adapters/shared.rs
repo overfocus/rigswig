@@ -6,6 +6,16 @@ use crate::adapters::build::{Build, calc};
 use crate::model::*;
 use crate::read::redact::{script_of, url_origin};
 
+/// Where an Ollama Launch model executes, inferred from Ollama's documented `:cloud` / `-cloud` naming. A local
+/// endpoint is only the router and is deliberately not part of this judgment.
+pub fn ollama_model_execution(model: &str) -> &'static str {
+    if model.rsplit_once(':').is_some_and(|(_, tag)| tag == "cloud") || model.ends_with("-cloud") {
+        "cloud"
+    } else {
+        "local"
+    }
+}
+
 /// A tool-neutral name for Claude Code's hook events.
 pub fn neutral_event(event: &str) -> String {
     match event {

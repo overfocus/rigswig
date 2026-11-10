@@ -80,6 +80,47 @@ fn every_local_model_is_listed_by_its_chat_name() {
 }
 
 #[test]
+fn launch_integrations_keep_local_and_cloud_model_choices() {
+    let fs = base().file(
+        format!("{HOME}/.ollama/config.json"),
+        r#"{"integrations":{"hermes":{"models":["gemma4:31b","kimi-k3.1-pro:cloud","gpt-oss:120b-cloud"],"onboarded":true}}}"#,
+    );
+    let h = run(&fs);
+    let integration = &h.settings["integrations"].value["hermes"];
+    assert_eq!(integration["onboarded"], true);
+    assert_eq!(integration["models"][0], serde_json::json!({"name":"gemma4:31b","execution":"local"}));
+    assert_eq!(integration["models"][1], serde_json::json!({"name":"kimi-k3.1-pro:cloud","execution":"cloud"}));
+    assert_eq!(integration["models"][2], serde_json::json!({"name":"gpt-oss:120b-cloud","execution":"cloud"}));
+    assert_eq!(h.settings["integrations"].source.as_deref(), Some("user"));
+    for model in ["gemma4:31b", "kimi-k3.1-pro:cloud", "gpt-oss:120b-cloud"] {
+        let it = item(&h, &format!("ollama:instruction:user:{model}"));
+        assert_eq!(it.load.when, LoadWhen::OnInvoke);
+        assert_eq!(it.load.chars.confidence, Confidence::Unknown);
+        assert_eq!(it.origin.file.as_deref(), Some("~/.ollama/config.json"));
+    }
+}
+
+#[test]
+fn an_invalid_launch_model_is_an_incomplete_read() {
+    let fs = base().file(
+        format!("{HOME}/.ollama/config.json"),
+        r#"{"integrations":{"hermes":{"models":[true,"gemma4:31b"],"onboarded":"yes"}}}"#,
+    );
+    let h = run(&fs);
+    assert_eq!(h.warnings.iter().filter(|w| w.code == "incomplete-launch-model").count(), 2);
+    assert_eq!(h.settings["integrations"].value["hermes"]["onboarded"], false);
+    assert_eq!(h.settings["integrations"].value["hermes"]["models"].as_array().unwrap().len(), 1);
+}
+
+#[test]
+fn a_malformed_launch_registry_is_an_incomplete_read() {
+    let fs = base().file(format!("{HOME}/.ollama/config.json"), r#"{"integrations":[]}"#);
+    let h = run(&fs);
+    assert!(h.warnings.iter().any(|w| w.code == "incomplete-launch-model"));
+    assert!(!h.settings.contains_key("integrations"));
+}
+
+#[test]
 fn server_settings_come_from_the_environment() {
     let fs = base();
     let h = run_env(
