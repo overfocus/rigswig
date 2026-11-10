@@ -170,6 +170,63 @@ fn the_catalog_lists_exactly_the_five_tools_with_schemas() {
     for t in tools {
         assert!(t["description"].as_str().is_some_and(|d| !d.is_empty()), "every tool says what it does");
         assert_eq!(t["inputSchema"]["type"], "object");
+        assert_eq!(t["inputSchema"]["additionalProperties"], false);
+    }
+    let status = tools.iter().find(|t| t["name"] == "status").unwrap();
+    assert_eq!(
+        status["inputSchema"]["properties"]["view"]["enum"],
+        serde_json::json!(["summary", "kind", "item", "full"])
+    );
+}
+
+#[test]
+fn status_is_summary_first_and_full_json_is_explicit() {
+    let s = Sandbox::new("summary-first");
+    s.write("repo/CLAUDE.md", "Use the test suite.");
+    s.write("home/.claude/agents/a.md", "---\ndescription: helps\n---\n");
+    let mut srv = s.server();
+    initialized(&mut srv);
+
+    let r = srv.request("v1", "tools/call", r#"{"name":"status","arguments":{}}"#);
+    let out: Value = serde_json::from_str(r["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(out["view"], "summary");
+    assert_eq!(out["tool"]["id"], "claude-code");
+    assert!(out["effectiveItems"].as_u64().unwrap() >= 2);
+    assert!(out["context"]["chars"]["value"].as_u64().unwrap() > 0);
+    assert!(out["kinds"].as_array().unwrap().iter().any(|k| k["kind"] == "instruction" && k["items"] == 1));
+    assert!(out["kinds"].as_array().unwrap().iter().any(|k| k["kind"] == "agent" && k["items"] == 1));
+    assert!(out.get("items").is_none(), "the default does not pay for every item's JSON");
+    assert!(out.get("layers").is_none() && out.get("settings").is_none());
+}
+
+#[test]
+fn status_drills_down_by_kind_and_exact_item() {
+    let s = Sandbox::new("drill-down");
+    s.write("repo/CLAUDE.md", "Use the test suite.");
+    s.write("home/.claude/agents/a.md", "---\ndescription: helps\n---\n");
+    let mut srv = s.server();
+    initialized(&mut srv);
+
+    let kind = srv.request("j1", "tools/call", r#"{"name":"status","arguments":{"view":"kind","kind":"agent"}}"#);
+    let out: Value = serde_json::from_str(kind["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(out["view"], "kind");
+    assert_eq!(out["kind"], "agent");
+    assert_eq!(out["items"].as_array().unwrap().len(), 1);
+    assert_eq!(out["items"][0]["id"], "claude-code:agent:user:a");
+
+    let item = srv.request(
+        "j2",
+        "tools/call",
+        r#"{"name":"status","arguments":{"view":"item","item":"claude-code:agent:user:a"}}"#,
+    );
+    let out: Value = serde_json::from_str(item["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(out["view"], "item");
+    assert_eq!(out["item"]["id"], "claude-code:agent:user:a");
+    assert_eq!(out["item"]["origin"]["layer"], "user");
+
+    for (id, arguments) in [("j3", r#"{"view":"kind"}"#), ("j4", r#"{"view":"item","item":"no-such-item"}"#)] {
+        let bad = srv.request(id, "tools/call", &format!(r#"{{"name":"status","arguments":{arguments}}}"#));
+        assert_eq!(bad["result"]["isError"], true, "{bad}");
     }
 }
 
@@ -181,14 +238,15 @@ fn status_returns_the_harness_json_and_whatif_takes_items_out() {
     let mut srv = s.server();
     initialized(&mut srv);
 
-    let r = srv.request("c1", "tools/call", r#"{"name":"status","arguments":{}}"#);
+    let r = srv.request("c1", "tools/call", r#"{"name":"status","arguments":{"view":"full"}}"#);
     assert_eq!(r["result"]["isError"], false);
     let h: Value =
         serde_json::from_str(r["result"]["content"][0]["text"].as_str().expect("the text")).expect("harness JSON");
     assert_eq!(h["tool"]["id"], "claude-code");
     assert!(h["items"].as_array().expect("items").iter().any(|i| i["id"] == "claude-code:agent:user:a"));
 
-    let r2 = srv.request("c2", "tools/call", r#"{"name":"status","arguments":{"without":["layer:user"]}}"#);
+    let r2 =
+        srv.request("c2", "tools/call", r#"{"name":"status","arguments":{"view":"full","without":["layer:user"]}}"#);
     let h2: Value = serde_json::from_str(r2["result"]["content"][0]["text"].as_str().expect("the text")).unwrap();
     // A taken-out item stays in the list, but nothing from the user layer is in effect any more.
     for i in h2["items"].as_array().expect("items") {
@@ -310,6 +368,31 @@ fn compare_answers_both_ways() {
         r#"{"name":"compare","arguments":{"repo":"no-such-folder-xyz","repoB":".","tool":"claude-code"}}"#,
     );
     assert_eq!(r2["result"]["isError"], true, "a folder that does not exist is a tool error, not a crash");
+}
+
+#[test]
+fn tool_arguments_are_typed_and_unknown_keys_are_refused() {
+    let s = Sandbox::new("typed-arguments");
+    s.write("repo/CLAUDE.md", "Use the test suite.");
+    let mut srv = s.server();
+    initialized(&mut srv);
+    let cases = [
+        ("status", r#"{"view":true}"#, "view must be a string"),
+        ("status", r#"{"kind":"agent"}"#, "kind needs view=kind"),
+        ("status", r#"{"without":["layer:user",4]}"#, "without must be an array of strings"),
+        ("status", r#"{"typo":true}"#, "unknown argument: typo"),
+        ("check", r#"{"noWarnings":"no"}"#, "noWarnings must be a boolean"),
+        ("check", r#"{"maxTokens":"40k"}"#, "maxTokens must be a non-negative integer"),
+        ("compare", r#"{"tools":["claude-code"]}"#, "tools must contain exactly two harness ids"),
+        ("tools", r#"{"tool":"codex"}"#, "unknown argument: tool"),
+    ];
+    for (index, (tool, arguments, expected)) in cases.into_iter().enumerate() {
+        let r =
+            srv.request(&format!("t{index}"), "tools/call", &format!(r#"{{"name":"{tool}","arguments":{arguments}}}"#));
+        assert_eq!(r["result"]["isError"], true, "{tool} {arguments}: {r}");
+        let text = r["result"]["content"][0]["text"].as_str().unwrap_or_default();
+        assert!(text.contains(expected), "wanted {expected:?}, got {text:?}");
+    }
 }
 
 #[test]

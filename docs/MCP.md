@@ -47,13 +47,23 @@ this row shows the server like any other MCP server, tool listings unmeasured.
 
 | Tool | Answers | Arguments |
 |---|---|---|
-| `status` | what a session in a repo loads: `status --json` (the full harness: items, sizes, origins, trail) | `repo` (or the client's process cwd), `tool`, `without` |
+| `status` | summary-first context totals, per-kind item counts and coverage; drill down to full item records, or explicitly request the whole harness | `repo` (or the client's process cwd), `tool`, `without`, `view`, `kind`, `item` |
 | `check` | whether a checkout passes CI limits and optional incomplete-read checks; `passed` is the verdict | `repo`, `tool`, `maxTokens`, `maxItemTokens`, `noWarnings`, `strict`, `without` |
 | `audit` | ranked findings, each with a saving and a fix | `repo`, `tool` |
 | `compare` | what differs: two repos with one harness (`repo`, `repoB`, `tool`), or two harnesses on one repo (`repo`, `tools`) | |
 | `tools` | the harnesses rigswig knows, with detection score, evidence, and any fresh live-session claim | `repo` |
 
-Every result is the tool's JSON, serialised as the content text; a failure inside the tool (a repo that does not
+Every result is the tool's JSON, serialised as the content text. `status` defaults to `view: "summary"`: tool and
+adapter provenance, exact character and estimated token totals, effective-item and warning counts, per-kind counts,
+and `coverage.notModelled`. Use `view: "kind", kind: "skill"` for every item of one kind (including its effective and
+shadowed state), `view: "item", item: "<exact-id>"` for one item, or `view: "full"` for the complete `status --json`
+model. Full harness JSON is never the default model-context cost.
+
+Arguments are validated before repository resolution: unknown keys, wrong types, empty identifiers, malformed string
+arrays, negative or fractional budgets, and mismatched `kind`/`item` views are tool errors. `compare.tools` must contain
+exactly two harness ids, and the two-repo and two-harness argument forms cannot be mixed.
+
+A failure inside the tool (a repo that does not
 exist, an unknown harness, or `--strict` on an adapter without a completeness contract) is `isError: true` with the
 message, not a protocol error. `strict` has the same meaning as in the CLI: fail on `incomplete-*` warnings, not on
 `coverage.notModelled` itself ([strict checks](STRICT.md)). Protocol errors are the

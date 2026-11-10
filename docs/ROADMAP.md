@@ -42,8 +42,8 @@ number of adapters or findings. Token estimates remain explicitly secondary to s
   unsupported invocation types must produce `unknown`, never proof that an item is unnecessary.
 - Reuse `OverlayFs` and full adapter re-resolution for `--without`, audit savings and multi-change simulations, as
   write planning already does, instead of only filtering a resolved model.
-- Make MCP summary-first, with drill-down by kind or item, and typed request validation. Full harness JSON must be an
-  explicit request rather than the default model-context cost.
+- [x] Make MCP summary-first, with kind/item drill-down and typed request validation before resolution. Full harness
+  JSON requires `view: "full"`; advertised schemas reject unknown arguments and match the runtime types.
 - Introduce adapter capability tiers and a compatibility matrix with last-verified harness versions, a contributor
   conformance kit and differential fixtures from real harness versions. Depth and confidence outrank adapter count.
 - Promote native harness-reported measurements and public tokenizers, calibrated by content type. Let `check` select
