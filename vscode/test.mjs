@@ -214,6 +214,7 @@ const statusFixture = JSON.stringify({
         { id: 'i:home', kind: 'instruction', name: '~/.claude/CLAUDE.md', origin: { layer: 'user', file: '~/.claude/CLAUDE.md' }, effective: true, load: { when: 'startup', chars: { value: 1000 } } },
         { id: 'a:off', kind: 'agent', name: 'old', origin: { layer: 'user', file: '~/.claude/agents/old.md', line: 3 }, effective: false, load: { when: 'startup', chars: { value: 500 } } },
         { id: 'h:1', kind: 'hook', name: 'PreToolUse', origin: { layer: 'user', file: '~/.claude/settings.json' }, effective: true, load: { when: 'never', chars: { value: 0 } } },
+        { id: 's:lazy', kind: 'skill', name: 'lazy', origin: { layer: 'user' }, effective: true, load: { when: 'on-invoke', chars: { value: 500 } } },
         { id: 'm:1', kind: 'mcp', name: 'srv', origin: { layer: 'user', file: '~/.claude.json' }, effective: true, load: { when: 'startup', chars: { value: 0 } } },
         { kind: 'agent' },
         null,
@@ -221,7 +222,7 @@ const statusFixture = JSON.stringify({
     warnings: [{ code: 'w', message: 'a warning' }, { code: 'bad' }],
 });
 const st = parseStatus(statusFixture);
-assert.equal(st.items.length, 5, 'malformed items are skipped, not fatal');
+assert.equal(st.items.length, 6, 'malformed items are skipped, not fatal');
 assert.deepEqual(st.layerFiles, ['~/.claude/settings.json'], 'a layer without a path is no file');
 assert.equal(st.warnings.length, 1);
 assert.equal(st.items.find((i) => i.id === 'a:off').line, 3);
@@ -230,8 +231,13 @@ assert.equal(lib.tokensFor(3000, st), 750, "an item's share uses the read's own 
 assert.equal(lib.tokensFor(10, { chars: 0, tokens: { value: 0 } }), 0, 'an empty read divides by nothing');
 
 const groups = lib.contextGroups(st);
-assert.deepEqual(groups.map((g) => g.kind).sort(), ['agent', 'hook', 'instruction', 'mcp'], 'one group per kind');
-assert.equal(groups[0].kind, 'instruction', 'the costliest kind first');
+assert.deepEqual(groups.map((g) => g.kind).sort(), ['agent', 'hook', 'instruction', 'mcp', 'skill'], 'one group per kind');
+assert.equal(groups[0].kind, 'instruction', 'the costliest startup kind first');
+assert.equal(groups[0].startupChars, 4000);
+assert.equal(groups[0].deferredChars, 0);
+const lazy = groups.find((g) => g.kind === 'skill');
+assert.equal(lazy.startupChars, 0, 'an on-invoke skill has no startup cost');
+assert.equal(lazy.deferredChars, 500, 'its on-invoke characters stay visible as deferred');
 assert.deepEqual(groups[0].items.map((i) => i.id), ['i:repo', 'i:home'], 'the largest item first');
 const agents = groups.find((g) => g.kind === 'agent');
 assert.equal(agents.items.length, 0, 'an item that does not load is not listed');
@@ -283,7 +289,7 @@ assert.deepEqual(watch, [
 ]);
 assert.ok(!watch.some((w) => w.names.includes('.claude.json')), '~/.claude.json is not watched');
 assert.equal(lib.watchTargets(st, repo, home, 1).length, 1, 'the cap holds');
-for (const name of ['CLAUDE.md', 'AGENTS.md', 'GEMINI.md', '.mcp.json', '.claude/**', '.codex/**', '.cursor/**', '.github/copilot-instructions.md']) {
+for (const name of ['CLAUDE.md', 'AGENTS.md', 'AGENTS.MD', 'CLAUDE.MD', 'GEMINI.md', 'deepseek.md', '.mcp.json', 'mcp.json', '.claude/**', '.codex/**', '.cursor/**', '.github/copilot-instructions.md', '.github/skills/**', '.omp/**', '.pi/**', '.deepseek/**', '.hermes/**', '.agent/**', '.agents/**']) {
     assert.ok(lib.WATCH_GLOB.includes(name), `the workspace glob watches ${name}`);
 }
 assert.ok(lib.WATCH_GLOB.startsWith('{') && lib.WATCH_GLOB.endsWith('}') && !lib.WATCH_GLOB.includes(' '), 'one brace glob');
@@ -358,8 +364,10 @@ assert.ok(onFiles, 'the editor toolbar has the page button on harness files');
 const [nameRe, pathRe] = [...onFiles.when.matchAll(/=~ \/(.+?)\/(?= \|\||\))/g)].map((m) => new RegExp(m[1]));
 const shows = (p) => nameRe.test(path.basename(p)) || pathRe.test(p);
 for (const p of ['/r/CLAUDE.md', '/r/CLAUDE.local.md', '/r/sub/AGENTS.md', '/r/AGENTS.override.md', '/r/GEMINI.md',
-    '/r/.mcp.json', '/r/.cursorrules', '/r/.github/copilot-instructions.md', '/h/.claude/settings.json',
-    '/h/.claude/skills/x/SKILL.md', '/r/.codex/config.toml', 'C:\\r\\.cursor\\rules\\a.mdc']) {
+    '/r/.mcp.json', '/r/mcp.json', '/r/deepseek.md', '/r/AGENTS.MD', '/r/CLAUDE.MD', '/r/.cursorrules', '/r/.github/copilot-instructions.md', '/h/.claude/settings.json',
+    '/h/.claude/skills/x/SKILL.md', '/r/.codex/config.toml', '/r/.omp/settings.json', '/r/.pi/mcp.json',
+    '/r/.deepseek/config.json', '/r/.hermes/skills/x/SKILL.md', '/r/.agents/skills/x/SKILL.md',
+    '/r/.agent/rules/a.md', '/r/.github/skills/x/SKILL.md', 'C:\\r\\.cursor\\rules\\a.mdc']) {
     assert.ok(shows(p), `the page button shows on ${p}`);
 }
 for (const p of ['/r/README.md', '/r/src/main.rs', '/r/MYCLAUDE.md', '/r/CLAUDE.md.bak', '/r/package.json']) {

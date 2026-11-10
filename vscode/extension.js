@@ -510,7 +510,11 @@ class ContextTree {
                 const tree = new vscode.TreeItem(i.name, vscode.TreeItemCollapsibleState.None);
                 const tok = lib.tokensFor(i.chars, parsed);
                 tree.description = [
-                    tok > 0 || i.when === 'startup' ? `~${fmt(tok)} tok` : 'no context cost',
+                    i.when === 'never'
+                        ? 'no context cost'
+                        : tok > 0 || i.when === 'startup'
+                          ? `~${fmt(tok)} tok ${i.when === 'startup' ? 'startup' : 'deferred'}`
+                          : 'no context cost',
                     i.package ?? i.layer,
                 ]
                     .filter(Boolean)
@@ -527,8 +531,12 @@ class ContextTree {
                 return { tree };
             });
             const tree = new vscode.TreeItem(g.kind, vscode.TreeItemCollapsibleState.Collapsed);
-            const off = g.notLoaded > 0 ? ` · ${g.notLoaded} not loaded` : '';
-            tree.description = `${g.items.length} · ~${fmt(lib.tokensFor(g.chars, parsed))} tok${off}`;
+            const off = g.notLoaded > 0 ? `${g.notLoaded} not loaded` : '';
+            const costs = [
+                g.startupChars > 0 ? `~${fmt(lib.tokensFor(g.startupChars, parsed))} tok startup` : null,
+                g.deferredChars > 0 ? `~${fmt(lib.tokensFor(g.deferredChars, parsed))} tok deferred` : null,
+            ].filter(Boolean);
+            tree.description = [`${g.items.length}`, ...costs, off].filter(Boolean).join(' · ');
             tree.iconPath = new vscode.ThemeIcon(KIND_ICON[g.kind] ?? 'symbol-misc');
             return { tree, children };
         });

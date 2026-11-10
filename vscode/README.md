@@ -20,8 +20,9 @@ nothing twice.
   - **Findings**, most severe first, each with its proposed fix, its evidence and the files it is about; clicking
     one opens its file. The count shows as a badge on the view.
   - **What loads**: every instruction file, agent, skill, command, MCP server and hook the session gets, grouped
-    by kind, the costliest first, with each one's share of the bill and its layer or plugin; clicking one opens
-    its file. Items that are overridden or turned off are counted, not listed.
+    by kind, the costliest startup groups first, with each one's share of the bill and its layer or plugin; clicking
+    one opens its file. Deferred/on-match costs are labelled separately from startup costs. Items that are overridden
+    or turned off are counted, not listed.
 - **The toolbar**: an open-page button on the editor's title bar whenever a file a harness reads is open
   (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `.mcp.json`, a `SKILL.md`, anything under `.claude/`, `.codex/`,
   `.cursor/`…), next to refresh and open on the rigswig view (and on the page panel, when the page opens in one).
@@ -30,7 +31,8 @@ nothing twice.
   `rigswig.openInBrowser` off), compare included, always read-only.
 
 It keeps itself current: creating, changing or deleting a file the harness reads (`CLAUDE.md`, `AGENTS.md`,
-`.claude/`, `.codex/`, a skill, a settings file in your home folder…) re-reads the bill and re-runs the audit,
+`.claude/`, `.codex/`, `.omp/`, `.pi/`, `.deepseek/`, `.hermes/`, `.agents/`, a skill, a settings file in your home
+folder…) re-reads the bill and re-runs the audit,
 debounced (`rigswig.autoRefresh`). Moving between files of the same folder re-runs nothing; moving to another
 folder of a multi-root workspace reads that one. **rigswig: Refresh** re-reads by hand, and **rigswig: Show the
 log** shows every CLI run with its exit code and time.

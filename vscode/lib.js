@@ -196,20 +196,24 @@ function tokensFor(chars, parsed) {
 function contextGroups(parsed) {
     const kinds = new Map();
     for (const item of parsed.items) {
-        const g = kinds.get(item.kind) ?? { kind: item.kind, chars: 0, items: [], notLoaded: 0 };
+        const g = kinds.get(item.kind) ?? { kind: item.kind, startupChars: 0, deferredChars: 0, items: [], notLoaded: 0 };
         kinds.set(item.kind, g);
         if (!item.effective) {
             g.notLoaded += 1;
             continue;
         }
         g.items.push(item);
-        g.chars += item.chars;
+        if (item.when === 'startup') {
+            g.startupChars += item.chars;
+        } else if (item.when !== 'never') {
+            g.deferredChars += item.chars;
+        }
     }
     const groups = [...kinds.values()].filter((g) => g.items.length > 0 || g.notLoaded > 0);
     for (const g of groups) {
         g.items.sort((a, b) => b.chars - a.chars || a.name.localeCompare(b.name));
     }
-    return groups.sort((a, b) => b.chars - a.chars || a.kind.localeCompare(b.kind));
+    return groups.sort((a, b) => b.startupChars - a.startupChars || b.deferredChars - a.deferredChars || a.kind.localeCompare(b.kind));
 }
 
 /**
@@ -217,10 +221,10 @@ function contextGroups(parsed) {
  * reported it. The files it already reports are watched by their exact paths (see `watchTargets`).
  */
 const WATCH_GLOB =
-    '{**/CLAUDE.md,**/CLAUDE.local.md,**/AGENTS.md,**/AGENTS.local.md,**/AGENTS.override.md,**/AGENT.md,**/GEMINI.md,' +
-    '**/HERMES.md,.hermes.md,.mcp.json,.cursorrules,.windsurfrules,.claude/**,.codex/**,.cursor/**,.gemini/**,' +
-    '.windsurf/**,.devin/**,.zed/settings.json,.vscode/mcp.json,.github/copilot-instructions.md,' +
-    '.github/instructions/**,.github/agents/**,.github/prompts/**,.github/mcp.json}';
+    '{**/CLAUDE.md,**/CLAUDE.MD,**/CLAUDE.local.md,**/AGENTS.md,**/AGENTS.MD,**/AGENTS.local.md,**/AGENTS.override.md,**/AGENT.md,**/GEMINI.md,**/deepseek.md,' +
+    '**/HERMES.md,.hermes.md,.mcp.json,mcp.json,.cursorrules,.windsurfrules,.claude/**,.codex/**,.cursor/**,.gemini/**,' +
+    '.windsurf/**,.devin/**,.omp/**,.pi/**,.deepseek/**,.hermes/**,.agent/**,.agents/**,.zed/settings.json,.vscode/mcp.json,.github/copilot-instructions.md,' +
+    '.github/instructions/**,.github/agents/**,.github/prompts/**,.github/skills/**,.github/mcp.json}';
 
 /**
  * Files a harness itself rewrites all the time (Claude Code's `~/.claude.json` keeps per-session state next to the
