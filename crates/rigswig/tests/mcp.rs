@@ -286,6 +286,10 @@ fn strict_check_reports_incomplete_reads() {
     let row = out["checks"].as_array().unwrap().iter().find(|c| c["check"] == "strict").unwrap();
     assert_eq!(row["passed"], false);
     assert!(row["detail"].as_str().unwrap().contains("incomplete-malformed-json"), "{row}");
+
+    let bad = srv.request("s2", "tools/call", r#"{"name":"check","arguments":{"strict":"yes"}}"#);
+    assert_eq!(bad["result"]["isError"], true);
+    assert!(bad["result"]["content"][0]["text"].as_str().unwrap_or_default().contains("strict must be a boolean"));
 }
 
 #[test]

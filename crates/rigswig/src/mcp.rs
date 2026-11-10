@@ -115,7 +115,11 @@ fn status(args: &Map<String, Value>) -> Result<Value, String> {
 
 /// `check`: the CI limits as one object, with `passed` for the whole row set.
 fn check(args: &Map<String, Value>) -> Result<Value, String> {
-    let strict = args.get("strict").and_then(Value::as_bool).unwrap_or(false);
+    let strict = match args.get("strict") {
+        None => false,
+        Some(Value::Bool(value)) => *value,
+        Some(_) => return Err("strict must be a boolean".into()),
+    };
     let mut h = crate::resolve_check(&arg_repo(args)?, arg_tool(args).as_deref(), strict)?;
     let without = strs(args, "without");
     if !without.is_empty() {

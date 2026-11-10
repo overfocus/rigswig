@@ -10,8 +10,9 @@ rigswig check --strict --max-tokens 40k --json
 ```
 
 The `strict` row in the JSON verdict passes only when no `incomplete-*` warning is present. A failure exits 1, like a
-budget failure. An adapter which has not opted into the completeness contract is refused before its files are read:
-the CLI exits 2, and MCP returns a tool error. A third-party adapter's default is therefore to fail closed, not to
+budget failure. An adapter which has not opted into the completeness contract is refused before that adapter resolves
+the setup: the CLI exits 2, and MCP returns a tool error. Candidate-harness detection still happens first. A
+third-party adapter's default is therefore to fail closed, not to
 look complete because it emitted no warnings. Every built-in adapter opts in through the shared classifier.
 
 ## What fails strict mode

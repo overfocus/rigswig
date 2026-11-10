@@ -24,7 +24,9 @@ hand first). Codex is read-only for now: its `config.toml` needs an editor that 
    kept only if the result reads back as exactly the intended settings. A file it cannot edit that way (a key written
    twice, say) is written whole, pretty-printed, and the plan says its layout will change. A new file is pretty-printed.
 2. **Apply** (the binary): only if the file is byte for byte what the plan saw. The old file is saved under
-   `~/.rigswig/backups/` (both the folder and its files are owner-only on Unix), and the new one is written to a
+   `~/.rigswig/backups/` (both the folder and its files are owner-only on Unix). Backup paths which are links are
+   refused; on Unix each directory component is opened with `openat`/`O_NOFOLLOW` and the backup is created relative
+   to that descriptor, so a symlink swap cannot redirect the write. The new settings are written to a
    temporary file beside it and renamed over it, so a crash leaves either the old file or the new one, never half of
    each. An existing settings file's permissions survive the replacement; a newly created settings file is owner-only
    on Unix.
