@@ -21,8 +21,8 @@ nothing twice.
     one opens its file. The count shows as a badge on the view.
   - **What loads**: every instruction file, agent, skill, command, MCP server and hook the session gets, grouped
     by kind, the costliest startup groups first, with each one's share of the bill and its layer or plugin; clicking
-    one opens its file. Deferred/on-match costs are labelled separately from startup costs. Items that are overridden
-    or turned off are counted, not listed.
+    one opens its file. Deferred/on-match costs are labelled separately from startup costs, and unknown timing is
+    labelled rather than guessed. Items that are overridden or turned off are counted, not listed.
 - **The toolbar**: an open-page button on the editor's title bar whenever a file a harness reads is open
   (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `.mcp.json`, a `SKILL.md`, anything under `.claude/`, `.codex/`,
   `.cursor/`…), next to refresh and open on the rigswig view (and on the page panel, when the page opens in one).

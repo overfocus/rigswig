@@ -508,15 +508,7 @@ class ContextTree {
             const children = g.items.map((i) => {
                 const file = lib.resolveFile(i.file, repo, home());
                 const tree = new vscode.TreeItem(i.name, vscode.TreeItemCollapsibleState.None);
-                const tok = lib.tokensFor(i.chars, parsed);
-                tree.description = [
-                    i.when === 'never'
-                        ? 'no context cost'
-                        : tok > 0 || i.when === 'startup'
-                          ? `~${fmt(tok)} tok ${i.when === 'startup' ? 'startup' : 'deferred'}`
-                          : 'no context cost',
-                    i.package ?? i.layer,
-                ]
+                tree.description = [lib.itemCost(i, parsed), i.package ?? i.layer]
                     .filter(Boolean)
                     .join(' · ');
                 tree.iconPath = new vscode.ThemeIcon(KIND_ICON[i.kind] ?? 'symbol-misc');
@@ -535,6 +527,7 @@ class ContextTree {
             const costs = [
                 g.startupChars > 0 ? `~${fmt(lib.tokensFor(g.startupChars, parsed))} tok startup` : null,
                 g.deferredChars > 0 ? `~${fmt(lib.tokensFor(g.deferredChars, parsed))} tok deferred` : null,
+                g.unknownChars > 0 ? `~${fmt(lib.tokensFor(g.unknownChars, parsed))} tok timing unknown` : null,
             ].filter(Boolean);
             tree.description = [`${g.items.length}`, ...costs, off].filter(Boolean).join(' · ');
             tree.iconPath = new vscode.ThemeIcon(KIND_ICON[g.kind] ?? 'symbol-misc');

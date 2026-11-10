@@ -189,6 +189,27 @@ function tokensFor(chars, parsed) {
     return Math.round((chars * parsed.tokens.value) / parsed.chars);
 }
 
+/** Only these values make a timing claim. Missing or unrecognized `load.when` stays unknown. */
+function loadTiming(when) {
+    if (when === 'startup' || when === 'never') {
+        return when;
+    }
+    return when === 'on-invoke' || when === 'on-match' ? 'deferred' : 'unknown';
+}
+
+/** One item's cost label, shared by the tree and tested without the editor. */
+function itemCost(item, parsed) {
+    const timing = loadTiming(item.when);
+    if (timing === 'never') {
+        return 'no context cost';
+    }
+    const tokens = tokensFor(item.chars, parsed).toLocaleString();
+    if (timing === 'unknown') {
+        return item.chars > 0 ? `~${tokens} tok timing unknown` : 'timing unknown';
+    }
+    return `~${tokens} tok ${timing}`;
+}
+
 /**
  * The context view's groups: the items that load, by kind, each kind's items largest first and the kinds by what
  * they cost. Items overridden or turned off are counted per kind as `notLoaded` and left out of the list.
@@ -196,24 +217,29 @@ function tokensFor(chars, parsed) {
 function contextGroups(parsed) {
     const kinds = new Map();
     for (const item of parsed.items) {
-        const g = kinds.get(item.kind) ?? { kind: item.kind, startupChars: 0, deferredChars: 0, items: [], notLoaded: 0 };
+        const g = kinds.get(item.kind) ?? { kind: item.kind, startupChars: 0, deferredChars: 0, unknownChars: 0, items: [], notLoaded: 0 };
         kinds.set(item.kind, g);
         if (!item.effective) {
             g.notLoaded += 1;
             continue;
         }
         g.items.push(item);
-        if (item.when === 'startup') {
+        const timing = loadTiming(item.when);
+        if (timing === 'startup') {
             g.startupChars += item.chars;
-        } else if (item.when !== 'never') {
+        } else if (timing === 'deferred') {
             g.deferredChars += item.chars;
+        } else if (timing === 'unknown') {
+            g.unknownChars += item.chars;
         }
     }
     const groups = [...kinds.values()].filter((g) => g.items.length > 0 || g.notLoaded > 0);
     for (const g of groups) {
         g.items.sort((a, b) => b.chars - a.chars || a.name.localeCompare(b.name));
     }
-    return groups.sort((a, b) => b.startupChars - a.startupChars || b.deferredChars - a.deferredChars || a.kind.localeCompare(b.kind));
+    return groups.sort((a, b) =>
+        b.startupChars - a.startupChars || b.deferredChars - a.deferredChars || b.unknownChars - a.unknownChars || a.kind.localeCompare(b.kind),
+    );
 }
 
 /**
@@ -223,7 +249,7 @@ function contextGroups(parsed) {
 const WATCH_GLOB =
     '{**/CLAUDE.md,**/CLAUDE.MD,**/CLAUDE.local.md,**/AGENTS.md,**/AGENTS.MD,**/AGENTS.local.md,**/AGENTS.override.md,**/AGENT.md,**/GEMINI.md,**/deepseek.md,' +
     '**/HERMES.md,.hermes.md,.mcp.json,mcp.json,.cursorrules,.windsurfrules,.claude/**,.codex/**,.cursor/**,.gemini/**,' +
-    '.windsurf/**,.devin/**,.omp/**,.pi/**,.deepseek/**,.hermes/**,.agent/**,.agents/**,.zed/settings.json,.vscode/mcp.json,.github/copilot-instructions.md,' +
+    '.windsurf/**,.devin/**,.omp/**,.pi/**,.deepseek,.deepseek/**,.hermes/**,.agent/**,.agents/**,.zed/settings.json,.vscode/mcp.json,.github/copilot-instructions.md,' +
     '.github/instructions/**,.github/agents/**,.github/prompts/**,.github/skills/**,.github/mcp.json}';
 
 /**
@@ -382,6 +408,7 @@ module.exports = {
     resolveFile,
     findingTargets,
     tokensFor,
+    itemCost,
     contextGroups,
     watchTargets,
     parseVersion,

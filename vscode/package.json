@@ -149,7 +149,7 @@
         {
           "command": "rigswig.openPage",
           "group": "navigation",
-          "when": "resourceScheme == file && (resourceFilename =~ /^((CLAUDE(\\.local)?|AGENTS?(\\.local|\\.override)?|GEMINI|HERMES|SKILL|copilot-instructions)\\.md|CLAUDE\\.MD|AGENTS\\.MD|deepseek\\.md)$|^(\\.mcp\\.json|mcp\\.json|\\.(cursorrules|windsurfrules|hermes\\.md))$/ || resourcePath =~ /[\\\\/]\\.(claude|codex|cursor|gemini|windsurf|devin|omp|hermes|pi|deepseek|deepseek-cli|agents?)[\\\\/]/)"
+          "when": "resourceScheme == file && (resourceFilename =~ /^((CLAUDE(\\.local)?|AGENTS?(\\.local|\\.override)?|GEMINI|HERMES|SKILL|copilot-instructions)\\.md|CLAUDE\\.MD|AGENTS\\.MD|deepseek\\.md)$|^(\\.mcp\\.json|mcp\\.json|\\.(cursorrules|windsurfrules|hermes\\.md)|\\.deepseek)$/ || resourcePath =~ /[\\\\/]\\.(claude|codex|cursor|gemini|windsurf|devin|omp|hermes|pi|deepseek|deepseek-cli|agents?)[\\\\/]/)"
         }
       ],
       "view/title": [

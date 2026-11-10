@@ -213,7 +213,9 @@ const statusFixture = JSON.stringify({
         { id: 'i:repo', kind: 'instruction', name: 'CLAUDE.md', origin: { layer: 'project', file: 'CLAUDE.md' }, effective: true, load: { when: 'startup', chars: { value: 3000 } } },
         { id: 'i:home', kind: 'instruction', name: '~/.claude/CLAUDE.md', origin: { layer: 'user', file: '~/.claude/CLAUDE.md' }, effective: true, load: { when: 'startup', chars: { value: 1000 } } },
         { id: 'a:off', kind: 'agent', name: 'old', origin: { layer: 'user', file: '~/.claude/agents/old.md', line: 3 }, effective: false, load: { when: 'startup', chars: { value: 500 } } },
-        { id: 'h:1', kind: 'hook', name: 'PreToolUse', origin: { layer: 'user', file: '~/.claude/settings.json' }, effective: true, load: { when: 'never', chars: { value: 0 } } },
+        { id: 'h:1', kind: 'hook', name: 'PreToolUse', origin: { layer: 'user', file: '~/.claude/settings.json' }, effective: true, load: { when: 'never', chars: { value: 500 } } },
+        { id: 'i:match', kind: 'instruction', name: 'scoped', origin: { layer: 'project' }, effective: true, load: { when: 'on-match', chars: { value: 400 } } },
+        { id: 's:unknown', kind: 'skill', name: 'unknown timing', origin: { layer: 'user' }, effective: true, load: { chars: { value: 250 } } },
         { id: 's:lazy', kind: 'skill', name: 'lazy', origin: { layer: 'user' }, effective: true, load: { when: 'on-invoke', chars: { value: 500 } } },
         { id: 'm:1', kind: 'mcp', name: 'srv', origin: { layer: 'user', file: '~/.claude.json' }, effective: true, load: { when: 'startup', chars: { value: 0 } } },
         { kind: 'agent' },
@@ -222,7 +224,7 @@ const statusFixture = JSON.stringify({
     warnings: [{ code: 'w', message: 'a warning' }, { code: 'bad' }],
 });
 const st = parseStatus(statusFixture);
-assert.equal(st.items.length, 6, 'malformed items are skipped, not fatal');
+assert.equal(st.items.length, 8, 'malformed items are skipped, not fatal');
 assert.deepEqual(st.layerFiles, ['~/.claude/settings.json'], 'a layer without a path is no file');
 assert.equal(st.warnings.length, 1);
 assert.equal(st.items.find((i) => i.id === 'a:off').line, 3);
@@ -234,11 +236,18 @@ const groups = lib.contextGroups(st);
 assert.deepEqual(groups.map((g) => g.kind).sort(), ['agent', 'hook', 'instruction', 'mcp', 'skill'], 'one group per kind');
 assert.equal(groups[0].kind, 'instruction', 'the costliest startup kind first');
 assert.equal(groups[0].startupChars, 4000);
-assert.equal(groups[0].deferredChars, 0);
+assert.equal(groups[0].deferredChars, 400);
+assert.equal(groups[0].unknownChars, 0);
 const lazy = groups.find((g) => g.kind === 'skill');
 assert.equal(lazy.startupChars, 0, 'an on-invoke skill has no startup cost');
 assert.equal(lazy.deferredChars, 500, 'its on-invoke characters stay visible as deferred');
-assert.deepEqual(groups[0].items.map((i) => i.id), ['i:repo', 'i:home'], 'the largest item first');
+assert.equal(lazy.unknownChars, 250, 'missing timing is unknown, not deferred');
+const never = groups.find((g) => g.kind === 'hook');
+assert.equal(never.startupChars + never.deferredChars + never.unknownChars, 0, 'never has no cost even with characters');
+assert.equal(lib.itemCost(st.items.find((i) => i.id === 'i:match'), st), '~100 tok deferred');
+assert.equal(lib.itemCost(st.items.find((i) => i.id === 's:unknown'), st), '~63 tok timing unknown');
+assert.equal(lib.itemCost(st.items.find((i) => i.id === 'h:1'), st), 'no context cost');
+assert.deepEqual(groups[0].items.map((i) => i.id), ['i:repo', 'i:home', 'i:match'], 'the largest item first');
 const agents = groups.find((g) => g.kind === 'agent');
 assert.equal(agents.items.length, 0, 'an item that does not load is not listed');
 assert.equal(agents.notLoaded, 1, 'but it is counted');
@@ -293,6 +302,7 @@ for (const name of ['CLAUDE.md', 'AGENTS.md', 'AGENTS.MD', 'CLAUDE.MD', 'GEMINI.
     assert.ok(lib.WATCH_GLOB.includes(name), `the workspace glob watches ${name}`);
 }
 assert.ok(lib.WATCH_GLOB.startsWith('{') && lib.WATCH_GLOB.endsWith('}') && !lib.WATCH_GLOB.includes(' '), 'one brace glob');
+assert.ok(lib.WATCH_GLOB.slice(1, -1).split(',').includes('.deepseek'), 'the root .deepseek instruction file, not only its directory form');
 
 // The version check.
 assert.ok(lib.versionAtLeast('rigswig 0.2.1', '0.2.0'));
@@ -366,7 +376,7 @@ const shows = (p) => nameRe.test(path.basename(p)) || pathRe.test(p);
 for (const p of ['/r/CLAUDE.md', '/r/CLAUDE.local.md', '/r/sub/AGENTS.md', '/r/AGENTS.override.md', '/r/GEMINI.md',
     '/r/.mcp.json', '/r/mcp.json', '/r/deepseek.md', '/r/AGENTS.MD', '/r/CLAUDE.MD', '/r/.cursorrules', '/r/.github/copilot-instructions.md', '/h/.claude/settings.json',
     '/h/.claude/skills/x/SKILL.md', '/r/.codex/config.toml', '/r/.omp/settings.json', '/r/.pi/mcp.json',
-    '/r/.deepseek/config.json', '/r/.hermes/skills/x/SKILL.md', '/r/.agents/skills/x/SKILL.md',
+    '/r/.deepseek', '/r/.deepseek/config.json', '/r/.hermes/skills/x/SKILL.md', '/r/.agents/skills/x/SKILL.md',
     '/r/.agent/rules/a.md', '/r/.github/skills/x/SKILL.md', 'C:\\r\\.cursor\\rules\\a.mdc']) {
     assert.ok(shows(p), `the page button shows on ${p}`);
 }
