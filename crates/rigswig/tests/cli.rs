@@ -189,14 +189,53 @@ fn check_exit_codes_and_without() {
     assert_eq!(run(&["--no-warnings"]).status.code(), Some(1), "the all-tools agent is a warning");
     assert_eq!(
         run(&["--no-warnings", "--without", "layer:user"]).status.code(),
-        Some(1),
-        "warnings come from the resolved setup"
+        Some(0),
+        "re-resolution drops warnings from the removed layer too"
     );
     assert_eq!(run(&["--max-tokens", "lots"]).status.code(), Some(2));
     let out = run(&["--max-tokens", "900", "--json"]);
     let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
     assert_eq!(v["passed"], false);
     assert_eq!(v["checks"][1]["check"], "max-tokens");
+}
+
+#[test]
+fn without_re_resolves_and_restores_a_shadowed_item() {
+    let s = Sandbox::new("exact-without");
+    s.write("repo/CLAUDE.md", "Use the tests.");
+    s.write("home/.claude/agents/a.md", "---\ndescription: user\n---\n");
+    s.write("repo/.claude/agents/a.md", "---\ndescription: project\n---\n");
+    let out = s.status(&["--without", "agent:a", "--json"]);
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let h: rigswig_core::model::Harness = serde_json::from_slice(&out.stdout).unwrap();
+    let user = h.items.iter().find(|i| i.id == "claude-code:agent:user:a").unwrap();
+    assert!(user.effective && user.load.when == rigswig_core::model::LoadWhen::Startup);
+    assert!(!h.items.iter().any(|i| i.id == "claude-code:agent:project:a"));
+}
+
+#[test]
+fn check_without_uses_the_re_resolved_budget() {
+    let s = Sandbox::new("exact-check-without");
+    s.write("repo/CLAUDE.md", "Use the tests.");
+    s.write("home/.claude/agents/a.md", &format!("---\ndescription: {}\n---\n", "u".repeat(200)));
+    s.write("repo/.claude/agents/a.md", &format!("---\ndescription: {}\n---\n", "p".repeat(2_000)));
+    let repo = s.real_repo();
+    let out = s.run(&[
+        "check",
+        "--repo",
+        &repo,
+        "--tool",
+        "claude-code",
+        "--without",
+        "agent:a",
+        "--max-tokens",
+        "10",
+        "--json",
+    ]);
+    assert_eq!(out.status.code(), Some(1), "the restored user agent still costs context");
+    let out: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    let row = out["checks"].as_array().unwrap().iter().find(|c| c["check"] == "max-tokens").unwrap();
+    assert_eq!(row["passed"], false);
 }
 
 #[test]

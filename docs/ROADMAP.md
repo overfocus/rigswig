@@ -40,8 +40,11 @@ number of adapters or findings. Token estimates remain explicitly secondary to s
 - Separate finding impact, confidence, effort and remediation safety. Distinguish referenced, invoked, manually
   invoked but unobservable, unknown because scanning was incomplete, and supported negative evidence. Truncation or
   unsupported invocation types must produce `unknown`, never proof that an item is unnecessary.
-- Reuse `OverlayFs` and full adapter re-resolution for `--without`, audit savings and multi-change simulations, as
-  write planning already does, instead of only filtering a resolved model.
+- [x] Reuse `OverlayFs` and full adapter re-resolution for file-backed `--without` selections across local/remote
+  status, UI, check and MCP. Shadowed winners return and warnings are recomputed; shared config files are refused
+  rather than deleting unselected siblings.
+- Extend exact re-resolution to structured config-item removal, audit savings and multi-change simulations. The
+  model-only `whatif::without` compatibility helper documents that it does not restore shadowed items.
 - [x] Make MCP summary-first, with kind/item drill-down and typed request validation before resolution. Full harness
   JSON requires `view: "full"`; advertised schemas reject unknown arguments and match the runtime types.
 - Introduce adapter capability tiers and a compatibility matrix with last-verified harness versions, a contributor

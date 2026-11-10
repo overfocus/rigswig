@@ -71,7 +71,9 @@ Usage:
                                             MCP config as the command `rigswig` with the argument `mcp` (docs/MCP.md)
 
 `status` and `check` take --without <what> (repeatable, or comma-separated): a plugin (name@marketplace), a
-layer (layer:user), a kind and name (agent:*, skill:deploy) or an item id. The totals are recomputed without them.
+layer (layer:user), a kind and name (agent:*, skill:deploy) or an item id. File-backed removals resolve the adapter
+again, restoring shadowed items and recomputing warnings and totals. A selection which would delete unselected siblings
+from a shared settings file is refused; that case needs structured config editing.
 
 rigswig never calls a model, makes no network request unless a run is given --github, writes nothing unless
 `ui --allow-writes` is used, and opens session logs only for `usage` and `audit --usage` (metadata only).
@@ -298,14 +300,18 @@ fn status(args: &[String], mode: Mode) -> ExitCode {
         if repo.is_some() {
             return fail("use --repo for a folder here, or --github / --archive for one that is not, not both");
         }
-        let (mut h, label, summary) = match with_remote(r, tool.as_deref(), |a, ctx| a.resolve(ctx)) {
-            Ok(x) => x,
-            Err(e) => return fail(&e),
+        let (mut h, label, summary) = match with_remote(r, tool.as_deref(), |a, ctx| {
+            let h = a.resolve(ctx);
+            if removals.is_empty() {
+                Ok(h)
+            } else {
+                rigswig_core::whatif::without_resolved(ctx, a, &h, &removals).map(|result| result.0)
+            }
+        }) {
+            Ok((Ok(h), label, summary)) => (h, label, summary),
+            Ok((Err(e), _, _)) | Err(e) => return fail(&e),
         };
         h.target.repo = printable(&label);
-        if !removals.is_empty() {
-            h = rigswig_core::whatif::without(&h, &removals).0;
-        }
         eprintln!("rigswig: {}", printable(&summary));
         if json {
             println!("{}", serde_json::to_string_pretty(&h).expect("the model serialises"));
@@ -528,10 +534,14 @@ fn status(args: &[String], mode: Mode) -> ExitCode {
         }
         println!("Rerun with --tool <id> to read a different one.");
     }
-    let mut h = pick.adapter.resolve(&ctx_for(pick.adapter));
+    let ctx = ctx_for(pick.adapter);
+    let mut h = pick.adapter.resolve(&ctx);
     h = with_session(h, pick.session.as_ref());
     if !removals.is_empty() {
-        let (w, counts) = rigswig_core::whatif::without(&h, &removals);
+        let (w, counts) = match rigswig_core::whatif::without_resolved(&ctx, pick.adapter, &h, &removals) {
+            Ok(result) => result,
+            Err(e) => return fail(&e),
+        };
         for (pattern, n) in counts {
             if n == 0 {
                 eprintln!("rigswig: --without {}: nothing in effect matches", printable(&pattern));
@@ -606,18 +616,23 @@ fn resolve(repo: &std::path::Path, tool: Option<&str>, session: bool) -> Result<
     Ok(with_session(h, claim.as_ref()))
 }
 
-/// Resolve a harness for `check`, refusing an adapter which has not opted into the incomplete-read contract when
-/// `strict` was requested. Like every automated read, this never follows live-session activity.
-pub(crate) fn resolve_check(
+/// Resolve an automated read, optionally taking items out by removing their backing files and resolving the adapter
+/// again. Strict readiness is checked before resolution; live-session activity never participates.
+pub(crate) fn resolve_automation(
     repo: &std::path::Path,
     tool: Option<&str>,
     strict: bool,
+    removals: &[String],
 ) -> Result<rigswig_core::model::Harness, String> {
     let (out, _) = with_harness(repo, tool, false, |a, ctx, _| {
         if strict && !a.strict_ready() {
-            Err(format!("{} does not support --strict completeness checking yet", a.id()))
+            return Err(format!("{} does not support --strict completeness checking yet", a.id()));
+        }
+        let h = a.resolve(ctx);
+        if removals.is_empty() {
+            Ok(h)
         } else {
-            Ok(a.resolve(ctx))
+            rigswig_core::whatif::without_resolved(ctx, a, &h, removals).map(|r| r.0)
         }
     })?;
     out
@@ -1133,13 +1148,10 @@ fn check(args: &[String]) -> ExitCode {
         }
     }
     let here = repo.unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
-    let mut h = match resolve_check(&here, tool.as_deref(), strict) {
+    let h = match resolve_automation(&here, tool.as_deref(), strict, &removals) {
         Ok(h) => h,
         Err(e) => return fail(&e),
     };
-    if !removals.is_empty() {
-        h = rigswig_core::whatif::without(&h, &removals).0;
-    }
 
     let mut out = check_json(&h, max_tokens, max_item, no_warnings, strict);
     if let Some(path) = baseline {

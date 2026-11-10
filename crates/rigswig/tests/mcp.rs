@@ -248,12 +248,8 @@ fn status_returns_the_harness_json_and_whatif_takes_items_out() {
     let r2 =
         srv.request("c2", "tools/call", r#"{"name":"status","arguments":{"view":"full","without":["layer:user"]}}"#);
     let h2: Value = serde_json::from_str(r2["result"]["content"][0]["text"].as_str().expect("the text")).unwrap();
-    // A taken-out item stays in the list, but nothing from the user layer is in effect any more.
-    for i in h2["items"].as_array().expect("items") {
-        if i["origin"]["layer"] == "user" {
-            assert_eq!(i["effective"], false, "{} should be taken out", i["id"]);
-        }
-    }
+    // Exact re-resolution removes the files: no user-layer item remains, and no stale warning or disabled copy is kept.
+    assert!(h2["items"].as_array().expect("items").iter().all(|i| i["origin"]["layer"] != "user"));
 }
 
 #[test]

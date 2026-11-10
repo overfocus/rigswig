@@ -6,10 +6,16 @@
 //! - `<kind>:<name>`, where the name may use `*` (`agent:*`, `skill:deploy`);
 //! - an exact item id.
 //!
-//! Items the removed ones overrode are not brought back: that would need the adapter's own order, so the what-if says
-//! so in `coverage.notModelled` when it matters.
+//! `without_resolved` removes the selected items' backing files through `OverlayFs` and resolves the adapter again, so
+//! shadowed winners return and warnings and package contributions are recomputed. Shared config files which would need
+//! structured editing are refused. `without` is the older model-only filter retained for callers which explicitly need
+//! that approximation; it never restores an item the removed one shadowed.
 
+use crate::adapter::{Adapter, Ctx};
+use crate::fs::OverlayFs;
 use crate::model::{Harness, LoadWhen, Warning, estimate_tokens};
+use std::collections::BTreeSet;
+use std::path::{Path, PathBuf};
 
 const KINDS: &[&str] = &["instruction", "agent", "skill", "command", "hook", "mcp", "permission"];
 
@@ -99,6 +105,75 @@ pub fn without(h: &Harness, patterns: &[String]) -> (Harness, Vec<(String, usize
         }
     }
     (out, counts)
+}
+
+/// Resolve the adapter again with every selected item's backing file absent. This restores shadowed winners and
+/// recomputes package contributions, context and warnings. A shared settings file needs structured editing, so it is
+/// refused rather than deleting unselected siblings or pretending that filtering the old model is equivalent.
+pub fn without_resolved(
+    ctx: &Ctx,
+    adapter: &dyn Adapter,
+    h: &Harness,
+    patterns: &[String],
+) -> Result<(Harness, Vec<(String, usize)>), String> {
+    let mut counts = Vec::new();
+    let mut counted = BTreeSet::new();
+    let mut selected = BTreeSet::new();
+    for pattern in patterns {
+        let mut n = 0;
+        for item in h.items.iter().filter(|i| i.effective && matches(h, pattern, i)) {
+            selected.insert(item.id.clone());
+            if counted.insert(item.id.clone()) {
+                n += 1;
+            }
+        }
+        counts.push((pattern.clone(), n));
+    }
+    let total: usize = counts.iter().map(|(_, n)| n).sum();
+    if total == 0 {
+        return Ok((h.clone(), counts));
+    }
+
+    fn backing_file(ctx: &Ctx, item: &crate::model::Item) -> Result<PathBuf, String> {
+        let file = item.origin.file.as_deref().ok_or_else(|| format!("{} has no backing file", item.id))?;
+        if let Some(rest) = file.strip_prefix("~/") {
+            Ok(ctx.home.join(rest))
+        } else if Path::new(file).is_absolute() {
+            Ok(PathBuf::from(file))
+        } else {
+            Ok(ctx.repo.join(file))
+        }
+    }
+
+    let mut overlay = OverlayFs::new(ctx.fs);
+    for id in &selected {
+        let item = h.items.iter().find(|i| &i.id == id).expect("selected from this harness");
+        if h.items
+            .iter()
+            .any(|other| other.effective && !selected.contains(&other.id) && other.origin.file == item.origin.file)
+        {
+            return Err(format!(
+                "{} shares {} with an item which is not being removed; structured config editing is needed",
+                item.id,
+                item.origin.file.as_deref().unwrap_or("its settings file")
+            ));
+        }
+        overlay.removed.insert(backing_file(ctx, item)?);
+    }
+    let overlaid =
+        Ctx { fs: &overlay, env: ctx.env.clone(), home: ctx.home.clone(), repo: ctx.repo.clone(), os: ctx.os };
+    let mut out = adapter.resolve(&overlaid);
+    out.warnings.push(Warning {
+        code: "what-if".into(),
+        message: format!(
+            "what-if: {total} item{} taken out ({})",
+            if total == 1 { "" } else { "s" },
+            patterns.join(", ")
+        ),
+        item: None,
+        file: None,
+    });
+    Ok((out, counts))
 }
 
 /// `40000`, `40k`, `1.5k`, `1m` as a number of tokens.

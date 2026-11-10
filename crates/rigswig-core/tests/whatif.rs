@@ -8,14 +8,14 @@ use rigswig_core::adapters::ClaudeCode;
 use rigswig_core::check::contract_errors;
 use rigswig_core::fs::MemFs;
 use rigswig_core::model::*;
-use rigswig_core::whatif::without;
+use rigswig_core::whatif::{without, without_resolved};
 
 const HOME: &str = "/home/dev";
 const REPO: &str = "/w/app";
 
-fn harness() -> Harness {
+fn fixture() -> MemFs {
     let mk = format!("{HOME}/mk");
-    let fs = MemFs::new()
+    MemFs::new()
         .file(format!("{REPO}/CLAUDE.md"), "project rules")
         .file(format!("{HOME}/.claude/agents/a.md"), "---\ndescription: user agent a\n---\n")
         .file(format!("{HOME}/.claude/agents/b.md"), "---\ndescription: user agent b\n---\n")
@@ -26,10 +26,46 @@ fn harness() -> Harness {
         )
         .file(format!("{mk}/.claude-plugin/marketplace.json"), r#"{"plugins":[{"name":"fmt","source":"./fmt"}]}"#)
         .file(format!("{mk}/fmt/skills/pretty/SKILL.md"), "---\ndescription: formats code nicely\n---\n")
-        .file(format!("{HOME}/.claude/settings.json"), r#"{"enabledPlugins":{"fmt@mk":true}}"#);
+        .file(format!("{HOME}/.claude/settings.json"), r#"{"enabledPlugins":{"fmt@mk":true}}"#)
+}
+
+fn harness() -> Harness {
+    let fs = fixture();
     let ctx =
         Ctx { fs: &fs, env: BTreeMap::new(), home: PathBuf::from(HOME), repo: PathBuf::from(REPO), os: Os::Linux };
     ClaudeCode.resolve(&ctx)
+}
+
+#[test]
+fn exact_file_removal_restores_the_shadowed_item() {
+    let fs = fixture();
+    let ctx =
+        Ctx { fs: &fs, env: BTreeMap::new(), home: PathBuf::from(HOME), repo: PathBuf::from(REPO), os: Os::Linux };
+    let before = ClaudeCode.resolve(&ctx);
+    let user = before.items.iter().find(|i| i.id == "claude-code:agent:user:a").unwrap();
+    assert!(!user.effective && user.shadowed_by.as_deref() == Some("claude-code:agent:project:a"));
+
+    let (after, counts) = without_resolved(&ctx, &ClaudeCode, &before, &["agent:a".into()]).unwrap();
+    assert_eq!(counts, [("agent:a".to_string(), 1)]);
+    let restored = after.items.iter().find(|i| i.id == "claude-code:agent:user:a").unwrap();
+    assert!(restored.effective && restored.load.when == LoadWhen::Startup);
+    assert!(!after.items.iter().any(|i| i.id == "claude-code:agent:project:a"));
+    assert!(!after.coverage.not_modelled.iter().any(|n| n.contains("not brought back")));
+    assert_eq!(contract_errors(&after), Vec::<String>::new());
+}
+
+#[test]
+fn exact_removal_refuses_a_shared_config_file_instead_of_deleting_siblings() {
+    let mut fs = fixture();
+    fs.add_file(
+        format!("{HOME}/.claude/settings.json"),
+        r#"{"enabledPlugins":{"fmt@mk":true},"permissions":{"allow":["Read","Bash"]}}"#,
+    );
+    let ctx =
+        Ctx { fs: &fs, env: BTreeMap::new(), home: PathBuf::from(HOME), repo: PathBuf::from(REPO), os: Os::Linux };
+    let before = ClaudeCode.resolve(&ctx);
+    let error = without_resolved(&ctx, &ClaudeCode, &before, &["permission:allow Read".into()]).unwrap_err();
+    assert!(error.contains("shares") && error.contains("structured config editing"), "{error}");
 }
 
 #[test]

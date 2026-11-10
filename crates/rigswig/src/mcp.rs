@@ -153,10 +153,7 @@ fn status(args: &Map<String, Value>) -> Result<Value, String> {
     let without = strs(args, "without")?;
     let repo = arg_repo(args)?;
     let tool = arg_tool(args)?;
-    let mut h = crate::resolve(&repo, tool.as_deref(), false)?;
-    if !without.is_empty() {
-        h = rigswig_core::whatif::without(&h, &without).0;
-    }
+    let h = crate::resolve_automation(&repo, tool.as_deref(), false, &without)?;
     match view {
         "summary" => Ok(status_summary(&h)),
         "kind" => {
@@ -187,10 +184,7 @@ fn check(args: &Map<String, Value>) -> Result<Value, String> {
     let without = strs(args, "without")?;
     let repo = arg_repo(args)?;
     let tool = arg_tool(args)?;
-    let mut h = crate::resolve_check(&repo, tool.as_deref(), strict)?;
-    if !without.is_empty() {
-        h = rigswig_core::whatif::without(&h, &without).0;
-    }
+    let h = crate::resolve_automation(&repo, tool.as_deref(), strict, &without)?;
     Ok(crate::check_json(&h, max_tokens, max_item, no_warnings, strict))
 }
 

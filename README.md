@@ -69,6 +69,11 @@ cargo run -- usage --repo path/to/repo                          # what past sess
 cargo run -- audit --repo path/to/repo --usage                  # findings that know what the sessions called
 ```
 
+`--without` is an exact file-backed simulation: the adapter resolves again with those files absent, so a shadowed
+winner returns and warnings, package contributions and budgets are recomputed. A selection which shares a settings
+file with unselected items is refused rather than deleting those siblings; structured config-item simulation remains
+on the roadmap.
+
 `check --json` is a versioned baseline file. Save and review one, then add `--baseline <file>` to carry existing
 warnings and failing checks while rejecting only new debt; fixed debt is reported and dropping a previously failing
 check is refused. rigswig reads but never writes the baseline. See [docs/BASELINES.md](docs/BASELINES.md).

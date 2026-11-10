@@ -1,8 +1,6 @@
 //! Planning a change to a Claude Code setup: one key in one of the three settings files a person owns (local, project,
 //! user). Managed settings and `.claude.json` (which Claude Code itself rewrites) are never targets.
 
-use std::collections::BTreeMap;
-
 use serde_json::{Map, Value};
 
 use super::{ClaudeCode, Paths};
@@ -136,7 +134,8 @@ pub(crate) fn plan(ctx: &Ctx, change: &Change) -> Result<Plan, String> {
     };
 
     // The setup after the change, resolved exactly.
-    let overlay = OverlayFs { base: fs, files: BTreeMap::from([(path.clone(), after.clone())]) };
+    let mut overlay = OverlayFs::new(fs);
+    overlay.files.insert(path.clone(), after.clone());
     let after_ctx =
         Ctx { fs: &overlay, env: ctx.env.clone(), home: ctx.home.clone(), repo: ctx.repo.clone(), os: ctx.os };
     let later = ClaudeCode.resolve(&after_ctx);

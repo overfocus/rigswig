@@ -282,21 +282,33 @@ impl Fs for MemFs {
     }
 }
 
-/// Another file system with some files replaced (or added): what the setup would look like after a planned change,
+/// Another file system with files replaced, added or removed: what the setup would look like after a planned change,
 /// so an adapter can resolve it exactly. Still read-only.
 pub struct OverlayFs<'a> {
     pub base: &'a dyn Fs,
     pub files: BTreeMap<PathBuf, String>,
+    pub removed: BTreeSet<PathBuf>,
 }
 
 impl OverlayFs<'_> {
+    pub fn new(base: &dyn Fs) -> OverlayFs<'_> {
+        OverlayFs { base, files: BTreeMap::new(), removed: BTreeSet::new() }
+    }
+
     fn over(&self, path: &Path) -> Option<&String> {
         self.files.get(&normalize(path))
+    }
+
+    fn is_removed(&self, path: &Path) -> bool {
+        self.removed.contains(&normalize(path))
     }
 }
 
 impl Fs for OverlayFs<'_> {
     fn read_to_string(&self, path: &Path) -> io::Result<String> {
+        if self.is_removed(path) {
+            return Err(not_found(path));
+        }
         match self.over(path) {
             Some(s) => Ok(s.clone()),
             None => self.base.read_to_string(path),
@@ -311,7 +323,11 @@ impl Fs for OverlayFs<'_> {
                 Err(e)
             }
         })?;
+        out.retain(|entry| !self.is_removed(&path.join(&entry.name)));
         for f in self.files.keys() {
+            if self.is_removed(f) {
+                continue;
+            }
             if f.parent() == Some(normalize(path).as_path()) {
                 let name = f.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
                 if !out.iter().any(|e| e.name == name) {
@@ -324,6 +340,9 @@ impl Fs for OverlayFs<'_> {
     }
 
     fn kind(&self, path: &Path) -> io::Result<EntryKind> {
+        if self.is_removed(path) {
+            return Err(not_found(path));
+        }
         if self.over(path).is_some() {
             return Ok(EntryKind::File);
         }
@@ -333,6 +352,9 @@ impl Fs for OverlayFs<'_> {
     }
 
     fn canonicalize(&self, path: &Path) -> io::Result<PathBuf> {
+        if self.is_removed(path) {
+            return Err(not_found(path));
+        }
         if self.over(path).is_some() {
             return Ok(normalize(path));
         }
@@ -340,6 +362,9 @@ impl Fs for OverlayFs<'_> {
     }
 
     fn modified(&self, path: &Path) -> io::Result<SystemTime> {
+        if self.is_removed(path) {
+            return Err(not_found(path));
+        }
         self.base.modified(path)
     }
 }

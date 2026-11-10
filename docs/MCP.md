@@ -61,7 +61,8 @@ model. Full harness JSON is never the default model-context cost.
 
 Arguments are validated before repository resolution: unknown keys, wrong types, empty identifiers, malformed string
 arrays, negative or fractional budgets, and mismatched `kind`/`item` views are tool errors. `compare.tools` must contain
-exactly two harness ids, and the two-repo and two-harness argument forms cannot be mixed.
+exactly two harness ids, and the two-repo and two-harness argument forms cannot be mixed. `without` re-resolves the
+adapter over removed backing files; selections requiring structured edits to a shared settings file are refused.
 
 A failure inside the tool (a repo that does not
 exist, an unknown harness, or `--strict` on an adapter without a completeness contract) is `isError: true` with the
