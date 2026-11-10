@@ -184,7 +184,7 @@ impl Run<'_, '_> {
             if !seen.insert(real.clone()) {
                 continue;
             }
-            let Ok(body) = self.fs().read_to_string(&real) else { continue };
+            let Ok(body) = self.b.text(&real) else { continue };
             let shown = self.b.display(&target);
             let mut it = self.b.item(
                 layer,
@@ -202,11 +202,11 @@ impl Run<'_, '_> {
     }
 
     /// A file's text when it exists and is not empty (empty files contribute nothing and claim no slot).
-    fn nonempty(&self, f: &Path) -> Option<String> {
+    fn nonempty(&mut self, f: &Path) -> Option<String> {
         if !matches!(self.fs().kind(f), Ok(crate::fs::EntryKind::File)) {
             return None;
         }
-        self.fs().read_to_string(f).ok().filter(|t| !t.is_empty())
+        self.b.text(f).ok().filter(|t| !t.is_empty())
     }
 
     /// User-level candidates, in registration order within a priority: native, then the default-on `.agent`/`.agents`

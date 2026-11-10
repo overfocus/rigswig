@@ -234,6 +234,16 @@ fn github_instructions_become_rules_by_apply_to() {
 }
 
 #[test]
+fn an_unreadable_discovered_skill_is_an_incomplete_read() {
+    let file = format!("{REPO}/.omp/skills/deploy/SKILL.md");
+    let fs = repo().file(&file, skill("deploy", "Deploy.")).unreadable(&file);
+    let h = run(&fs);
+    let warning = h.warnings.iter().find(|w| w.code == "incomplete-read-failed").expect("incomplete read");
+    assert_eq!(warning.file.as_deref(), Some(".omp/skills/deploy/SKILL.md"));
+    assert!(!h.items.iter().any(|i| i.name == "deploy"));
+}
+
+#[test]
 fn a_second_skill_of_a_name_loads_under_a_namespace() {
     let fs = repo()
         .file(format!("{REPO}/.omp/skills/deploy/SKILL.md"), skill("deploy", "Native deploy."))

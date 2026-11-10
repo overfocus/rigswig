@@ -420,7 +420,7 @@ impl Run<'_, '_> {
     fn instructions(&mut self) {
         for name in ["AGENTS.override.md", "AGENTS.md"] {
             let f = self.p.codex_home.join(name);
-            if let Ok(text) = self.fs().read_to_string(&f) {
+            if let Ok(text) = self.b.text(&f) {
                 if !text.trim().is_empty() {
                     let t = text.trim().to_string();
                     self.add_doc(&f, "user", &text, &t);
@@ -448,8 +448,7 @@ impl Run<'_, '_> {
             let mut names = vec!["AGENTS.override.md".to_string(), "AGENTS.md".to_string()];
             names.extend(fallbacks.iter().cloned());
             // The first candidate that exists as a file is the folder's pick, even if it is empty.
-            let Some((f, text)) =
-                names.iter().map(|n| d.join(n)).find_map(|f| self.fs().read_to_string(&f).ok().map(|t| (f, t)))
+            let Some((f, text)) = names.iter().map(|n| d.join(n)).find_map(|f| self.b.text(&f).ok().map(|t| (f, t)))
             else {
                 continue;
             };
@@ -489,7 +488,7 @@ impl Run<'_, '_> {
 
     fn skill(&mut self, dir: &Path, layer: &str, ns: Option<&str>) -> Option<usize> {
         let file = dir.join("SKILL.md");
-        let text = self.fs().read_to_string(&file).ok()?;
+        let text = self.b.text(&file).ok()?;
         let fm = frontmatter::parse(&text);
         let base = fm
             .str("name")
@@ -589,7 +588,7 @@ impl Run<'_, '_> {
 
         // Custom prompts (deprecated): top-level Markdown in the Codex home's prompts/, invoked explicitly.
         for f in self.b.files_in(&self.p.codex_home.join("prompts"), ".md") {
-            let Ok(text) = self.fs().read_to_string(&f) else { continue };
+            let Ok(text) = self.b.text(&f) else { continue };
             let fm = frontmatter::parse(&text);
             let stem = f.file_stem().unwrap_or_default().to_string_lossy().into_owned();
             let name = format!("prompts:{stem}");
@@ -617,7 +616,7 @@ impl Run<'_, '_> {
                 let attrs = AgentAttrs { tools: ToolAccess::All, model: str_at(&t, "model").map(String::from) };
                 let mut it = self.b.item(layer, &name, ItemDetail::Agent(attrs), LoadWhen::Startup, calc(chars));
                 it.origin.file = Some(self.b.display(&f));
-                if let Ok(text) = self.fs().read_to_string(&f) {
+                if let Ok(text) = self.b.text(&f) {
                     it.load.content_hash = Some(sha256_hex(&text));
                 }
                 agents.push(self.b.push(it));

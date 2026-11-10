@@ -340,7 +340,10 @@ fn installed_packages_contribute_skills_and_prompts_last() {
 fn a_package_in_settings_but_not_installed_is_reported() {
     let fs = MemFs::new().file(format!("{AGENT}/settings.json"), r#"{"packages": ["npm:missing-kit"]}"#);
     let h = run(&fs);
-    assert!(has_warning(&h, "package-not-installed"));
+    assert!(has_warning(&h, "incomplete-package-not-installed"));
+    assert!(
+        h.warnings.iter().find(|w| w.code == "incomplete-package-not-installed").is_some_and(|w| w.is_incomplete())
+    );
     assert!(h.layers.iter().any(|l| l.kind == LayerKind::Package && !l.present));
 }
 

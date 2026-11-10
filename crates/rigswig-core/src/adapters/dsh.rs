@@ -220,8 +220,8 @@ impl Run<'_, '_> {
     }
 
     /// A file's text, if it exists and is not empty.
-    fn doc_text(&self, file: &Path) -> Option<String> {
-        let text = self.fs().read_to_string(file).ok()?;
+    fn doc_text(&mut self, file: &Path) -> Option<String> {
+        let text = self.b.text(file).ok()?;
         (!text.trim().is_empty()).then_some(text)
     }
 
@@ -276,7 +276,7 @@ impl Run<'_, '_> {
     /// One skill: invoked by name, so the listing (name + description) is measured at startup and the body
     /// only when the skill runs.
     fn add_skill(&mut self, f: &Path, layer: &str) -> Option<usize> {
-        let Ok(text) = self.fs().read_to_string(f) else { return None };
+        let Ok(text) = self.b.text(f) else { return None };
         let fm = frontmatter::parse(&text);
         let body = text[fm.body_start..].trim();
         if body.is_empty() {

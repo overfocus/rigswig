@@ -212,7 +212,7 @@ impl Run<'_, '_> {
                 "the deprecated .cursorrules file is present; Cursor reads it only when 'Include .cursorrules file' is on",
                 None,
             );
-            let text = self.fs().read_to_string(&self.p.repo.join(".cursorrules")).unwrap_or_default();
+            let text = self.b.text(&self.p.repo.join(".cursorrules")).unwrap_or_default();
             if !text.trim().is_empty() {
                 self.add_doc(&self.p.repo.join(".cursorrules"), "project", LoadWhen::Startup);
             }
@@ -246,7 +246,7 @@ impl Run<'_, '_> {
 
     /// One plain instruction file, measured against its whole text.
     fn add_doc(&mut self, file: &Path, layer: &str, when: LoadWhen) {
-        let Ok(text) = self.fs().read_to_string(file) else { return };
+        let Ok(text) = self.b.text(file) else { return };
         let body = text.trim();
         if body.is_empty() {
             return;
@@ -260,8 +260,8 @@ impl Run<'_, '_> {
     }
 
     /// The `.mdc` text, or None for a rule whose frontmatter or body is missing.
-    fn rule_text(&self, file: &Path) -> Option<String> {
-        let text = self.fs().read_to_string(file).ok()?;
+    fn rule_text(&mut self, file: &Path) -> Option<String> {
+        let text = self.b.text(file).ok()?;
         let fm = frontmatter::parse(&text);
         if fm.body_start == 0 { None } else { Some(text) }
     }
@@ -285,7 +285,7 @@ impl Run<'_, '_> {
         // Legacy slash commands, which Cursor migrates into skills.
         for (layer, dir) in [("project", self.p.project.join("commands")), ("user", self.p.user.join("commands"))] {
             for f in self.b.files_in(&dir, ".md") {
-                let Some(text) = self.fs().read_to_string(&f).ok().filter(|t| !t.trim().is_empty()) else {
+                let Some(text) = self.b.text(&f).ok().filter(|t| !t.trim().is_empty()) else {
                     continue;
                 };
                 let stem = f.file_stem().unwrap_or_default().to_string_lossy().into_owned();
@@ -306,7 +306,7 @@ impl Run<'_, '_> {
     /// One SKILL.md: invoked by name (`/name` or `@name`), so its listing is measured at startup and the
     /// body only when the skill runs.
     fn add_skill(&mut self, f: &Path, layer: &str) {
-        let Ok(text) = self.fs().read_to_string(f) else { return };
+        let Ok(text) = self.b.text(f) else { return };
         let fm = frontmatter::parse(&text);
         let body = text[fm.body_start..].trim();
         // The name comes from the folder that holds SKILL.md, not the category folder above it.
@@ -340,7 +340,7 @@ impl Run<'_, '_> {
             ("imports_user", self.home.join(".codex/agents")),
         ] {
             for f in self.b.files_in(&dir, ".md") {
-                let Ok(text) = self.fs().read_to_string(&f) else { continue };
+                let Ok(text) = self.b.text(&f) else { continue };
                 let fm = frontmatter::parse(&text);
                 let Some(name) = fm
                     .str("name")

@@ -2,7 +2,7 @@
 //!
 //! There is deliberately no write method: an adapter cannot change anything even by mistake.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::OsString;
 use std::io;
 use std::path::{Component, Path, PathBuf};
@@ -69,6 +69,8 @@ enum Node {
 #[derive(Debug, Clone, Default)]
 pub struct MemFs {
     nodes: BTreeMap<PathBuf, Node>,
+    /// Paths whose contents must fail with `PermissionDenied`, while metadata and directory discovery keep working.
+    unreadable: BTreeSet<PathBuf>,
     /// Modification times the tree was stamped with. Anything unstamped reports the Unix epoch, which no
     /// freshness window ever counts as recent — tests only stamp what liveness is meant to see.
     mtimes: BTreeMap<PathBuf, SystemTime>,
@@ -113,6 +115,12 @@ impl MemFs {
         let p = normalize(path.as_ref());
         self.add_parents(&p);
         self.nodes.insert(p, Node::File(content.into()));
+        self
+    }
+
+    /// Make an existing file's content unreadable without hiding it from discovery. Used to prove incomplete reads.
+    pub fn unreadable(mut self, path: impl AsRef<Path>) -> Self {
+        self.unreadable.insert(normalize(path.as_ref()));
         self
     }
 
@@ -212,19 +220,15 @@ impl MemFs {
         }
         Ok(out)
     }
-
-    fn node(&self, path: &Path) -> io::Result<&Node> {
-        let real = self.resolve(path)?;
-        if real.as_os_str() == "/" {
-            return Ok(&Node::Dir);
-        }
-        self.nodes.get(&real).ok_or_else(|| not_found(path))
-    }
 }
 
 impl Fs for MemFs {
     fn read_to_string(&self, path: &Path) -> io::Result<String> {
-        match self.node(path)? {
+        let real = self.resolve(path)?;
+        if self.unreadable.contains(&real) {
+            return Err(io::Error::new(io::ErrorKind::PermissionDenied, format!("unreadable: {}", path.display())));
+        }
+        match self.nodes.get(&real).ok_or_else(|| not_found(path))? {
             Node::File(s) => Ok(s.clone()),
             _ => Err(io::Error::new(io::ErrorKind::InvalidInput, format!("not a file: {}", path.display()))),
         }

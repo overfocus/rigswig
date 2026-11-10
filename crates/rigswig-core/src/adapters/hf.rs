@@ -171,7 +171,7 @@ impl Adapter for Hf {
         let installed = installed_version(ctx);
         for (store, scope) in [(p.agents_global.clone(), "global"), (p.agents_local.clone(), "project")] {
             let skill_md = store.join(DEFAULT_SKILL_ID).join("SKILL.md");
-            let content = match ctx.fs.read_to_string(&skill_md) {
+            let content = match b.text(&skill_md) {
                 Ok(text) => text,
                 Err(_) => continue, // no generated skill in this root
             };
@@ -228,7 +228,7 @@ impl Adapter for Hf {
 /// `rank` is the source's priority (canonical store 0, mirror 1).
 fn add_skill(b: &mut Build, dir: &Path, layer: &str) -> Option<(usize, String)> {
     let f = dir.join("SKILL.md");
-    let Ok(text) = b.fs().read_to_string(&f) else { return None };
+    let Ok(text) = b.text(&f) else { return None };
     let fm = frontmatter::parse(&text);
     let body = text[fm.body_start..].trim();
     if body.is_empty() {

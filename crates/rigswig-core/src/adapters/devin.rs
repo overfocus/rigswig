@@ -362,7 +362,7 @@ impl Run<'_, '_> {
 
     /// A whole instruction file as one item, measured against its text.
     fn add_doc(&mut self, file: &Path, layer: &str, when: LoadWhen) {
-        let Ok(text) = self.fs().read_to_string(file) else { return };
+        let Ok(text) = self.b.text(file) else { return };
         let body = text.trim();
         if body.is_empty() {
             return;
@@ -378,7 +378,7 @@ impl Run<'_, '_> {
     /// One rule file with the Windsurf-style `trigger` frontmatter. Below the workspace root every rule file
     /// loads lazily (on access), so the trigger only matters at the root.
     fn add_rule(&mut self, file: &Path, layer: &str, at_root: bool) {
-        let Ok(text) = self.fs().read_to_string(file) else { return };
+        let Ok(text) = self.b.text(file) else { return };
         let body = text.trim();
         if body.is_empty() {
             return;
@@ -409,7 +409,7 @@ impl Run<'_, '_> {
     /// `.cursor/rules/*.md(c)`: `alwaysApply` starts the session, `globs` fire on match, a description alone is
     /// the agent's call, and nothing at all waits for the user.
     fn add_cursor_rule(&mut self, file: &Path, layer: &str) {
-        let Ok(text) = self.fs().read_to_string(file) else { return };
+        let Ok(text) = self.b.text(file) else { return };
         let body = text.trim();
         if body.is_empty() {
             return;
@@ -440,7 +440,7 @@ impl Run<'_, '_> {
     fn instructions(&mut self) {
         for name in ["AGENTS.md", "AGENT.md"] {
             let f = self.p.user.join(name);
-            if let Ok(text) = self.fs().read_to_string(&f) {
+            if let Ok(text) = self.b.text(&f) {
                 if !text.trim().is_empty() {
                     self.add_doc(&f, "user", LoadWhen::Startup);
                     break;
@@ -584,7 +584,7 @@ impl Run<'_, '_> {
     /// Push a skill, keeping same-named skills apart (nothing documents which one a name resolves to).
     fn skill(&mut self, dir: &Path, layer: &str) -> Option<usize> {
         let file = dir.join("SKILL.md");
-        let text = self.fs().read_to_string(&file).ok()?;
+        let text = self.b.text(&file).ok()?;
         if text.trim().is_empty() {
             return None;
         }
@@ -638,7 +638,7 @@ impl Run<'_, '_> {
         if self.switches.claude {
             let rel = self.p.repo.join(".claude/commands");
             for (f, rel_path) in self.b.walk(&rel, ".md") {
-                let Ok(text) = self.fs().read_to_string(&f) else { continue };
+                let Ok(text) = self.b.text(&f) else { continue };
                 if text.trim().is_empty() {
                     continue;
                 }
@@ -715,7 +715,7 @@ impl Run<'_, '_> {
     }
 
     fn agent_item(&mut self, file: &Path, dir: &Path, layer: &str) -> Option<usize> {
-        let text = self.fs().read_to_string(file).ok()?;
+        let text = self.b.text(file).ok()?;
         if text.trim().is_empty() {
             return None;
         }

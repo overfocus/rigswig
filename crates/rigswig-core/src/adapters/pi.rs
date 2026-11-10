@@ -387,7 +387,7 @@ impl Run<'_, '_> {
             }
             handled.push(lower);
             let real = self.fs().canonicalize(&f).unwrap_or_else(|_| f.clone());
-            let Ok(text) = self.fs().read_to_string(&f) else { continue };
+            let Ok(text) = self.b.text(&f) else { continue };
             let shown = self.b.display(&f);
             let mut it = self.b.item(
                 layer,
@@ -419,7 +419,7 @@ impl Run<'_, '_> {
             let mut winner: Option<String> = None;
             for (layer, dir) in [("project", self.p.project.clone()), ("user", self.p.agent.clone())] {
                 let f = dir.join(name);
-                let Ok(text) = self.fs().read_to_string(&f) else { continue };
+                let Ok(text) = self.b.text(&f) else { continue };
                 let shown = self.b.display(&f);
                 let mut it = self.b.item(
                     layer,
@@ -674,7 +674,7 @@ impl Run<'_, '_> {
     /// One skill: needs a non-empty description; its name is the front matter's, else its folder's. The listing
     /// (name, description and the file's path) loads at startup unless `disable-model-invocation` hides it.
     fn add_skill(&mut self, f: &Path, layer: &str, blocked: bool) -> Option<usize> {
-        let text = self.fs().read_to_string(f).ok()?;
+        let text = self.b.text(f).ok()?;
         let fm = frontmatter::parse(&text);
         let description = fm.str("description").filter(|d| !d.trim().is_empty())?.to_string();
         let name = fm
@@ -740,7 +740,7 @@ impl Run<'_, '_> {
                 self.b.files_in(&root, ".md")
             };
             for f in files {
-                let Ok(text) = self.fs().read_to_string(&f) else { continue };
+                let Ok(text) = self.b.text(&f) else { continue };
                 let fm = frontmatter::parse(&text);
                 let name = f.file_stem().unwrap_or_default().to_string_lossy().into_owned();
                 let body = char_len(text[fm.body_start..].trim());

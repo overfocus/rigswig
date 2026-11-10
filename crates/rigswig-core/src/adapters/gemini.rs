@@ -355,7 +355,7 @@ impl Run<'_, '_> {
         if !seen.insert(real.clone()) {
             return;
         }
-        let Ok(text) = self.fs().read_to_string(&real) else { return };
+        let Ok(text) = self.b.text(&real) else { return };
         if text.trim().is_empty() {
             return;
         }
@@ -482,7 +482,7 @@ impl Run<'_, '_> {
     }
 
     fn add_agent(&mut self, f: &Path, layer: &str) -> Option<usize> {
-        let Ok(text) = self.fs().read_to_string(f) else { return None };
+        let Ok(text) = self.b.text(f) else { return None };
         let fm = frontmatter::parse(&text);
         let name = fm
             .str("name")

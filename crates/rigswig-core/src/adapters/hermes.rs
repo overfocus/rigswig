@@ -527,8 +527,8 @@ impl Run<'_, '_> {
         self.p.repo.ancestors().find(|d| self.fs().exists(&d.join(".git"))).unwrap_or(&self.p.repo).to_path_buf()
     }
 
-    fn non_empty(&self, file: &Path) -> Option<String> {
-        let text = self.fs().read_to_string(file).ok()?;
+    fn non_empty(&mut self, file: &Path) -> Option<String> {
+        let text = self.b.text(file).ok()?;
         if text.trim().is_empty() {
             return None;
         }
@@ -948,7 +948,7 @@ impl Run<'_, '_> {
                 calc(e.listing),
             );
             it.origin.file = Some(file_label);
-            it.load.content_hash = self.fs().read_to_string(&e.file).ok().map(|t| sha256_hex(&t));
+            it.load.content_hash = self.b.text(&e.file).ok().map(|t| sha256_hex(&t));
             if !platform_ok {
                 Build::disable(&mut it);
             }

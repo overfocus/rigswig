@@ -220,7 +220,7 @@ impl Run<'_, '_> {
     fn instructions(&mut self) {
         for name in INSTRUCTION_FILES {
             let f = self.p.repo.join(name);
-            let Some(text) = self.fs().read_to_string(&f).ok().filter(|t| !t.trim().is_empty()) else { continue };
+            let Some(text) = self.b.text(&f).ok().filter(|t| !t.trim().is_empty()) else { continue };
             let name = self.b.display(&f);
             let mut it = self.b.item(
                 "project",
@@ -241,7 +241,7 @@ impl Run<'_, '_> {
     fn memory(&mut self) {
         let hash = &sha256_hex(self.p.repo.to_string_lossy().as_ref())[..12];
         let f = self.p.user.join("memories").join(hash).join("MEMORY.md");
-        let Ok(text) = self.fs().read_to_string(&f) else { return };
+        let Ok(text) = self.b.text(&f) else { return };
         if text.trim().is_empty() {
             return;
         }
@@ -317,7 +317,7 @@ impl Run<'_, '_> {
     /// One skill: folded into the system prompt when active, so the listing (name + the extracted
     /// description) is measured at startup and the body on invoke.
     fn add_skill(&mut self, f: &Path, layer: &str) -> Option<usize> {
-        let Ok(text) = self.fs().read_to_string(f) else { return None };
+        let Ok(text) = self.b.text(f) else { return None };
         let body = text.trim();
         if body.is_empty() {
             return None;

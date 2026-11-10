@@ -58,6 +58,23 @@ impl<'a> Build<'a> {
         printable(&s)
     }
 
+    /// Read an optional text file. Absence is normal; a present file which cannot be read is an incomplete reading.
+    pub fn text(&mut self, path: &Path) -> std::io::Result<String> {
+        match self.fs().read_to_string(path) {
+            Ok(text) => Ok(text),
+            Err(error) => {
+                if error.kind() != std::io::ErrorKind::NotFound || self.fs().exists(path) {
+                    self.warn(
+                        "read-failed",
+                        format!("the file could not be read as UTF-8 text ({:?}), skipped", error.kind()),
+                        Some(path),
+                    );
+                }
+                Err(error)
+            }
+        }
+    }
+
     /// Record an advisory or incomplete-read warning. The `incomplete-` namespace is reserved for sources rigswig
     /// could not read fully, constructs it had to drop without modelling them, and genuinely ambiguous resolution.
     /// Native truncation, documented precedence and intentional security boundaries stay advisory.
@@ -76,7 +93,9 @@ impl<'a> Build<'a> {
                     | "mcp-server-transport"
                     | "launch-model"
                     | "package-unreadable"
+                    | "package-not-installed"
                     | "plugin-missing"
+                    | "read-failed"
                     | "profile-unresolved"
                     | "setting-unreadable"
                     | "settings-patterns-not-applied"

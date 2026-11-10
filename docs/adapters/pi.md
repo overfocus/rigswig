@@ -98,7 +98,7 @@ same package in both scopes is the project's. rigswig reads an installed package
 `<scope>/npm/node_modules/<name>` and `<scope>/git/<host>/<path>`, `<scope>` being the agent directory or `.pi`; a
 local path is read where it points. A package's skills and prompts come from the plain paths its `package.json` lists
 under `pi`, else from its `skills/` and `prompts/` folders. The object form's empty `skills` or `prompts` list turns
-that kind off. A package in settings but not installed is warned (`package-not-installed`): Pi installs it at startup.
+that kind off. A package in settings but not installed is warned (`incomplete-package-not-installed`): Pi installs it at startup.
 
 ## Env vars read
 

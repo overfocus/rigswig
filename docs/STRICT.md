@@ -21,6 +21,8 @@ The `incomplete-` warning namespace covers:
 - malformed JSON, JSONC, TOML, YAML and model manifests;
 - unsupported configuration constructs which had to be dropped, including agent front matter and YAML features;
 - unreadable settings, packages, model system blobs, MCP bundles and enabled plugin content;
+- present plain-text files which fail with permission, I/O, broken-link or UTF-8 errors (`incomplete-read-failed`);
+  an absent optional file is not an incomplete read;
 - incomplete agents, unresolved profiles or external directories, and setting patterns which were not applied;
 - duplicate or otherwise genuinely ambiguous sources, transports and triggers;
 - filesystem walks which stopped before discovering every item.

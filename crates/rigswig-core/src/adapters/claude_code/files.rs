@@ -32,7 +32,7 @@ fn add_instruction(b: &mut Build, st: &mut Instr, file: &Path, layer: &str, hops
     if !st.seen.insert(real.clone()) {
         return;
     }
-    let Ok(text) = b.fs().read_to_string(file) else { return };
+    let Ok(text) = b.text(file) else { return };
     let name = b.display(file);
     let (when, applies_to) = rule_scope(&text, file);
     let mut it = b.item(
@@ -57,7 +57,7 @@ fn add_instruction(b: &mut Build, st: &mut Instr, file: &Path, layer: &str, hops
             None => dir.join(&imp),
         };
         let Ok(t) = b.fs().canonicalize(&target) else { continue };
-        if b.fs().read_to_string(&t).is_err() {
+        if b.text(&t).is_err() {
             continue;
         }
         if !st.roots.iter().any(|r| is_within(&t, r)) {
@@ -180,8 +180,8 @@ pub(crate) fn instructions(b: &mut Build, p: &Paths, subs: &[(PathBuf, String)])
     b.note_not_modelled("AGENTS.md and .claude/rules in subfolders (the docs do not say when they load)");
 }
 
-fn read_fm(b: &Build, file: &Path) -> Option<(String, FrontMatter)> {
-    let text = b.fs().read_to_string(file).ok()?;
+fn read_fm(b: &mut Build, file: &Path) -> Option<(String, FrontMatter)> {
+    let text = b.text(file).ok()?;
     let fm = frontmatter::parse(&text);
     Some((text, fm))
 }
@@ -249,7 +249,7 @@ fn command(b: &mut Build, file: &Path, layer: &str, name: String, inline_desc: O
     Some(b.push(it))
 }
 
-fn skill_name(b: &Build, dir: &Path) -> String {
+fn skill_name(b: &mut Build, dir: &Path) -> String {
     read_fm(b, &dir.join("SKILL.md")).and_then(|(_, fm)| fm.str("name").map(String::from)).unwrap_or_else(|| stem(dir))
 }
 
@@ -485,13 +485,13 @@ const MEMORY_BYTES: usize = 25 * 1024;
 
 /// The repo's git root: the main checkout for a worktree (whose `.git` is a file pointing into the main `.git`), the
 /// folder holding `.git` otherwise, and the repo folder itself outside git.
-fn git_root(b: &Build, repo: &Path) -> PathBuf {
+fn git_root(b: &mut Build, repo: &Path) -> PathBuf {
     for d in repo.ancestors() {
         let g = d.join(".git");
         match b.fs().kind(&g) {
             Ok(crate::fs::EntryKind::Dir) => return d.to_path_buf(),
             Ok(_) => {
-                let text = b.fs().read_to_string(&g).unwrap_or_default();
+                let text = b.text(&g).unwrap_or_default();
                 let Some(target) = text.lines().find_map(|l| l.strip_prefix("gitdir:")).map(str::trim) else {
                     return d.to_path_buf();
                 };
@@ -542,7 +542,7 @@ pub(crate) fn memory_index(b: &mut Build, p: &Paths) {
         }
     };
     let file = dir.join("MEMORY.md");
-    let Ok(text) = b.fs().read_to_string(&file) else { return };
+    let Ok(text) = b.text(&file) else { return };
     let mut loaded: String = text.split_inclusive('\n').take(MEMORY_LINES).collect();
     if loaded.len() > MEMORY_BYTES {
         let mut cut = MEMORY_BYTES;

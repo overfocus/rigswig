@@ -67,6 +67,16 @@ fn the_copilot_home_moves_with_the_documented_variable() {
 }
 
 #[test]
+fn an_unreadable_startup_file_is_an_incomplete_read() {
+    let file = format!("{GH}/copilot-instructions.md");
+    let fs = MemFs::new().dir(REPO).file(&file, "rules").unreadable(&file);
+    let h = run(&fs);
+    let warning = h.warnings.iter().find(|w| w.code == "incomplete-read-failed").expect("incomplete read");
+    assert_eq!(warning.file.as_deref(), Some(".github/copilot-instructions.md"));
+    assert!(!h.items.iter().any(|i| i.name == ".github/copilot-instructions.md"));
+}
+
+#[test]
 fn config_layers_follow_the_documented_rank() {
     let fs = MemFs::new()
         .dir(REPO)

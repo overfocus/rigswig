@@ -97,7 +97,7 @@ impl Run<'_, '_> {
                 if *s != scope || *k != kind || !self.source_on(provider, scope) {
                     continue;
                 }
-                let Ok(text) = self.fs().read_to_string(f) else { continue };
+                let Ok(text) = self.b.text(f) else { continue };
                 if text.trim().is_empty() {
                     continue;
                 }
@@ -135,7 +135,7 @@ impl Run<'_, '_> {
             }
         }
         if let Some((provider, scope, f)) = append.into_iter().find(|(_, _, f)| self.is_file(f)) {
-            if let Ok(text) = self.fs().read_to_string(&f) {
+            if let Ok(text) = self.b.text(&f) {
                 self.instruction_item(provider, scope, &f, &text, LoadWhen::Startup);
             }
         }
@@ -238,7 +238,7 @@ impl Run<'_, '_> {
             if !self.source_on(f.provider, f.scope) {
                 continue;
             }
-            let Ok(text) = self.fs().read_to_string(&f.path) else { continue };
+            let Ok(text) = self.b.text(&f.path) else { continue };
             let fm = frontmatter::parse(&text);
             if fm.str("enabled") == Some("false") {
                 continue;
@@ -398,7 +398,7 @@ impl Run<'_, '_> {
                     continue;
                 }
                 seen_real.push(real);
-                let Ok(text) = self.fs().read_to_string(&f) else { continue };
+                let Ok(text) = self.b.text(&f) else { continue };
                 let fm = frontmatter::parse(&text);
                 if fm.str("enabled") == Some("false") {
                     continue;
@@ -592,13 +592,13 @@ impl Run<'_, '_> {
         self.b.resolve_clashes(&idx, |i| i.name.clone(), |_| 0);
     }
 
-    fn fm_name(&self, f: &Path) -> Option<String> {
-        let text = self.fs().read_to_string(f).ok()?;
+    fn fm_name(&mut self, f: &Path) -> Option<String> {
+        let text = self.b.text(f).ok()?;
         frontmatter::parse(&text).str("name").map(str::to_string)
     }
 
     fn command_item(&mut self, provider: &str, scope: &str, f: &Path, name: &str, off: bool) -> Option<usize> {
-        let text = self.fs().read_to_string(f).ok()?;
+        let text = self.b.text(f).ok()?;
         let fm = frontmatter::parse(&text);
         let layer = self.layer(provider, scope);
         let body = char_len(text[fm.body_start..].trim());
@@ -634,7 +634,7 @@ impl Run<'_, '_> {
             let mut files = self.files(&dir, &[".md"]);
             files.sort();
             for f in files {
-                let Ok(text) = self.fs().read_to_string(&f) else { continue };
+                let Ok(text) = self.b.text(&f) else { continue };
                 let fm = frontmatter::parse(&text);
                 let (Some(name), Some(desc)) = (fm.str("name"), fm.str("description")) else {
                     self.b.warn("agent-incomplete", "a task agent without name or description is skipped", Some(&f));
