@@ -30,15 +30,40 @@ fn current(path: &Path) -> Result<Option<String>, String> {
     }
 }
 
-/// Write `text` to `path` atomically: a temporary file beside it, flushed, then renamed over it.
+/// Create a file which did not exist before. On Unix, `mode` is applied at creation, before any contents are written.
+fn create_new(path: &Path, _mode: u32) -> std::io::Result<std::fs::File> {
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(_mode);
+    }
+    options.open(path)
+}
+
+/// Write `text` to `path` atomically: a temporary file beside it, flushed, then renamed over it. An existing file's
+/// permissions survive the replacement; a new settings file is owner-only on Unix.
 fn write_atomic(path: &Path, text: &str) -> Result<(), String> {
     let dir = path.parent().ok_or("no folder for that file")?;
     std::fs::create_dir_all(dir).map_err(|e| format!("could not create {}: {e}", dir.display()))?;
+    let permissions = std::fs::symlink_metadata(path).ok().map(|m| m.permissions());
+    #[cfg(unix)]
+    let mode = {
+        use std::os::unix::fs::PermissionsExt;
+        permissions.as_ref().map_or(0o600, |p| p.mode())
+    };
+    #[cfg(not(unix))]
+    let mode = 0;
     let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-    let tmp = dir.join(format!(".{name}.rigswig-{}.tmp", crate::ui::random_hex()));
+    let random = crate::ui::random_hex().map_err(|e| format!("secure randomness is unavailable: {e}"))?;
+    let tmp = dir.join(format!(".{name}.rigswig-{random}.tmp"));
     let result = (|| {
-        let mut f = std::fs::OpenOptions::new().write(true).create_new(true).open(&tmp)?;
+        let mut f = create_new(&tmp, mode)?;
         f.write_all(text.as_bytes())?;
+        if let Some(p) = permissions {
+            f.set_permissions(p)?;
+        }
         f.sync_all()?;
         std::fs::rename(&tmp, path)
     })();
@@ -58,10 +83,19 @@ pub fn apply(plan: &Plan, before_hash: Option<&str>, backups: &Path) -> Result<A
     let backup = match &now {
         Some(text) => {
             std::fs::create_dir_all(backups).map_err(|e| format!("could not create the backup folder: {e}"))?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                std::fs::set_permissions(backups, std::fs::Permissions::from_mode(0o700))
+                    .map_err(|e| format!("could not make the backup folder private: {e}"))?;
+            }
             let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
             let name = plan.path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-            let b = backups.join(format!("{secs}-{}-{name}", &crate::ui::random_hex()[..8]));
-            std::fs::write(&b, text).map_err(|e| format!("could not save a backup: {e}"))?;
+            let random = crate::ui::random_hex().map_err(|e| format!("secure randomness is unavailable: {e}"))?;
+            let b = backups.join(format!("{secs}-{}-{name}", &random[..8]));
+            let mut backup_file = create_new(&b, 0o600).map_err(|e| format!("could not save a backup: {e}"))?;
+            backup_file.write_all(text.as_bytes()).map_err(|e| format!("could not save a backup: {e}"))?;
+            backup_file.sync_all().map_err(|e| format!("could not save a backup: {e}"))?;
             Some(b)
         }
         None => None,
@@ -147,6 +181,51 @@ mod tests {
         assert!(a.backup.is_none());
         undo(&a).unwrap();
         assert!(!f.exists());
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[cfg(unix)]
+    fn mode(path: &Path) -> u32 {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::metadata(path).unwrap().permissions().mode() & 0o777
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn atomic_replacement_preserves_the_settings_files_permissions() {
+        let d = dir("permissions");
+        let f = d.join("settings.json");
+        std::fs::write(&f, "old\n").unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&f, std::fs::Permissions::from_mode(0o600)).unwrap();
+        let p = plan(&f, Some("old\n"), "new\n");
+        apply(&p, p.before_hash.as_deref(), &d.join("backups")).unwrap();
+        assert_eq!(mode(&f), 0o600, "atomic replacement must not broaden the settings file");
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn backups_are_private() {
+        let d = dir("private-backup");
+        let f = d.join("settings.json");
+        std::fs::write(&f, "old\n").unwrap();
+        let backups = d.join("backups");
+        let p = plan(&f, Some("old\n"), "new\n");
+        let a = apply(&p, p.before_hash.as_deref(), &backups).unwrap();
+        assert_eq!(mode(&backups), 0o700);
+        assert_eq!(mode(a.backup.as_ref().unwrap()), 0o600);
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_created_settings_file_is_owner_only() {
+        let d = dir("new-permissions");
+        let f = d.join("settings.json");
+        let p = plan(&f, None, "{}\n");
+        apply(&p, None, &d.join("backups")).unwrap();
+        assert_eq!(mode(&f), 0o600);
         let _ = std::fs::remove_dir_all(&d);
     }
 

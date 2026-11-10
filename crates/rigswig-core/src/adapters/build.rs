@@ -58,9 +58,38 @@ impl<'a> Build<'a> {
         printable(&s)
     }
 
+    /// Record an advisory or incomplete-read warning. The `incomplete-` namespace is reserved for sources rigswig
+    /// could not read fully, constructs it had to drop without modelling them, and genuinely ambiguous resolution.
+    /// Native truncation, documented precedence and intentional security boundaries stay advisory.
     pub fn warn(&mut self, code: &str, message: impl Into<String>, file: Option<&Path>) {
+        let incomplete = code.starts_with("malformed-")
+            || matches!(
+                code,
+                "agent-frontmatter"
+                    | "agent-incomplete"
+                    | "ambiguous-skill"
+                    | "blob-missing"
+                    | "channel-ambiguous"
+                    | "duplicate-name"
+                    | "external-dir-unresolvable"
+                    | "mcp-bundle"
+                    | "mcp-server-transport"
+                    | "package-unreadable"
+                    | "plugin-missing"
+                    | "profile-unresolved"
+                    | "setting-unreadable"
+                    | "settings-patterns-not-applied"
+                    | "unknown-trigger"
+                    | "walk-stopped"
+                    | "yaml-feature-skipped"
+            );
+        let code = if incomplete && !code.starts_with(INCOMPLETE_WARNING_PREFIX) {
+            format!("{INCOMPLETE_WARNING_PREFIX}{code}")
+        } else {
+            code.into()
+        };
         let file = file.map(|f| self.display(f));
-        let w = Warning { code: code.into(), message: printable(&message.into()), item: None, file };
+        let w = Warning { code, message: printable(&message.into()), item: None, file };
         if !self.warnings.contains(&w) {
             self.warnings.push(w);
         }

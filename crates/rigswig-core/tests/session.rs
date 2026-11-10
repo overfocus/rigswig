@@ -77,15 +77,14 @@ fn claude_session_in_repo(w: &mut World, stamp: SystemTime) {
 }
 
 #[test]
-fn fresh_machine_claim_beats_the_repos_own_files() {
+fn fresh_machine_claim_does_not_beat_the_repos_own_files() {
     let now = SystemTime::now();
     let mut w = World::new();
     hermes_home_active(&mut w, now - Duration::from_secs(60));
     let pick = w.pick(None, true, now);
-    assert_eq!(pick.adapter.id(), "hermes", "a live hermes session outranks claude-code's repo files");
-    assert_eq!(pick.reason, PickReason::SessionMachine);
-    let claim = pick.session.expect("the pick followed the claim");
-    assert!(claim.evidence.iter().any(|e| e.contains("Hermes home: state.db-wal")), "have {:#?}", claim.evidence);
+    assert_eq!(pick.adapter.id(), "claude-code", "machine activity elsewhere must not move this repo's reading");
+    assert_eq!(pick.reason, PickReason::Evidence);
+    assert!(pick.session.is_none());
 }
 
 #[test]
@@ -188,9 +187,10 @@ fn a_clock_behind_the_files_is_never_stale() {
     // An mtime one minute ahead of the pick's clock (a skewed machine or a rounded-up stamp) must still claim.
     let now = SystemTime::now();
     let mut w = World::new();
-    hermes_home_active(&mut w, now + Duration::from_secs(60));
+    claude_session_in_repo(&mut w, now + Duration::from_secs(60));
     let pick = w.pick(None, true, now);
-    assert_eq!(pick.adapter.id(), "hermes", "have reason {:?}", pick.reason);
+    assert_eq!(pick.adapter.id(), "claude-code", "have reason {:?}", pick.reason);
+    assert_eq!(pick.reason, PickReason::SessionRepo);
 }
 
 #[test]

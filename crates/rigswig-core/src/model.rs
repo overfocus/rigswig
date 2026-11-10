@@ -58,8 +58,8 @@ pub struct Tool {
     /// Why the adapter thinks this tool is in use here (files found), as short labels.
     #[serde(default)]
     pub detected_by: Vec<String>,
-    /// The live session this reading follows, when the default pick preferred one. Absent unless the pick
-    /// followed a live session (`--no-session` keeps every pick evidence-only), and always absent on remote
+    /// The live session this interactive reading follows, when the default pick preferred a fresh repo-scoped claim.
+    /// Absent for explicit tools, automation, machine-wide activity and `--no-session`, and always absent on remote
     /// readings, which carry nothing from this machine.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session: Option<Session>,
@@ -456,13 +456,24 @@ pub struct Coverage {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Warning {
-    /// A stable code, e.g. `stale-cache`, `agent-all-tools`.
+    /// A stable code, e.g. `stale-cache`, `agent-all-tools` or `incomplete-malformed-json`. The `incomplete-` prefix
+    /// means the adapter could not fully read or unambiguously resolve the source; `check --strict` fails on it.
     pub code: String,
     pub message: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub item: Option<ItemId>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub file: Option<String>,
+}
+
+/// Prefix on a warning whose source could not be read completely or whose resolution remains ambiguous. `check
+/// --strict` fails on these only; other warnings stay advisory unless `--no-warnings` is also present.
+pub const INCOMPLETE_WARNING_PREFIX: &str = "incomplete-";
+
+impl Warning {
+    pub fn is_incomplete(&self) -> bool {
+        self.code.starts_with(INCOMPLETE_WARNING_PREFIX)
+    }
 }
 
 /// Tokens from characters, as a labelled estimate: `chars / 4`, with a range of 3 to 5 characters per token.

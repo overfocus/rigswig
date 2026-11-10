@@ -48,6 +48,10 @@ impl Paths {
 pub struct Dsh;
 
 impl Adapter for Dsh {
+    fn strict_ready(&self) -> bool {
+        true
+    }
+
     fn id(&self) -> &'static str {
         ID
     }

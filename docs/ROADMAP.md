@@ -1,5 +1,76 @@
 # Roadmap
 
+## Product direction from the 2026-11-10 review
+
+rigswig's durable advantage is its compiler-like core: harness-specific readers resolve into one provenance-rich
+model, then audits, comparisons, simulations and output formats consume it. The product direction is **static
+analysis and regression prevention for coding-agent configuration** — the equivalent of a linter and a dry-run plan
+for agent harnesses — not runtime watching, general configuration synchronisation or automatic instruction rewriting.
+
+The next releases optimise for reproducibility, measurement confidence and a repeatable CI workflow rather than the
+number of adapters or findings. Token estimates remain explicitly secondary to semantic resolution and provenance.
+
+### 0.2.x: correctness and trust
+
+- [x] Make automation deterministic: `check`, `audit`, `compare` and MCP use repository evidence, never live-session
+  activity. Interactive `status` and `ui` may follow a fresh **repo-scoped** session; machine-wide activity is shown
+  as evidence but never overrides the repo's own configuration.
+- [x] Harden write mode before expanding it: preserve settings-file permissions across atomic replacement, create
+  private backup directories and files, and use an OS-backed CSPRNG which fails closed when secure randomness is not
+  available.
+- [x] Clarify that the headline estimate covers known file-provided startup context; characters remain the exact
+  comparison unit and tokens are advisory.
+- [x] Keep the required formatting, test and Clippy gates green on stable Rust.
+- [x] Design and implement strict automation semantics for unreadable required files and incomplete adapter coverage.
+  `check --strict` fails on machine-readable `incomplete-*` warnings, not on `coverage.notModelled` itself; adapters
+  opt into the contract and third-party adapters fail closed by default ([STRICT.md](STRICT.md)).
+
+### 0.3: regression prevention and confidence
+
+- Version every public JSON surface (`status`, `audit`, `compare`, `fleet`, `usage` and `check`) with generated
+  schemas, compatibility tests and consistent adapter/coverage provenance. Expose structured MCP results and schemas.
+- Add versioned baselines, `check --baseline`, a no-new-debt ratchet, repository policy with explained suppressions,
+  and SARIF output. The key question is "did this change make the harness worse?", not only "is it under a fixed
+  budget?".
+- Separate finding impact, confidence, effort and remediation safety. Distinguish referenced, invoked, manually
+  invoked but unobservable, unknown because scanning was incomplete, and supported negative evidence. Truncation or
+  unsupported invocation types must produce `unknown`, never proof that an item is unnecessary.
+- Reuse `OverlayFs` and full adapter re-resolution for `--without`, audit savings and multi-change simulations, as
+  write planning already does, instead of only filtering a resolved model.
+- Make MCP summary-first, with drill-down by kind or item, and typed request validation. Full harness JSON must be an
+  explicit request rather than the default model-context cost.
+- Introduce adapter capability tiers and a compatibility matrix with last-verified harness versions, a contributor
+  conformance kit and differential fixtures from real harness versions. Depth and confidence outrank adapter count.
+- Promote native harness-reported measurements and public tokenizers, calibrated by content type. Let `check` select
+  the estimate or a conservative bound explicitly.
+
+### Candidate spike: behavioral harness comparison with agent-neuron
+
+The existing `compare` answers a static question: what differs between two resolved configurations? A promising next
+step is an offline behavioral comparison orchestrated by [agent-neuron](https://github.com/overfocus/agent-neuron):
+run the same scenario against configurations A and B, then compare both observed behavior and rigswig's static
+prediction. This is a spike, not yet an engine dependency or a committed surface.
+
+- Scenarios use invented, disposable fixtures and only offline harness commands or deterministic stand-ins which
+  cannot call a model or the network. One `run` neuron handles one scenario/configuration input; the engine supplies
+  timeouts, budgets and a replayable trace rather than another hand-built runner.
+- Normalize and compare which instructions and tools became available, permission and trust decisions, context costs,
+  errors and invocation order. Keep message contents, personal configuration and real session logs out of the trace.
+  Show where observed behavior confirms or contradicts the static model, with each fact's provenance intact.
+- The spike must preserve every current guarantee: no real model calls, no network, no writes outside its scratch
+  fixture, no session-log reads, and no change to default builds. agent-neuron's engine is POSIX-only; any later
+  integration stays optional there. Prefer a sidecar for the experiment; if linking ever makes sense, pin a full
+  engine commit and reassess publishing first.
+- Real model-backed quality evaluation is a different product and consent boundary, not something to introduce
+  silently through this feature. It is outside this spike.
+
+### Deliberately later
+
+More adapters for coverage numbers, broader live-session detection, general-purpose write mode, WebAssembly, private
+GitHub support, runtime watching, cloud fleet management, model-generated rewrites and MCP testing. Usage readers for
+Gemini CLI and Copilot CLI remain valuable where they improve audit confidence without weakening metadata-only
+privacy.
+
 ## v0.1
 
 1. **Repository** (done): name, licence, fresh history, a Rust workspace (`rigswig-core` library, `rigswig` binary),
@@ -112,14 +183,16 @@ and docs) asked whether the other harnesses can be read to the same bar as [USAG
 Until a harness has its reader, `usage` keeps refusing it. Ollama and the Hugging Face CLI will refuse with a clearer
 reason: they keep no sessions.
 
-## Next: session detection from more harnesses
+## Deferred: broader session detection
 
-The default picker knows a live session for Claude Code (its session folder names the repo) and Hermes (the
-daemon's home is active — machine-wide only, since its session database never leaves the home). The mechanism, the
-pick rules and what each harness can prove from file names, kinds and modification times alone are scoped in the
-2026-11-09 assessment. The remaining waves: gemini-cli and dsh (their folders also name the repo), codex and
-copilot (machine-wide), and the decision on Hermes' database read. Later: a heartbeat file each harness's hooks can
-append to, for exact per-repo claims on the machine-only ones.
+Interactive `status` and `ui` follow only a fresh claim whose artifacts name the repo. Machine-wide claims remain
+`tools` evidence and never select a harness; `check`, `audit`, `compare` and MCP always use repository evidence.
+Claude Code can make a repo-scoped claim. Hermes can only report machine-wide activity without opening its database,
+so it no longer moves the default pick.
+
+Further repo-scoped probes (for example Gemini CLI and dsh) are deferred behind the 0.2.x/0.3 correctness work.
+Machine-wide probes for Codex and Copilot are not selection inputs. A heartbeat file that harness hooks could append
+to is one possible future source of exact per-repo evidence, but is not planned for 0.2.x.
 
 ## Later
 
@@ -129,13 +202,13 @@ append to, for exact per-repo claims on the machine-only ones.
   ([#1](https://github.com/overfocus/rigswig/issues/1)).
 - A WebAssembly build of `rigswig-core`, for a page that reads an uploaded `--json` without the CLI installed
   (the extension publishes instead, from `.github/workflows/extension.yml`).
-- Real tokenizer counts where a harness's tokenizer is public, labelled as such.
+- Native harness-reported context counts and public tokenizers: promoted to the 0.3 measurement work above.
 
 ## Not in scope
 
 Watching a running agent (processes, ports, activity streams), reading session content (`usage` reads metadata
-only: [USAGE.md](USAGE.md); the one exception is the default picker's is-a-session-live look, which reads session
+only: [USAGE.md](USAGE.md); the one exception is the interactive picker's is-a-session-live look, which reads session
 folders' file names, kinds and modification times and never a file — adapter pages carry each harness's artifacts,
-and `--no-session` switches it off), writing or
+and `--no-session` switches off its influence on interactive selection), writing or
 syncing configuration, testing MCP servers, any network call other than
 the opt-in `--github` download.

@@ -96,7 +96,7 @@
           "default": []
         },
         "session": {
-          "description": "The live session this reading follows, when the default pick preferred one. Absent unless the pick\nfollowed a live session (`--no-session` keeps every pick evidence-only), and always absent on remote\nreadings, which carry nothing from this machine.",
+          "description": "The live session this interactive reading follows, when the default pick preferred a fresh repo-scoped claim.\nAbsent for explicit tools, automation, machine-wide activity and `--no-session`, and always absent on remote\nreadings, which carry nothing from this machine.",
           "anyOf": [
             {
               "$ref": "#/$defs/Session"
@@ -930,7 +930,7 @@
       "type": "object",
       "properties": {
         "code": {
-          "description": "A stable code, e.g. `stale-cache`, `agent-all-tools`.",
+          "description": "A stable code, e.g. `stale-cache`, `agent-all-tools` or `incomplete-malformed-json`. The `incomplete-` prefix\nmeans the adapter could not fully read or unambiguously resolve the source; `check --strict` fails on it.",
           "type": "string"
         },
         "message": {

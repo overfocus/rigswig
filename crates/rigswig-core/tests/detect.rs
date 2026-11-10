@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use rigswig_core::adapter::Ctx;
+use rigswig_core::adapter::{Adapter, Ctx, Detection};
 use rigswig_core::adapters;
 use rigswig_core::fs::MemFs;
 use rigswig_core::model::Os;
@@ -49,6 +49,49 @@ fn home_folder_evidence_alone_never_scores_over_50() {
         let ctx = Ctx { fs: &fs, env, home: PathBuf::from(HOME), repo: PathBuf::from(REPO), os: Os::Linux };
         let d = a.detect(&ctx);
         assert!(d.score <= 50, "{} scores {} from the home folder alone ({:?})", a.id(), d.score, d.evidence);
+    }
+}
+
+#[test]
+fn incomplete_warning_classes_are_machine_readable() {
+    let fs = MemFs::new();
+    let ctx =
+        Ctx { fs: &fs, env: BTreeMap::new(), home: PathBuf::from(HOME), repo: PathBuf::from(REPO), os: Os::Linux };
+    let mut b = rigswig_core::adapters::build::Build::new(&ctx, "example");
+    for code in ["malformed-json", "walk-stopped", "settings-patterns-not-applied", "mcp-bundle"] {
+        b.warn(code, "cannot resolve everything", None);
+    }
+    b.warn("agent-all-tools", "advisory", None);
+    assert!(b.warnings[..4].iter().all(rigswig_core::model::Warning::is_incomplete));
+    assert!(b.warnings[..4].iter().all(|w| w.code.starts_with("incomplete-")));
+    assert!(!b.warnings[4].is_incomplete());
+}
+
+struct ExternalAdapter;
+
+impl Adapter for ExternalAdapter {
+    fn id(&self) -> &'static str {
+        "external"
+    }
+    fn env_vars(&self) -> &'static [&'static str] {
+        &[]
+    }
+    fn detect(&self, _: &Ctx) -> Detection {
+        Detection { score: 0, evidence: Vec::new() }
+    }
+    fn resolve(&self, _: &Ctx) -> rigswig_core::model::Harness {
+        unreachable!("strict readiness does not resolve")
+    }
+}
+
+#[test]
+fn strict_readiness_is_explicit_and_every_builtin_opts_in() {
+    assert!(
+        !ExternalAdapter.strict_ready(),
+        "a third-party adapter must fail closed until it classifies incomplete reads"
+    );
+    for a in adapters::all() {
+        assert!(a.strict_ready(), "{} has not declared its strict completeness contract", a.id());
     }
 }
 

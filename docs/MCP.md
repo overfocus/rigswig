@@ -2,8 +2,9 @@
 
 `rigswig mcp` serves the same five read-only surfaces as **MCP tools** over stdio: any harness that speaks MCP can
 register rigswig and then ask, mid-session, what a session in a repo loads, whether a checkout passes its budgets
-and what an audit finds. It is the CLI, not a new mode: the same adapters, the same redaction, the same totals —
-over a stdio subprocess the client launches and owns.
+and what an audit finds. It is the CLI, not a new mode: the same adapters, the same redaction, and the same totals —
+over a stdio subprocess the client launches and owns. Every tool chooses the harness from repository evidence, never
+live-session activity, so repeated automation reads are deterministic.
 
 There is deliberately nothing else on the wire: no network transport (a socket would make rigswig a listener, and
 the harnesses' own clients already launch stdio servers), no write tools (the page's write mode never becomes
@@ -47,13 +48,15 @@ this row shows the server like any other MCP server, tool listings unmeasured.
 | Tool | Answers | Arguments |
 |---|---|---|
 | `status` | what a session in a repo loads: `status --json` (the full harness: items, sizes, origins, trail) | `repo` (or the client's process cwd), `tool`, `without` |
-| `check` | whether a checkout passes CI limits; `passed` is the verdict | `repo`, `tool`, `maxTokens`, `maxItemTokens`, `noWarnings`, `without` |
+| `check` | whether a checkout passes CI limits and optional incomplete-read checks; `passed` is the verdict | `repo`, `tool`, `maxTokens`, `maxItemTokens`, `noWarnings`, `strict`, `without` |
 | `audit` | ranked findings, each with a saving and a fix | `repo`, `tool` |
 | `compare` | what differs: two repos with one harness (`repo`, `repoB`, `tool`), or two harnesses on one repo (`repo`, `tools`) | |
 | `tools` | the harnesses rigswig knows, with detection score, evidence, and any fresh live-session claim | `repo` |
 
 Every result is the tool's JSON, serialised as the content text; a failure inside the tool (a repo that does not
-exist, an unknown harness) is `isError: true` with the message, not a protocol error. Protocol errors are the
+exist, an unknown harness, or `--strict` on an adapter without a completeness contract) is `isError: true` with the
+message, not a protocol error. `strict` has the same meaning as in the CLI: fail on `incomplete-*` warnings, not on
+`coverage.notModelled` itself ([strict checks](STRICT.md)). Protocol errors are the
 JSON-RPC ones: `-32700` for a line that is not JSON, `-32600` for a batch (later revisions dropped those),
 `-32601` for a method rigswig does not have.
 

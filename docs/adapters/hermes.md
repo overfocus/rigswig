@@ -120,15 +120,15 @@ the trail of layers that set it. Only non-secret keys: secrets live in `.env`, w
   trust tiers are not modelled. Like every harness, each effective server's tool listing is named among the
   unmeasured costs.
 
-## Live sessions (the default pick)
+## Live sessions (`tools` evidence)
 
 Hermes writes one SQLite database per home (`state.db`, plus its WAL), a gateway-state file and a CLI history file
 ([sessions](https://hermes-agent.nousresearch.com/docs/user-guide/sessions.md); the file set seen on an installed
-home 2026-11-09). Where a session's repo lives is inside the database, which the pick never opens — so the claim is
-machine-scoped: the home is active, but nothing on disk says which repo a session sits in. The probe looks at
-`state.db-wal`, `state.db`, `gateway_state.json` and `.hermes_history` in the Hermes home (and in the profile home,
-when one is named) for file presence and modification times within 15 minutes, and opens none of them
-(`status --no-session` keeps every pick evidence-only). A home with none of the files makes no claim.
+home 2026-11-09). Where a session's repo lives is inside the database, which rigswig never opens for this probe — so
+the claim is machine-scoped: the home is active, but nothing on disk says which repo a session sits in. The probe looks
+at `state.db-wal`, `state.db`, `gateway_state.json` and `.hermes_history` in the Hermes home (and in the profile home,
+when one is named) for file presence and modification times within 15 minutes, and opens none of them. This activity
+appears in `rigswig tools`; it never moves the default harness pick. A home with none of the files makes no claim.
 
 ## Env vars read
 

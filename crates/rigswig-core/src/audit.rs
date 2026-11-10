@@ -74,7 +74,8 @@ pub enum Severity {
     Low,
 }
 
-/// Tokens before you type that the proposed change would save: an estimate, computed by taking `without` out.
+/// Estimated tokens from startup files that the proposed change would save: an estimate, computed by taking `without`
+/// out.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Saving {
@@ -1457,7 +1458,8 @@ fn permissions(h: &Harness, findings: &mut Vec<Finding>) {
 /// The harness's own warnings, as findings.
 fn warnings(h: &Harness, findings: &mut Vec<Finding>) {
     for w in h.warnings.iter().filter(|w| w.code != "what-if") {
-        let (severity, proposal) = match w.code.as_str() {
+        let base = w.code.strip_prefix(crate::model::INCOMPLETE_WARNING_PREFIX).unwrap_or(&w.code);
+        let (severity, proposal) = match base {
             "agent-all-tools" => (
                 Severity::Medium,
                 "Give each agent a `tools` list in its front matter, so a review or research agent cannot edit or run commands.",
@@ -1469,7 +1471,7 @@ fn warnings(h: &Harness, findings: &mut Vec<Finding>) {
             }
             _ => (Severity::Low, "See `rigswig status --json` for the warning in context."),
         };
-        let items: Vec<String> = match w.code.as_str() {
+        let items: Vec<String> = match base {
             "agent-all-tools" => h
                 .items
                 .iter()
@@ -1480,7 +1482,7 @@ fn warnings(h: &Harness, findings: &mut Vec<Finding>) {
                 .collect(),
             _ => w.item.iter().cloned().collect(),
         };
-        let evidence: Vec<String> = if w.code == "agent-all-tools" {
+        let evidence: Vec<String> = if base == "agent-all-tools" {
             h.items
                 .iter()
                 .filter(|i| items.contains(&i.id))
@@ -1510,7 +1512,7 @@ pub struct Fleet {
     pub repos: Vec<FleetRepo>,
     /// User-scope items, the costliest per session first.
     pub items: Vec<FleetItem>,
-    /// What moving every item the fleet does not need saves, per repo: tokens before you type.
+    /// What moving every item the fleet does not need saves, per repo: estimated tokens from startup files.
     pub notes: Vec<String>,
 }
 

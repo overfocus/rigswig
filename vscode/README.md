@@ -57,7 +57,8 @@ log** shows every CLI run with its exit code and time.
 ## How it reads, and what it never does
 
 The extension spawns three rigswig commands and nothing else: `status --json` for the bill and the What loads
-view, `audit --json` for the findings, and `--version` once per binary. All hold the CLI's own guarantees:
+view, `audit --json --tool <harness-status-selected>` for the findings, and `--version` once per binary. All hold
+the CLI's own guarantees:
 
 - the page spawn is read-only: it carries neither `--allow-writes` nor `--allow-github`;
 - the findings spawn reads files only: it never passes `--usage`, because session logs are opt-in per run and an

@@ -124,8 +124,8 @@ pub fn fleet(patterns: &[String], tool: Option<&str>, progress: &mut dyn FnMut(P
                 fraction: (i as f64 + x.fraction) / n as f64,
             })
         };
-        // A fleet reads many repos at once: the pick stays with each repo's own files, however live a session is
-        // (repo-scoped claims could follow, but machine-scoped ones cannot say which repo they ran in).
+        // A fleet reads many repos at once: like every audit, it stays with each repo's own evidence and never
+        // follows live activity.
         match repo(p, tool, false, None, &mut each) {
             // A repo is a git checkout or a folder with the harness's own files; the user config folder alone (which
             // every folder sees) does not make one.
@@ -333,8 +333,8 @@ fn repo_json(repo: &Path, tool: &str, progress: &mut dyn FnMut(Progress)) -> Res
 }
 
 fn repo_audit(repo: &Path, tool: &str, progress: &mut dyn FnMut(Progress)) -> Result<Audit, String> {
-    // The page's audit is the same read the status bar does: it follows the default pick's live-session claim.
-    self::repo(repo, Some(tool), true, None, progress).map(|(a, _)| a)
+    // The page's audit is deterministic, like the CLI's: live activity never selects a different harness.
+    self::repo(repo, Some(tool), false, None, progress).map(|(a, _)| a)
 }
 
 #[cfg(test)]

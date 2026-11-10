@@ -130,6 +130,10 @@ struct Run<'a, 'b> {
 }
 
 impl Adapter for Codex {
+    fn strict_ready(&self) -> bool {
+        true
+    }
+
     fn id(&self) -> &'static str {
         ID
     }

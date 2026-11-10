@@ -232,7 +232,7 @@ fn same_named_skills_in_one_tier_are_listed_by_their_relative_path() {
     let h = run(&fs);
     assert!(h.items.iter().any(|i| i.name == "a/one" && i.effective));
     assert!(h.items.iter().any(|i| i.name == "b/two" && i.effective), "neither is guessed between");
-    assert!(h.warnings.iter().any(|w| w.code == "ambiguous-skill"));
+    assert!(h.warnings.iter().any(|w| w.code == "incomplete-ambiguous-skill"));
 }
 
 #[test]
@@ -311,7 +311,7 @@ fn a_profile_is_its_own_hermes_home() {
 
     let unresolved = run_env(&[("HERMES_PROFILE", "ghost")], &fs);
     assert_eq!(unresolved.settings["model"].value, "main-model");
-    assert!(unresolved.warnings.iter().any(|w| w.code == "profile-unresolved"));
+    assert!(unresolved.warnings.iter().any(|w| w.code == "incomplete-profile-unresolved"));
 }
 
 #[test]

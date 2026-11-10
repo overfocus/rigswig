@@ -320,11 +320,12 @@ function statusArgs(repo) {
 }
 
 /**
- * The arguments for `rigswig audit --json` on one repo: the findings read, and nothing else. Never `--usage`
- * (session logs are opt-in per run, and a click in an editor is not that), never any write or download flag.
+ * The arguments for `rigswig audit --json` on one repo and the harness status selected: the findings read, and
+ * nothing else. Never `--usage` (session logs are opt-in per run, and a click in an editor is not that), never any
+ * write or download flag. The explicit tool keeps the findings on the same harness when status follows a live session.
  */
-function auditArgs(repo) {
-    return ['audit', '--json', '--repo', repo];
+function auditArgs(repo, tool) {
+    return ['audit', '--json', '--repo', repo, '--tool', tool];
 }
 
 /** The arguments for the version check. */

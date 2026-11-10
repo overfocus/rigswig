@@ -61,7 +61,7 @@ pub fn text(h: &Harness) -> String {
     let c = &h.context;
     let _ = writeln!(
         o,
-        "  Context   ~{} tokens before you type ({}..{}, estimated from {} characters)",
+        "  Context   ~{} estimated tokens from startup files ({}..{}, estimated from {} characters)",
         thousands(c.tokens.value),
         thousands(c.tokens.low),
         thousands(c.tokens.high),
@@ -138,7 +138,7 @@ pub fn compare_text(c: &rigswig_core::compare::Comparison) -> String {
     let delta = c.b.tokens as i64 - c.a.tokens as i64;
     let _ = writeln!(
         o,
-        "  Context   A ~{}  B ~{}  tokens before you type  ({})",
+        "  Context   A ~{}  B ~{}  estimated tokens from startup files  ({})",
         thousands(c.a.tokens),
         thousands(c.b.tokens),
         match delta {
@@ -204,7 +204,7 @@ pub fn audit_text(a: &rigswig_core::audit::Audit) -> String {
     let p = |s: &str| printable(s);
     let _ = writeln!(
         o,
-        "rigswig audit: {} in {}  (~{} tokens before you type)",
+        "rigswig audit: {} in {}  (~{} estimated tokens from startup files)",
         p(&a.tool),
         p(&a.repo),
         thousands(a.tokens)

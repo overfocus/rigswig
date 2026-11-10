@@ -135,7 +135,7 @@ function startPage(repo) {
 // identity check (see readAudit).
 
 let state = null; // { repo, parsed }
-let findings = { repo: null, value: null, error: null };
+let findings = { repo: null, tool: null, value: null, error: null };
 let lastError = null; // { message, missing }
 let readSeq = 0;
 let warnedMissing = false;
@@ -172,8 +172,8 @@ async function read() {
         }
         state = { repo, parsed };
         lastError = null;
-        if (findings.repo !== repo) {
-            findings = { repo, value: null, error: null };
+        if (findings.repo !== repo || findings.tool !== parsed.tool) {
+            findings = { repo, tool: parsed.tool, value: null, error: null };
             void readAudit(findings);
         }
     } catch (e) {
@@ -196,16 +196,16 @@ async function read() {
  * one for the same repo — can never overwrite a newer one, whichever finishes last.
  */
 async function readAudit(pending) {
-    const { repo } = pending;
+    const { repo, tool } = pending;
     try {
-        const value = lib.parseAudit(await run(lib.auditArgs(repo), repo, AUDIT_TIMEOUT_MS));
+        const value = lib.parseAudit(await run(lib.auditArgs(repo, tool), repo, AUDIT_TIMEOUT_MS));
         if (findings === pending) {
-            findings = { repo, value, error: null };
+            findings = { repo, tool, value, error: null };
         }
     } catch (e) {
         log.error(`audit: ${e.message}`);
         if (findings === pending) {
-            findings = { repo, value: null, error: e.message };
+            findings = { repo, tool, value: null, error: e.message };
         }
     }
     if (state?.repo === repo) {
@@ -317,7 +317,7 @@ const status = {
         tip.appendMarkdown('**').appendText(parsed.tool).appendMarkdown('** in `').appendText(basename(repo));
         tip.appendMarkdown('`:\n\n');
         tip.appendText(
-            `- ~${fmt(t.value)} tokens load before you type (${t.method}: ${fmt(t.low)}..${fmt(t.high)} from ${fmt(parsed.chars)} characters)\n`,
+            `- ~${fmt(t.value)} estimated tokens from startup files (${t.method}: ${fmt(t.low)}..${fmt(t.high)} from ${fmt(parsed.chars)} characters)\n`,
         );
         if (parsed.session) {
             tip.appendText(`- picked for a live session (${parsed.session.scope}): ${parsed.session.evidence.join(', ')}\n`);
@@ -733,7 +733,7 @@ function activate(context) {
         clearTimeout(timer);
         timer = setTimeout(() => {
             if (drop) {
-                findings = { repo: null, value: null, error: null };
+                findings = { repo: null, tool: null, value: null, error: null };
                 drop = false;
             }
             void read();

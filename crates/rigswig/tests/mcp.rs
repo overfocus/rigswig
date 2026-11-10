@@ -199,6 +199,39 @@ fn status_returns_the_harness_json_and_whatif_takes_items_out() {
 }
 
 #[test]
+fn reads_use_repo_evidence_not_a_repo_scoped_live_session() {
+    let s = Sandbox::new("deterministic");
+    std::fs::remove_dir(s.0.join("repo/.claude")).unwrap();
+    s.write("repo/AGENTS.md", "Codex rules");
+    s.write("repo/.codex/config.toml", "");
+    let mut repo = std::fs::canonicalize(s.0.join("repo")).unwrap();
+    if cfg!(windows) {
+        let text = repo.to_string_lossy().into_owned();
+        if let Some(rest) = text.strip_prefix(r"\\\\?\\") {
+            if rest.as_bytes().get(1) == Some(&b':') {
+                repo = std::path::PathBuf::from(rest);
+            }
+        }
+    }
+    let slug: String =
+        repo.to_string_lossy().chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect();
+    s.write(&format!("home/.claude/projects/{slug}/live.jsonl"), "metadata only");
+    let mut srv = s.server();
+    initialized(&mut srv);
+
+    for (id, tool) in [("d1", "status"), ("d2", "check"), ("d3", "audit")] {
+        let r = srv.request(id, "tools/call", &format!(r#"{{"name":"{tool}","arguments":{{}}}}"#));
+        let out: Value = serde_json::from_str(r["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+        if tool == "status" {
+            assert_eq!(out["tool"]["id"], "codex", "status followed live activity instead of repo evidence");
+            assert!(out["tool"]["session"].is_null(), "automation carries no live-session claim");
+        } else {
+            assert_eq!(out["tool"], "codex", "{tool} followed live activity instead of repo evidence");
+        }
+    }
+}
+
+#[test]
 fn check_reports_the_verdict_and_the_budget_rows() {
     let s = Sandbox::new("check");
     s.write("repo/CLAUDE.md", "Use the test suite.");
@@ -237,6 +270,22 @@ fn audit_returns_findings_and_tools_lists_the_harnesses() {
     let ids: Vec<&str> = list.iter().map(|t| t["id"].as_str().unwrap_or_default()).collect();
     assert!(ids.contains(&"claude-code"));
     assert!(ids.contains(&"omp"), "the newest adapter rides along");
+}
+
+#[test]
+fn strict_check_reports_incomplete_reads() {
+    let s = Sandbox::new("strict-check");
+    s.write("repo/CLAUDE.md", "Use the test suite.");
+    s.write("repo/.claude/settings.json", "{not json");
+    let mut srv = s.server();
+    initialized(&mut srv);
+
+    let r = srv.request("s1", "tools/call", r#"{"name":"check","arguments":{"strict":true}}"#);
+    let out: Value = serde_json::from_str(r["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(out["passed"], false);
+    let row = out["checks"].as_array().unwrap().iter().find(|c| c["check"] == "strict").unwrap();
+    assert_eq!(row["passed"], false);
+    assert!(row["detail"].as_str().unwrap().contains("incomplete-malformed-json"), "{row}");
 }
 
 #[test]

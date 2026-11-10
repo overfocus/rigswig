@@ -742,7 +742,7 @@ impl Run<'_, '_> {
             }
             if shape == Shape::VsCode {
                 let o = self.b.jsonc(&f).object();
-                if o.contains_key("servers") && !o.get("mcp").is_some_and(|m| m.get("servers").is_some()) {
+                if o.contains_key("servers") && o.get("mcp").is_none_or(|m| m.get("servers").is_none()) {
                     self.b.warn(
                         "vscode-mcp-not-read",
                         ".vscode/mcp.json lists servers at the top level; OMP reads only mcp.servers there, so it loads none of them",

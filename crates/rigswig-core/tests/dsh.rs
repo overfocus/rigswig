@@ -128,7 +128,7 @@ fn skills_follow_the_documented_rank_and_layouts() {
     let h = run(&fs);
     let review = item(&h, "dsh:skill:project:review");
     assert!(review.effective, "project-.dsh outranks project-.agents on the same name");
-    assert!(h.warnings.iter().any(|w| w.code == "duplicate-name"), "the loser is named");
+    assert!(h.warnings.iter().any(|w| w.code == "incomplete-duplicate-name"), "the loser is named");
     let audit = item(&h, "dsh:skill:project:audit");
     match &audit.detail {
         ItemDetail::Skill(s) => assert!(s.body_chars.unwrap() > 0),

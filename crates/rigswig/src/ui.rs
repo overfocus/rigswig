@@ -47,21 +47,12 @@ const MAX_REQUEST: usize = 8 * 1024;
 /// Write-mode request bodies are one small JSON change.
 const MAX_BODY: usize = 16 * 1024;
 
-/// 128 random bits as hex: the OS's random source on Unix, else std's randomly keyed hasher.
-pub fn random_hex() -> String {
+/// 128 random bits as hex from the operating system's cryptographic random source. Failure is returned to the caller:
+/// an authentication token or write-mode temporary name must never fall back to a non-cryptographic generator.
+pub fn random_hex() -> std::io::Result<String> {
     let mut bytes = [0u8; 16];
-    let ok = std::fs::File::open("/dev/urandom").and_then(|mut f| f.read_exact(&mut bytes)).is_ok();
-    if !ok {
-        use std::hash::{BuildHasher, Hasher};
-        for chunk in bytes.chunks_mut(8) {
-            let mut h = std::collections::hash_map::RandomState::new().build_hasher();
-            h.write_u128(
-                std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos()),
-            );
-            chunk.copy_from_slice(&h.finish().to_le_bytes());
-        }
-    }
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
+    getrandom::fill(&mut bytes).map_err(|e| std::io::Error::other(e.to_string()))?;
+    Ok(bytes.iter().map(|b| format!("{b:02x}")).collect())
 }
 
 /// Compare without stopping at the first differing byte.
@@ -268,7 +259,10 @@ pub fn handle(
     let Some(data) = render(req.param("tool"), req.param("vs").filter(|v| !v.is_empty())) else {
         return plain(404, "no such harness");
     };
-    let nonce = random_hex();
+    let nonce = match random_hex() {
+        Ok(n) => n,
+        Err(_) => return plain(500, "secure randomness is unavailable"),
+    };
     let body = page_template().replace("__NONCE__", &nonce).replace("__DATA__", &data);
     Response {
         status: 200,
@@ -369,7 +363,7 @@ pub fn serve(
     let listener = TcpListener::bind(("127.0.0.1", port))?;
     let port = listener.local_addr()?.port();
     listener.set_nonblocking(true)?;
-    let token = random_hex();
+    let token = random_hex()?;
     ready(&format!("http://127.0.0.1:{port}/?t={token}"));
     let mut last = Instant::now();
     loop {
@@ -579,7 +573,7 @@ mod tests {
 
     #[test]
     fn tokens_are_random_and_long() {
-        let (a, b) = (random_hex(), random_hex());
+        let (a, b) = (random_hex().expect("OS randomness"), random_hex().expect("OS randomness"));
         assert_eq!(a.len(), 32);
         assert_ne!(a, b);
     }

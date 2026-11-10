@@ -31,7 +31,7 @@ rigswig ui                 # all of it as a local page, with compare and write m
 
 ```text
 claude-code in my-app
-  Context   ~2,915 tokens before you type (2,332..3,886, estimated from 11,657 characters)
+  Context   ~2,915 estimated tokens from startup files (2,332..3,886, from 11,657 characters)
             + not measured: tool listings of 1 MCP server (docs-search)
 ```
 
@@ -48,6 +48,7 @@ hour idle. In the editor there is an extension: the bill and the audit's finding
 
 | You want to... | Run | Read |
 |---|---|---|
+| Require complete, unambiguous resolution in CI | `rigswig check --strict` (exit 1 on an incomplete read; unsupported adapters refuse) | [strict checks](STRICT.md) |
 | Cut startup tokens in CI | `rigswig check --max-tokens 40k` (exit 1 when the budget is passed) | `rigswig --help` |
 | See another harness beside this one | `rigswig compare . --tools claude-code,codex` | the harnesses table in [README](../README.md#harnesses) |
 | Ask what past sessions here actually invoked | `rigswig usage` (findings: `rigswig audit --usage`) | [USAGE.md](USAGE.md) |
@@ -58,12 +59,14 @@ hour idle. In the editor there is an extension: the bill and the audit's finding
 
 Each command reads files and does nothing else unless you ask: no network outside the opt-in `--github` download,
 no model calls, no writes outside `ui --allow-writes`, and session logs only when a run says `--usage`
-([every guarantee](../README.md#guarantees), and what enforces them).
+([every guarantee](../README.md#guarantees), and what enforces them). `check`, `audit`, `compare` and MCP choose the
+harness from repository evidence alone, so live activity elsewhere cannot change an automation result.
 
 ## Where the details live
 
 - [README.md](../README.md) — what rigswig is, the guarantees, every harness.
 - [docs/AUDIT.md](AUDIT.md) — the findings and fleet mode.
+- [docs/STRICT.md](STRICT.md) — incomplete-read checking, adapter readiness and exit behavior.
 - [docs/USAGE.md](USAGE.md) — session-log usage, metadata only, and what changed in the guarantee.
 - [docs/adapters/](adapters) — the rules modelled per harness, each with its doc sources.
 - [docs/ROADMAP.md](ROADMAP.md) — what is done and what is deliberately not.

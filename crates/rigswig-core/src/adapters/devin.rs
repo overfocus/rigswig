@@ -135,6 +135,10 @@ struct Run<'a, 'b> {
 }
 
 impl Adapter for Devin {
+    fn strict_ready(&self) -> bool {
+        true
+    }
+
     fn id(&self) -> &'static str {
         ID
     }
@@ -619,7 +623,6 @@ impl Run<'_, '_> {
             (self.p.repo.join(".github/skills"), "imports_project"),
         ]
         .into_iter()
-        .filter(|(_, layer)| *layer != "project" || true)
         .filter(|(dir, layer)| match *layer {
             "project" => true,
             "imports_project" => self.switches.any_import_skills_at(dir),

@@ -611,8 +611,8 @@ ul.rows > li.flash { outline: 2px solid var(--green); outline-offset: -2px; bord
 
     budget.appendChild(el("div", { cls: "hero" }, [
       el("div", null, [
-        el("h2", { id: "budget-h", text: "Context budget" }),
-        el("p", { cls: "big" }, [el("b", null, ap(t.value)), el("span", { text: "tokens before you type" })]),
+        el("h2", { id: "budget-h", text: "File-provided context" }),
+        el("p", { cls: "big" }, [el("b", null, ap(t.value)), el("span", { text: "estimated tokens from startup files" })]),
         el("p", { cls: "sub" }, [el("strong", { text: pct(share) }), " of a " + k(win) + " window" + (winA.pick || winA.autoFrom !== "unknown" ? "" : " (a stand-in: the model's window is unknown)")]),
         el("p", { cls: "sub", text: "Between " + k(t.low) + " and " + k(t.high) + ", estimated from " + fmt(h.context.chars.value) + " characters (" + t.method + ")." }),
         el("div", { cls: "modellines" }, [modelLine(h, winA, other ? "A" : null), other ? modelLine(other, winB, "B") : null])
@@ -957,7 +957,7 @@ ul.rows > li.flash { outline: 2px solid var(--green); outline-offset: -2px; bord
       el("div", { cls: "stat" }, [el("b", { text: String(a.findings.length) }), el("span", { text: "findings in " + a.repo })]),
       el("div", { cls: "stat" + (bySev.high ? " warn" : "") }, [el("b", { text: String(bySev.high) }), el("span", { text: "high severity" })]),
       el("div", { cls: "stat good" }, [el("b", null, ap(Math.max(0, saving))), el("span", { text: "tokens a session they could save" })]),
-      el("div", { cls: "stat" }, [el("b", null, ap(a.tokens)), el("span", { text: "tokens before you type now" })])
+      el("div", { cls: "stat" }, [el("b", null, ap(a.tokens)), el("span", { text: "estimated tokens from startup files now" })])
     ]));
     if (!a.findings.length) {
       into.appendChild(el("p", { cls: "empty", text: "No findings: nothing here to fix." }));
@@ -1125,7 +1125,7 @@ ul.rows > li.flash { outline: 2px solid var(--green); outline-offset: -2px; bord
     var dsec = el("section", { cls: "box", style: "--edge:linear-gradient(90deg,var(--a),var(--b));--edge-text:var(--cyan)", "aria-labelledby": "diff-h" });
     var delta = cmp.b.tokens - cmp.a.tokens;
     dsec.appendChild(el("div", { cls: "head" }, [el("h2", { id: "diff-h", text: "What differs" }), el("span", { cls: "aside", text: "A " + cmp.a.tool + " · B " + cmp.b.tool })]));
-    dsec.appendChild(el("p", { cls: "lead" }, ["A ~" + k(cmp.a.tokens) + " and B ~" + k(cmp.b.tokens) + " tokens before you type: ", el("b", { text: delta === 0 ? "the same" : "B has " + k(Math.abs(delta)) + (delta > 0 ? " more" : " fewer") }), "."]));
+    dsec.appendChild(el("p", { cls: "lead" }, ["A ~" + k(cmp.a.tokens) + " and B ~" + k(cmp.b.tokens) + " estimated tokens from startup files: ", el("b", { text: delta === 0 ? "the same" : "B has " + k(Math.abs(delta)) + (delta > 0 ? " more" : " fewer") }), "."]));
     dsec.appendChild(el("div", { cls: "dkey", "aria-hidden": "true" }, [
       el("span", null, [el("i", { cls: "d-a" }), "only A"]), el("span", null, [el("i", { cls: "d-c" }), "changed"]),
       el("span", null, [el("i", { cls: "d-s" }), "same"]), el("span", null, [el("i", { cls: "d-b" }), "only B"])

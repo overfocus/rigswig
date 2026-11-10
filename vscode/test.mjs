@@ -144,7 +144,7 @@ if (live) {
     url.done();
 
     // The findings read against the real audit on this repo: the same harness status and audit agree on.
-    const auditOut = spawnSync(binPath, auditArgs(root), { cwd: here, encoding: 'utf8' });
+    const auditOut = spawnSync(binPath, auditArgs(root, parsed.tool), { cwd: here, encoding: 'utf8' });
     assert.equal(auditOut.status, 0, `the CLI audit run: ${auditOut.stderr}`);
     const liveAudit = parseAudit(auditOut.stdout);
     assert.equal(liveAudit.tool, parsed.tool, 'the audit names the same harness status does');
@@ -176,9 +176,9 @@ assert.ok(uiArgs('/repo').every((a) => a !== '--allow-github'), 'never github');
 assert.deepEqual(statusArgs('/repo'), ['status', '--json', '--repo', '/repo']);
 // The findings spawn is the audit, and nothing else: never session logs (`--usage` is opt-in per run, and an
 // editor is not a run that opted in), and none of the write or download flags either.
-assert.deepEqual(auditArgs('/repo'), ['audit', '--json', '--repo', '/repo']);
+assert.deepEqual(auditArgs('/repo', 'claude-code'), ['audit', '--json', '--repo', '/repo', '--tool', 'claude-code']);
 for (const banned of ['--usage', '--allow-writes', '--allow-github', '--github', '--archive']) {
-    assert.ok(auditArgs('/repo').every((a) => a !== banned), `the extension's audit never passes ${banned}`);
+    assert.ok(auditArgs('/repo', 'claude-code').every((a) => a !== banned), `the extension's audit never passes ${banned}`);
 }
 
 // The panel toolbar: refresh and the page are editor-title buttons on the rigswig webview, each with an icon.

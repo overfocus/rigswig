@@ -46,6 +46,14 @@ pub trait Adapter {
     /// Read and resolve everything. Never fails: what cannot be read becomes a warning or a coverage note.
     fn resolve(&self, ctx: &Ctx) -> Harness;
 
+    /// Whether this adapter classifies incomplete and ambiguous reads with `incomplete-*` warning codes. Strict
+    /// automation refuses adapters which return false: no warnings is not evidence of completeness without this
+    /// contract. Third-party adapters default to false; every built-in adapter opts in explicitly after using the
+    /// shared classifier.
+    fn strict_ready(&self) -> bool {
+        false
+    }
+
     /// Plan a change (write mode): what applying it would do. Planning reads only; the binary applies a plan. The
     /// default refuses: an adapter opts in kind by kind.
     fn plan(&self, _ctx: &Ctx, _change: &crate::change::Change) -> Result<crate::change::Plan, String> {
@@ -96,8 +104,6 @@ pub enum PickReason {
     Explicit,
     /// A repo-scoped live claim won: session artifacts naming this repo, freshly touched.
     SessionRepo,
-    /// A machine-scoped live claim won: the harness is active on this machine, somewhere.
-    SessionMachine,
     /// The repo's own files point at it.
     Evidence,
     /// Nothing in the repo points at any harness we read (the winner scores at most 50).
@@ -123,11 +129,12 @@ pub struct Pick<'a> {
     pub session: Option<SessionClaim>,
 }
 
-/// The default pick. Order of authority: `--tool`; then a fresh repo-scoped claim; then a fresh machine-scoped
-/// one; then the repo's own evidence, ties to the first of `adapters::all()` (the list runs reversed, since
-/// `max_by_key` keeps the last of equal maximums); a winner that only home-folder evidence supported (score at
-/// most 50) is a machine guess. `session_enabled` false keeps every pick evidence-only. Each fresh claim picks
-/// its harness by newest activity, ties by detection score, then list order — on an exact tie, the first named.
+/// One default pick: which adapter, and why. The default: `--tool`; then a fresh repo-scoped claim; then the repo's own
+/// evidence, ties to the first of `adapters::all()` (the list runs reversed, since `max_by_key` keeps the last of equal
+/// maximums); a winner that only home-folder evidence supported (score at most 50) is a machine guess. Machine-scoped
+/// activity is useful evidence in `tools`, but cannot say which repo it belongs to and never moves a pick. Each fresh
+/// repo claim picks its harness by newest activity, ties by detection score, then list order. `session_enabled` false
+/// keeps every pick evidence-only; automation passes false so its result cannot depend on what is running.
 pub fn pick<'a>(
     scored: &[(&'a dyn Adapter, Detection)],
     base: &PickCtx<'a>,
@@ -144,27 +151,21 @@ pub fn pick<'a>(
         return Ok(Pick { adapter: *a, score: d.score, reason: PickReason::Explicit, session: None });
     }
     if session_enabled {
-        let claims: Vec<(&'a dyn Adapter, u8, SessionClaim)> = scored
+        if let Some((a, score, c)) = scored
             .iter()
             .filter_map(|(a, d)| {
                 let ctx =
                     Ctx { fs: base.fs, env: env_of(*a), home: base.home.clone(), repo: base.repo.clone(), os: base.os };
                 let c = a.session(&ctx)?;
-                c.fresh(now).then_some((*a, d.score, c))
+                (c.scope == SessionScope::Repo && c.fresh(now)).then_some((*a, d.score, c))
             })
-            .collect();
-        for (scope, reason) in
-            [(SessionScope::Repo, PickReason::SessionRepo), (SessionScope::Machine, PickReason::SessionMachine)]
+            .collect::<Vec<_>>()
+            .iter()
+            .rev()
+            .max_by_key(|(_, score, c)| (c.latest, *score))
+            .map(|(a, s, c)| (*a, *s, c.clone()))
         {
-            if let Some((a, score, c)) = claims
-                .iter()
-                .filter(|(_, _, c)| c.scope == scope)
-                .rev()
-                .max_by_key(|(_, score, c)| (c.latest, *score))
-                .map(|(a, s, c)| (*a, *s, c.clone()))
-            {
-                return Ok(Pick { adapter: a, score, reason, session: Some(c) });
-            }
+            return Ok(Pick { adapter: a, score, reason: PickReason::SessionRepo, session: Some(c) });
         }
     }
     let (a, d) = scored.iter().rev().max_by_key(|(_, d)| d.score).expect("at least one adapter");

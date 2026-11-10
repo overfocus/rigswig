@@ -5,7 +5,7 @@ See everything your coding agent loads before you type, and where each piece cam
 **Start here: [getting started](docs/GETTING-STARTED.md) — install it, three commands, and what each one tells
 you.**
 
-![rigswig's page for a repo: about 15.9k tokens load before you type, 1.6% of the 1M window its model (opus) has, most of it AGENTS.md, with every kind of item as a tile](docs/images/overview.png)
+![rigswig's page for a repo: about 15.9k estimated startup tokens from files, 1.6% of the 1M window its model (opus) has, most of it AGENTS.md, with every kind of item as a tile](docs/images/overview.png)
 
 <table>
   <tr>
@@ -58,6 +58,7 @@ cargo run -- ui --repo path/to/repo              # the same as a page on 127.0.0
 cargo run -- compare repo-a repo-b               # what differs between two repos, one harness
 cargo run -- compare path/to/repo --tools claude-code,codex   # or between two harnesses on one repo
 cargo run -- check --repo path/to/repo --max-tokens 40k        # for CI: exit 1 when the budget is passed
+cargo run -- check --repo path/to/repo --strict               # or when the reading was incomplete/ambiguous
 cargo run -- status --repo path/to/repo --without layer:user   # what-if: the totals without some items
 cargo run -- audit --repo path/to/repo                          # ranked findings, each with a saving and a fix
 cargo run -- audit --repos '~/code/*'                           # fleet: each user-scope item against every repo
@@ -107,8 +108,10 @@ These are the point of the tool, and they will be enforced by tests:
   ([what changed](docs/USAGE.md#what-changed-in-the-guarantee)). (Claude Code's
   auto-memory index, `MEMORY.md`, is read and counted in every run because it loads into every session.) The one
   look a run makes without asking is the default picker's is-a-session-live check: file names, kinds and
-  modification times of a session folder and the harness home, never a file's contents (`--no-session` keeps every
-  pick evidence-only, and a remote reading carries none of it — it has nothing from this machine).
+  modification times of a session folder and the harness home, never a file's contents. Only a fresh artifact that
+  names this repo can influence interactive `status` / `ui` (`--no-session` keeps that pick evidence-only); activity
+  known only at machine scope is evidence in `tools`, and `check`, `audit`, `compare` and MCP always use the repo's own
+  evidence. A remote reading carries none of it — it has nothing from this machine.
 - **Private folders stay private.** List them in `~/.rigswig/private.json` (`{"private": ["~/notes"]}`): rigswig
   refuses them as a repo, and `audit --repos` skips them.
 

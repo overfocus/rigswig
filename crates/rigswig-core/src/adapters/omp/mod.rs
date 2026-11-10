@@ -182,6 +182,10 @@ fn merge(dst: &mut Map<String, Value>, src: &Map<String, Value>) {
 pub struct Omp;
 
 impl Adapter for Omp {
+    fn strict_ready(&self) -> bool {
+        true
+    }
+
     fn id(&self) -> &'static str {
         ID
     }

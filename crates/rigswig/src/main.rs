@@ -24,13 +24,16 @@ Usage:
   rigswig status [--repo <path>] [--tool <id>] [--no-session] [--json]
                                             what a coding-agent session in a repo loads, and where each piece came from
                                             (--tool picks the harness; by default the one with the most evidence, unless
-                                            a live session claims this machine: a claim naming this repo beats one naming
-                                            only the machine, and both beat the repo's files; --no-session keeps every
-                                            pick evidence-only; when no repo evidence picks one, the reading is shown as
-                                            a machine guess and the installed harnesses are listed)
-  rigswig check [--repo <path>] [--tool <id>] [--no-session] [--max-tokens <n>] [--max-item-tokens <n>] [--no-warnings] [--json]
-                                            for CI: exits 1 when a limit is passed (n may be 40000, 40k or 1m)
-  rigswig audit [--repo <path>] [--tool <id>] [--no-session] [--json]
+                                            a fresh session artifact names this repo; --no-session keeps the pick
+                                            evidence-only; machine-wide activity never moves it; when no repo evidence
+                                            picks one, the reading is shown as a machine guess and installed harnesses
+                                            are listed)
+  rigswig check [--repo <path>] [--tool <id>] [--strict] [--max-tokens <n>] [--max-item-tokens <n>] [--no-warnings] [--json]
+                                            for CI: exits 1 when a limit is passed (n may be 40000, 40k or 1m);
+                                            --strict also fails on incomplete reads or ambiguous resolution, and
+                                            refuses an adapter without that completeness contract; ordinary advisory
+                                            warnings need --no-warnings to fail; always uses repository evidence
+  rigswig audit [--repo <path>] [--tool <id>] [--json]
                                             ranked findings: what costs context and nothing here references, plugins the
                                             repo's files do not call for, instruction files over budget, repeated text,
                                             dead references and piled-up permission rules; each with a saving and a fix
@@ -351,9 +354,9 @@ fn status(args: &[String], mode: Mode) -> ExitCode {
         return ExitCode::SUCCESS;
     }
 
-    // The default pick, shared by the page and the reading: `--tool` is explicit; otherwise the harness with the
-    // most evidence — unless a live session claims this run (a repo-scoped claim beats a machine-scoped one, and
-    // both beat the repo's own files; `--no-session` keeps the evidence-only order).
+    // The default pick, shared by the page and the interactive reading: `--tool` is explicit; otherwise the harness
+    // with the most evidence — unless a fresh session artifact names this repo. Machine-wide activity never moves
+    // the pick, and `--no-session` keeps the evidence-only order.
     let pick = match rigswig_core::adapter::pick(
         &scored,
         &rigswig_core::adapter::PickCtx { fs: &os_fs::OsFs, home: home.clone(), repo: repo.clone(), os: this_os() },
@@ -602,6 +605,23 @@ fn resolve(repo: &std::path::Path, tool: Option<&str>, session: bool) -> Result<
     Ok(with_session(h, claim.as_ref()))
 }
 
+/// Resolve a harness for `check`, refusing an adapter which has not opted into the incomplete-read contract when
+/// `strict` was requested. Like every automated read, this never follows live-session activity.
+pub(crate) fn resolve_check(
+    repo: &std::path::Path,
+    tool: Option<&str>,
+    strict: bool,
+) -> Result<rigswig_core::model::Harness, String> {
+    let (out, _) = with_harness(repo, tool, false, |a, ctx, _| {
+        if strict && !a.strict_ready() {
+            Err(format!("{} does not support --strict completeness checking yet", a.id()))
+        } else {
+            Ok(a.resolve(ctx))
+        }
+    })?;
+    out
+}
+
 /// `~/x` and `*` in the last part of a path: `~/code/*` is every folder in `~/code`.
 fn expand(pattern: &str) -> Result<Vec<PathBuf>, String> {
     let p = match pattern.strip_prefix("~/") {
@@ -724,14 +744,13 @@ fn audit(args: &[String]) -> ExitCode {
     let mut with_usage = false;
     let mut days: Option<u64> = Some(30);
     let mut remote: Option<Remote> = None;
-    let mut no_session = false;
     let mut it = args.iter();
     while let Some(a) = it.next() {
         let mut value =
             |name: &str| it.next().filter(|v| !v.starts_with("--")).cloned().ok_or(format!("{name} needs a value"));
         match a.as_str() {
             "--json" => json = true,
-            "--no-session" => no_session = true,
+            "--no-session" => {} // retained for compatibility: audits always ignore session activity
             "--repo" => match value("--repo") {
                 Ok(v) => repo = Some(PathBuf::from(v)),
                 Err(e) => return fail(&e),
@@ -793,7 +812,7 @@ fn audit(args: &[String]) -> ExitCode {
         if with_usage {
             say_usage(since.as_deref());
         }
-        let a = match audits::repo(&here, tool.as_deref(), !no_session, with_usage.then_some(since.as_deref()), quiet) {
+        let a = match audits::repo(&here, tool.as_deref(), false, with_usage.then_some(since.as_deref()), quiet) {
             Ok((a, _)) => a,
             Err(e) => return fail(&e),
         };
@@ -832,6 +851,7 @@ pub(crate) fn check_json(
     max_tokens: Option<u64>,
     max_item: Option<u64>,
     no_warnings: bool,
+    strict: bool,
 ) -> Value {
     // (name, passed, detail)
     let mut results: Vec<(String, bool, String)> = Vec::new();
@@ -841,12 +861,26 @@ pub(crate) fn check_json(
         errs.is_empty(),
         if errs.is_empty() { "the output keeps the contract".into() } else { errs.join("; ") },
     ));
+    if strict {
+        let ws: Vec<String> = h
+            .warnings
+            .iter()
+            .filter(|w| w.is_incomplete())
+            .map(|w| {
+                let file = w.file.as_deref().map(|f| format!(" ({f})")).unwrap_or_default();
+                format!("{}: {}{file}", printable(&w.code), printable(&w.message))
+            })
+            .collect();
+        let detail =
+            if ws.is_empty() { "no incomplete reads or ambiguous resolution reported".into() } else { ws.join("; ") };
+        results.push(("strict".into(), ws.is_empty(), detail));
+    }
     let t = &h.context.tokens;
     if let Some(max) = max_tokens {
         results.push((
             "max-tokens".into(),
             t.value <= max,
-            format!("~{} tokens before you type (estimate, {}..{}); limit {max}", t.value, t.low, t.high),
+            format!("~{} estimated tokens from startup files ({}..{}); limit {max}", t.value, t.low, t.high),
         ));
     }
     if let Some(max) = max_item {
@@ -921,7 +955,7 @@ fn check(args: &[String]) -> ExitCode {
     let mut max_tokens: Option<u64> = None;
     let mut max_item: Option<u64> = None;
     let mut no_warnings = false;
-    let mut no_session = false;
+    let mut strict = false;
     let mut json = false;
     let mut removals: Vec<String> = Vec::new();
     let mut it = args.iter();
@@ -931,7 +965,8 @@ fn check(args: &[String]) -> ExitCode {
         match a.as_str() {
             "--json" => json = true,
             "--no-warnings" => no_warnings = true,
-            "--no-session" => no_session = true,
+            "--strict" => strict = true,
+            "--no-session" => {} // retained for compatibility: checks always ignore session activity
             "--repo" => match value("--repo") {
                 Ok(v) => repo = Some(PathBuf::from(v)),
                 Err(e) => return fail(&e),
@@ -955,7 +990,7 @@ fn check(args: &[String]) -> ExitCode {
         }
     }
     let here = repo.unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
-    let mut h = match resolve(&here, tool.as_deref(), !no_session) {
+    let mut h = match resolve_check(&here, tool.as_deref(), strict) {
         Ok(h) => h,
         Err(e) => return fail(&e),
     };
@@ -963,7 +998,7 @@ fn check(args: &[String]) -> ExitCode {
         h = rigswig_core::whatif::without(&h, &removals).0;
     }
 
-    let out = check_json(&h, max_tokens, max_item, no_warnings);
+    let out = check_json(&h, max_tokens, max_item, no_warnings, strict);
     let passed = out["passed"].as_bool().unwrap_or(false);
     if json {
         println!("{}", serde_json::to_string_pretty(&out).expect("serialises"));

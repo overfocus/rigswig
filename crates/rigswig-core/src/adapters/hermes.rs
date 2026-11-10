@@ -230,6 +230,10 @@ struct Run<'a, 'b> {
 }
 
 impl Adapter for Hermes {
+    fn strict_ready(&self) -> bool {
+        true
+    }
+
     fn id(&self) -> &'static str {
         ID
     }

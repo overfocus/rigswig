@@ -23,9 +23,11 @@ hand first). Codex is read-only for now: its `config.toml` needs an editor that 
    added after the last one with the separators the object already uses, or removed with its comma), and the edit is
    kept only if the result reads back as exactly the intended settings. A file it cannot edit that way (a key written
    twice, say) is written whole, pretty-printed, and the plan says its layout will change. A new file is pretty-printed.
-2. **Apply** (the binary): only if the file is byte for byte what the plan saw. The old file is saved to
-   `~/.rigswig/backups/`, the new one is written to a temporary file beside it and renamed over it, so a crash leaves
-   either the old file or the new one, never half of each.
+2. **Apply** (the binary): only if the file is byte for byte what the plan saw. The old file is saved under
+   `~/.rigswig/backups/` (both the folder and its files are owner-only on Unix), and the new one is written to a
+   temporary file beside it and renamed over it, so a crash leaves either the old file or the new one, never half of
+   each. An existing settings file's permissions survive the replacement; a newly created settings file is owner-only
+   on Unix.
 3. **Undo**: the last change applied in this run of the page, only if the file is still exactly what rigswig wrote
    (otherwise restore it by hand from the backup). A file rigswig created is removed.
 
@@ -35,4 +37,6 @@ Changes take effect in the next session (or after `/reload-plugins`), never in a
 
 On top of the page's own gate (127.0.0.1, the token, the exact `Host`), a write request must be a `POST` with the
 token in an `X-Rigswig-Token` header (a cross-site form cannot set one), an exact `Origin`, a JSON body of at most
-16 KB, and no cross-site `Sec-Fetch-Site`. The page's CSP allows `connect-src 'self'` only in write mode.
+16 KB, and no cross-site `Sec-Fetch-Site`. The page's CSP allows `connect-src 'self'` only in write mode. The token
+and temporary names use the operating system's cryptographic random source; if that source fails, the page or write
+fails closed rather than falling back to a non-cryptographic generator.

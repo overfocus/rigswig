@@ -77,6 +77,10 @@ impl Paths {
 }
 
 impl Adapter for Gemini {
+    fn strict_ready(&self) -> bool {
+        true
+    }
+
     fn id(&self) -> &'static str {
         ID
     }

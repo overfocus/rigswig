@@ -161,7 +161,7 @@ fn key_of(line: &str, number: usize, notes: &mut Vec<String>) -> Option<(String,
         return None;
     }
     let after = rest.trim().is_empty();
-    if !after && !(rest.starts_with(' ') || rest.starts_with('\t')) {
+    if !(after || rest.starts_with(' ') || rest.starts_with('\t')) {
         notes.push(format!("line {number}: no space after the colon"));
         return None;
     }

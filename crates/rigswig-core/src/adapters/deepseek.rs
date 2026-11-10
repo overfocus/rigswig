@@ -36,6 +36,10 @@ impl Paths {
 pub struct DeepSeekCli;
 
 impl Adapter for DeepSeekCli {
+    fn strict_ready(&self) -> bool {
+        true
+    }
+
     fn id(&self) -> &'static str {
         ID
     }

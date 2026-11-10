@@ -348,6 +348,6 @@ fn a_package_in_settings_but_not_installed_is_reported() {
 fn malformed_settings_warn_without_quoting_content() {
     let fs = MemFs::new().file(format!("{AGENT}/settings.json"), "{ \"defaultModel\": \"s3cr3t\"");
     let h = run(&fs);
-    assert!(has_warning(&h, "malformed-json"));
+    assert!(has_warning(&h, "incomplete-malformed-json"));
     assert!(!serde_json::to_string(&h).unwrap().contains("s3cr3t"));
 }

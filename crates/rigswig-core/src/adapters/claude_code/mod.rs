@@ -94,6 +94,10 @@ impl Paths {
 }
 
 impl Adapter for ClaudeCode {
+    fn strict_ready(&self) -> bool {
+        true
+    }
+
     fn id(&self) -> &'static str {
         ID
     }

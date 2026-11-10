@@ -38,6 +38,10 @@ impl Paths {
 }
 
 impl Adapter for Cursor {
+    fn strict_ready(&self) -> bool {
+        true
+    }
+
     fn id(&self) -> &'static str {
         ID
     }

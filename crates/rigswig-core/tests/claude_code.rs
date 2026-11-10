@@ -397,7 +397,7 @@ fn secrets_never_reach_the_output() {
 fn malformed_json_is_a_warning_that_quotes_nothing() {
     let fs = base().file(format!("{REPO}/.claude/settings.json"), r#"{"model": "CANARY-MALFORMED"#);
     let h = run(&fs);
-    let w = h.warnings.iter().find(|w| w.code == "malformed-json").expect("a warning");
+    let w = h.warnings.iter().find(|w| w.code == "incomplete-malformed-json").expect("a warning");
     assert_eq!(w.file.as_deref(), Some(".claude/settings.json"));
     assert!(!serde_json::to_string(&h).unwrap().contains("CANARY-MALFORMED"));
 }
@@ -493,7 +493,7 @@ fn agent_folders_are_scanned_recursively_and_a_subfolder_does_not_change_the_nam
         item(&h, "claude-code:agent:project:twin#2").shadowed_by.as_deref(),
         Some("claude-code:agent:project:twin")
     );
-    assert!(h.warnings.iter().any(|w| w.code == "duplicate-name"));
+    assert!(h.warnings.iter().any(|w| w.code == "incomplete-duplicate-name"));
 }
 
 #[test]
@@ -515,7 +515,11 @@ fn project_agents_come_from_every_folder_up_to_the_git_root_and_the_closest_wins
         item(&h, "claude-code:agent:project:reviewer#2").shadowed_by.as_deref(),
         Some("claude-code:agent:project:reviewer")
     );
-    assert!(!h.warnings.iter().any(|w| w.code == "duplicate-name"), "an override is not a duplicate: {:?}", h.warnings);
+    assert!(
+        !h.warnings.iter().any(|w| w.code == "incomplete-duplicate-name"),
+        "an override is not a duplicate: {:?}",
+        h.warnings
+    );
     assert!(h.items.iter().all(|i| i.name != "stray"));
 }
 

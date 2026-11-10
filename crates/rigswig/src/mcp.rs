@@ -105,7 +105,7 @@ fn send_err(id: Option<Value>, code: i32, message: String) {
 
 /// `status`: the full harness JSON for a repo (its tool, or the one with the most evidence).
 fn status(args: &Map<String, Value>) -> Result<Value, String> {
-    let mut h = crate::resolve(&arg_repo(args)?, arg_tool(args).as_deref(), true)?;
+    let mut h = crate::resolve(&arg_repo(args)?, arg_tool(args).as_deref(), false)?;
     let without = strs(args, "without");
     if !without.is_empty() {
         h = rigswig_core::whatif::without(&h, &without).0;
@@ -115,7 +115,8 @@ fn status(args: &Map<String, Value>) -> Result<Value, String> {
 
 /// `check`: the CI limits as one object, with `passed` for the whole row set.
 fn check(args: &Map<String, Value>) -> Result<Value, String> {
-    let mut h = crate::resolve(&arg_repo(args)?, arg_tool(args).as_deref(), true)?;
+    let strict = args.get("strict").and_then(Value::as_bool).unwrap_or(false);
+    let mut h = crate::resolve_check(&arg_repo(args)?, arg_tool(args).as_deref(), strict)?;
     let without = strs(args, "without");
     if !without.is_empty() {
         h = rigswig_core::whatif::without(&h, &without).0;
@@ -123,13 +124,13 @@ fn check(args: &Map<String, Value>) -> Result<Value, String> {
     let max_tokens = args.get("maxTokens").and_then(Value::as_u64);
     let max_item = args.get("maxItemTokens").and_then(Value::as_u64);
     let no_warnings = args.get("noWarnings").and_then(Value::as_bool).unwrap_or(false);
-    Ok(crate::check_json(&h, max_tokens, max_item, no_warnings))
+    Ok(crate::check_json(&h, max_tokens, max_item, no_warnings, strict))
 }
 
 /// `audit`: the ranked findings for one repo.
 fn audit(args: &Map<String, Value>) -> Result<Value, String> {
     let quiet = &mut |_: rigswig_core::audit::Progress| {};
-    let (a, _) = crate::audits::repo(&arg_repo(args)?, arg_tool(args).as_deref(), true, None, quiet)?;
+    let (a, _) = crate::audits::repo(&arg_repo(args)?, arg_tool(args).as_deref(), false, None, quiet)?;
     Ok(serde_json::to_value(&a).expect("serialises"))
 }
 
@@ -224,6 +225,7 @@ fn tools_list() -> Value {
           "maxTokens": { "type": "number", "description": "The maximum total startup tokens" },
           "maxItemTokens": { "type": "number", "description": "The maximum tokens for any single startup item" },
           "noWarnings": { "type": "boolean", "description": "Also fail when the resolution emits warnings" },
+          "strict": { "type": "boolean", "description": "Fail on incomplete reads or ambiguous resolution; refuse an adapter without a completeness contract" },
           "without": { "type": "array", "items": { "type": "string" }, "description": "What to take out before totalling, as in status" }
       }, "required": [] } },
     { "name": "audit",

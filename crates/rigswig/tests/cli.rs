@@ -120,6 +120,7 @@ fn status_text_and_bad_options() {
     let out = s.status(&[]);
     assert!(out.status.success());
     assert!(String::from_utf8_lossy(&out.stdout).contains("claude-code in repo"));
+    assert!(String::from_utf8_lossy(&out.stdout).contains("estimated tokens from startup files"));
     assert_eq!(s.status(&["--tool", "nope"]).status.code(), Some(2));
     assert_eq!(s.status(&["--bogus"]).status.code(), Some(2));
 }
@@ -196,6 +197,33 @@ fn check_exit_codes_and_without() {
     let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
     assert_eq!(v["passed"], false);
     assert_eq!(v["checks"][1]["check"], "max-tokens");
+}
+
+#[test]
+fn strict_check_fails_on_incomplete_reads_not_advisories() {
+    let s = Sandbox::new("strict-check");
+    s.write("repo/CLAUDE.md", "Use the test suite.");
+    s.write("home/.claude/agents/a.md", "---\ndescription: helps\n---\n");
+    let repo = s.real_repo();
+    let run = |extra: &[&str]| {
+        let mut args = vec!["check", "--repo", &repo, "--tool", "claude-code"];
+        args.extend(extra);
+        s.run(&args)
+    };
+
+    let advisory = run(&["--strict", "--json"]);
+    assert!(advisory.status.success(), "an all-tools agent is advisory, not an incomplete read");
+    let out: serde_json::Value = serde_json::from_slice(&advisory.stdout).unwrap();
+    assert!(out["checks"].as_array().unwrap().iter().any(|c| c["check"] == "strict" && c["passed"] == true));
+
+    s.write("repo/.claude/settings.json", "{not json");
+    assert!(run(&[]).status.success(), "ordinary checks still permit warnings");
+    let incomplete = run(&["--strict", "--json"]);
+    assert_eq!(incomplete.status.code(), Some(1));
+    let out: serde_json::Value = serde_json::from_slice(&incomplete.stdout).unwrap();
+    let row = out["checks"].as_array().unwrap().iter().find(|c| c["check"] == "strict").unwrap();
+    assert_eq!(row["passed"], false);
+    assert!(row["detail"].as_str().unwrap().contains("incomplete-malformed-json"), "{row}");
 }
 
 /// A tiny HTTP client for the end-to-end test: one request, the status and the body.
@@ -630,8 +658,8 @@ fn usage_flags_are_refused_where_they_do_not_belong() {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// The live-session pick: status/audit/check default to what is actually running, and the probe that finds it
-// is metadata only — folder names, kinds and modification times, never an opened file.
+// The live-session pick: interactive status/ui may follow a fresh repo-scoped claim. Automation always uses the
+// repo's evidence, and every probe is metadata only — folder names, kinds and modification times, never file content.
 
 use std::time::{Duration, SystemTime};
 
@@ -677,21 +705,38 @@ fn claude_session_in_repo(s: &Sandbox, ago: u64) {
 }
 
 #[test]
-fn a_live_session_moves_the_default_pick() {
+fn machine_activity_does_not_move_the_default_pick() {
     let s = Sandbox::new("session");
     s.write("repo/CLAUDE.md", "the repo is set up for claude-code");
     hermes_home_active(&s, 30);
     let out = s.status(&[]);
     assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
     let text = String::from_utf8_lossy(&out.stdout);
-    assert!(text.contains("hermes in repo"), "first line bills the live session: {text}");
-    assert!(text.contains("Session   active on this machine"), "the annotation says the pick followed it: {text}");
-    assert!(!text.contains("claude-code in repo"), "{text}");
-    // --no-session puts the evidence-only pick back.
+    assert!(text.contains("claude-code in repo"), "the repo's own evidence wins: {text}");
+    assert!(!text.contains("Session   "), "machine activity is not a claim on this repo: {text}");
     let plain = s.status(&["--no-session"]);
-    let text = String::from_utf8_lossy(&plain.stdout);
-    assert!(text.contains("claude-code in repo"), "--no-session restores the repo's own evidence: {text}");
-    assert!(!text.contains("Session   "), "{text}");
+    assert_eq!(plain.stdout, out.stdout, "--no-session is the same deterministic reading");
+}
+
+#[test]
+fn check_and_audit_ignore_a_repo_scoped_live_session() {
+    let s = Sandbox::new("automation-session");
+    std::fs::remove_dir(s.0.join("repo/.claude")).unwrap();
+    s.write("repo/AGENTS.md", "Codex rules");
+    s.write("repo/.codex/config.toml", "");
+    claude_session_in_repo(&s, 30);
+    let repo = s.real_repo();
+
+    let interactive = s.status(&["--json"]);
+    let h: rigswig_core::model::Harness = serde_json::from_slice(&interactive.stdout).unwrap();
+    assert_eq!(h.tool.id, "claude-code", "interactive status may follow this repo's live session");
+
+    for command in ["check", "audit"] {
+        let out = s.run(&[command, "--repo", &repo, "--json"]);
+        assert!(out.status.success(), "{command}: {}", String::from_utf8_lossy(&out.stderr));
+        let json: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+        assert_eq!(json["tool"], "codex", "{command} must use repo evidence, not live activity");
+    }
 }
 
 #[test]
@@ -709,14 +754,14 @@ fn a_stale_session_does_not_move_anything() {
 fn the_extension_reads_the_same_pick_in_json() {
     let s = Sandbox::new("session-json");
     s.write("repo/CLAUDE.md", "claude-code's own file");
-    hermes_home_active(&s, 30);
+    claude_session_in_repo(&s, 30);
     let out = s.status(&["--json"]);
     assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
     let h: rigswig_core::model::Harness = serde_json::from_slice(&out.stdout).expect("valid harness JSON");
     assert_eq!(rigswig_core::check::contract_errors(&h), Vec::<String>::new());
-    assert_eq!(h.tool.id, "hermes");
-    let session = h.tool.session.expect("the JSON carries the claim the pick followed");
-    assert_eq!(session.scope, rigswig_core::model::SessionScope::Machine);
+    assert_eq!(h.tool.id, "claude-code");
+    let session = h.tool.session.expect("the JSON carries the repo-scoped claim the pick followed");
+    assert_eq!(session.scope, rigswig_core::model::SessionScope::Repo);
     assert!(!session.evidence.is_empty());
     // An explicit --tool never carries a claim.
     let out = s.status(&["--json", "--tool", "claude-code"]);
