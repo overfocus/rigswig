@@ -12,7 +12,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - name: The tag matches the crate version
         run: |
@@ -33,7 +33,7 @@ jobs:
           - { target: x86_64-pc-windows-msvc, os: windows-latest, ext: .exe }
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -73,8 +73,8 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
       - run: node vscode/test.mjs
@@ -116,7 +116,7 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: rust-lang/crates-io-auth-action@v1
         id: auth
@@ -150,13 +150,13 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
       # Trusted publishing needs npm >= 11.5.1; the runner's bundled npm can be older.
       - run: npm install --global npm@latest
       # The picker carries no binary, so it is not a matrix artifact: it is staged here, in this job.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Stage the picker
         run: node npm/build.mjs --version "$GITHUB_REF_NAME" --picker --out stage
       - uses: actions/download-artifact@v4
