@@ -7,7 +7,7 @@ use serde_json::{Map, Value};
 use crate::adapter::{Adapter, Ctx, Detection, SessionClaim};
 use crate::adapters::build::{Build, calc, char_len, unknown};
 use crate::adapters::shared;
-use crate::fs::Fs;
+use crate::fs::{EntryKind, Fs};
 use crate::model::*;
 use crate::read::frontmatter;
 use crate::read::redact::{printable, safe_base, sha256_hex, url_origin};
@@ -230,6 +230,24 @@ struct Run<'a, 'b> {
     cap: u64,
 }
 
+/// A terminal-session record is a few hundred bytes; anything bigger than a record could ever be is refused
+/// before parsing, so a file that has stopped being a record is never read far.
+const RECORD_BYTES: usize = 4096;
+
+/// Whether a record's `cwd` names the repo being read: equal as written, or equal once both paths resolve (a
+/// session may stand in the same folder under another spelling of it). Anything else is not this repo, and a
+/// foreign folder is never reported anywhere.
+fn names_repo(fs: &dyn Fs, cwd: &str, repo: &Path) -> bool {
+    let cwd = Path::new(cwd);
+    if cwd == repo {
+        return true;
+    }
+    match (fs.canonicalize(cwd), fs.canonicalize(repo)) {
+        (Ok(c), Ok(r)) => c == r,
+        _ => false,
+    }
+}
+
 impl Adapter for Hermes {
     fn strict_ready(&self) -> bool {
         true
@@ -278,11 +296,54 @@ impl Adapter for Hermes {
         Detection { score, evidence }
     }
 
-    /// The session look: the Hermes home's own activity files (`docs/adapters/hermes.md`, "Live sessions").
-    /// Metadata only — the one place a session's repo is named (`state.db`) is never opened, so the claim is
-    /// machine-scoped: it cannot say which repo a live session sits in.
+    /// The session look. First, the home's per-terminal session records (`terminal-sessions/*`): tiny gateway
+    /// state files whose whitelisted `cwd` field names the folder a session runs in (`docs/adapters/hermes.md`,
+    /// "Live sessions"; read against release 0.23.1). A record naming this repo is a repo-scoped claim — the one
+    /// artifact of Hermes's that may move an interactive `status`/`ui` pick. The records are written once, at
+    /// spawn, never refreshed; the claim's freshness joins the record with the home's own activity (a live
+    /// session keeps writing the WAL), which the machine look below observes. Everything else stays metadata —
+    /// file names and modification times, `state.db` never opened — so with no matching record the claim stays
+    /// machine-scoped, as before: the home is active, nothing says which repo a session sits in.
     fn session(&self, ctx: &Ctx) -> Option<SessionClaim> {
         let p = Paths::new(ctx);
+
+        // The repo-scoped look: each record is read only for its `cwd` field, and anything bigger than a record
+        // could be is refused before parsing. A record naming another folder (or parsing oddly, or unreadable)
+        // reports nothing, and nothing of a foreign folder reaches any output.
+        let mut homes: Vec<&Path> = vec![p.hermes_home.as_path()];
+        if p.active != p.hermes_home {
+            homes.push(p.active.as_path());
+        }
+        let mut matches = 0usize;
+        let mut record_latest = None;
+        for home in homes {
+            let dir = home.join("terminal-sessions");
+            for e in ctx.fs.read_dir(&dir).unwrap_or_default() {
+                if e.kind != EntryKind::File {
+                    continue;
+                }
+                let record = dir.join(&e.name);
+                let Ok(text) = ctx.fs.read_to_string(&record) else { continue };
+                if text.len() > RECORD_BYTES {
+                    continue;
+                }
+                let cwd = serde_json::from_str::<Value>(&text)
+                    .ok()
+                    .and_then(|v| v.get("cwd").and_then(Value::as_str).map(str::to_owned));
+                let Some(cwd) = cwd else { continue };
+                if !names_repo(ctx.fs, &cwd, &ctx.repo) {
+                    continue;
+                }
+                matches += 1;
+                if let Ok(t) = ctx.fs.modified(&record) {
+                    record_latest = record_latest.max(Some(t));
+                }
+            }
+        }
+        // Machine-scoped look over the home's own activity files — file names and modification times only,
+        // `state.db` never opened — computed first, because the repo claim borrows its freshness: the terminal
+        // records are written once, at spawn, and never refreshed, so a session still live a quarter-hour on
+        // shows liveness in the home's own files (the WAL a live session keeps writing), not in its record.
         let mut latest = None;
         let mut seen: Vec<String> = Vec::new();
         let mut look = |dir: &Path, tag: &str| {
@@ -304,6 +365,18 @@ impl Adapter for Hermes {
         look(p.hermes_home.as_path(), "Hermes home");
         if p.active != p.hermes_home {
             look(p.active.as_path(), "Hermes home (profile)");
+        }
+
+        // A record keeps naming the repo for as long as the home shows any live activity. The join's edge — a
+        // dead session's lingering record while a live session runs in another terminal — is accepted and named
+        // in the adapter doc.
+        if matches > 0 {
+            let (plural, verb) = if matches == 1 { ("", "names") } else { ("s", "name") };
+            return Some(SessionClaim {
+                scope: SessionScope::Repo,
+                latest: record_latest.max(latest),
+                evidence: vec![format!("terminal-sessions: {matches} record{plural} {verb} this folder")],
+            });
         }
         if seen.is_empty() {
             return None;

@@ -13,8 +13,9 @@ nothing twice.
   $(beaker) claude-code · ~11k tok · $(warning) 10 findings · ~1.7k saveable
   ```
 
-  The tooltip breaks it down: the provider when the harness names one (`ollama-launch` under an `ollama launch`,
-  and the layer that set it), the estimate and its range, the fixed costs no file shows, the findings by severity.
+  The tooltip breaks it down: the model and the provider when the harness names them (`glm-5.3-flash:cloud` via
+  `ollama-launch` on an `ollama launch`, and the layer that set each), the estimate and its range, the fixed costs
+  no file shows, the findings by severity.
   Clicking it opens the page. When the CLI is missing it reads **rigswig: set up** and offers to install it or set
   its path; when a read fails, the click opens the log.
 - **The rigswig view** in the activity bar, in two parts:

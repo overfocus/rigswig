@@ -118,7 +118,11 @@ These are the point of the tool, and they will be enforced by tests:
   ([what changed](docs/USAGE.md#what-changed-in-the-guarantee)). (Claude Code's
   auto-memory index, `MEMORY.md`, is read and counted in every run because it loads into every session.) The one
   look a run makes without asking is the default picker's is-a-session-live check: file names, kinds and
-  modification times of a session folder and the harness home, never a file's contents. Only a fresh artifact that
+  modification times of a session folder and the harness home, never a file's contents — with one whitelisted
+  exception: Hermes's per-terminal session records (`~/.hermes/terminal-sessions/*`), tiny gateway state files
+  parsed only for their `cwd` field (the folder a session runs in — nothing else is kept, and anything bigger than
+  a record is refused), written once at spawn, with freshness joined to the home's own live activity, so a launched
+  session can be attributed to its repo for as long as the home shows one, without any log being opened. Only a fresh artifact that
   names this repo can influence interactive `status` / `ui` (`--no-session` keeps that pick evidence-only); activity
   known only at machine scope is evidence in `tools`, and `check`, `audit`, `compare` and MCP always use the repo's own
   evidence. A remote reading carries none of it — it has nothing from this machine.

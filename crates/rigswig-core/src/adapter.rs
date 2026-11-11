@@ -68,7 +68,10 @@ pub trait Adapter {
     }
 
     /// What session activity this harness shows right now, as file-system metadata only: folder names, kinds and
-    /// modification times, never a file opened and never a log's contents. The claim only observes — [`pick`]
+    /// modification times, never a file opened and never a log's contents. The one exception a harness may model
+    /// is a whitelisted, tiny state record that names a session's working folder without any conversation
+    /// content — the adapter's doc (`docs/adapters/hermes.md`, "Live sessions") states the field, the reader and
+    /// the refusal of anything beyond a record's size. The claim only observes — [`pick`]
     /// decides, against the caller's clock, because an adapter gets no clock. The default: no session signal.
     fn session(&self, _ctx: &Ctx) -> Option<SessionClaim> {
         None

@@ -1,5 +1,6 @@
 //! The live-session probe and the default pick: claims, the freshness window, the repo-folder boundary, and the
-//! promise that a probe is metadata only (it never opens a file).
+//! promise that a probe is metadata only — never a log, with the one whitelisted record exception
+//! (Hermes's terminal-session `cwd`).
 //!
 //! Fixtures are invented: a repo whose files belong to Claude Code, and a Hermes home that is or is not active.
 //! No harness actually ran here.
@@ -76,6 +77,15 @@ fn claude_session_in_repo(w: &mut World, stamp: SystemTime) {
     w.fs.stamp("/home/u/.claude/projects/-home-u-repo/aaaa.jsonl", stamp);
 }
 
+/// One Hermes per-terminal session record under the home, naming `cwd`, stamped at `stamp`. The `message` field
+/// is a canary: the probe reads only `cwd`, and nothing from it — the id, the timestamp, the message — may ever
+/// reach any output.
+fn hermes_record(w: &mut World, stamp: SystemTime, cwd: &str) {
+    let body = format!(r#"{{"session_id": "local-abc", "cwd": "{cwd}", "message": "canary: never read", "ts": 1.5}}"#);
+    w.fs.add_file("/home/u/.hermes/terminal-sessions/tty-dev-pts-1", body);
+    w.fs.stamp("/home/u/.hermes/terminal-sessions/tty-dev-pts-1", stamp);
+}
+
 #[test]
 fn fresh_machine_claim_does_not_beat_the_repos_own_files() {
     let now = SystemTime::now();
@@ -85,6 +95,99 @@ fn fresh_machine_claim_does_not_beat_the_repos_own_files() {
     assert_eq!(pick.adapter.id(), "claude-code", "machine activity elsewhere must not move this repo's reading");
     assert_eq!(pick.reason, PickReason::Evidence);
     assert!(pick.session.is_none());
+}
+
+#[test]
+fn a_hermes_record_names_this_repo_and_moves_the_pick() {
+    let now = SystemTime::now();
+    let mut w = World::new();
+    hermes_record(&mut w, now - Duration::from_secs(30), "/home/u/repo");
+    let pick = w.pick(None, true, now);
+    assert_eq!(pick.adapter.id(), "hermes", "a launched hermes session beats the repo's other setup");
+    assert_eq!(pick.reason, PickReason::SessionRepo);
+    let claim = pick.session.expect("the pick followed the record");
+    assert_eq!(claim.scope, SessionScope::Repo);
+    assert_eq!(claim.evidence, vec!["terminal-sessions: 1 record names this folder"]);
+    assert!(!format!("{claim:?}").contains("canary"), "nothing of the record but `cwd` reaches a claim");
+}
+
+#[test]
+fn a_hermes_record_for_another_folder_never_moves_or_names_it() {
+    let now = SystemTime::now();
+    let mut w = World::new();
+    hermes_record(&mut w, now - Duration::from_secs(30), "/home/u/elsewhere");
+    hermes_home_active(&mut w, now - Duration::from_secs(60));
+    let pick = w.pick(None, true, now);
+    assert_eq!(pick.adapter.id(), "claude-code");
+    assert_eq!(pick.reason, PickReason::Evidence, "a foreign record is nobody's repo claim");
+    let hermes = w.adapters.iter().find(|a| a.id() == "hermes").unwrap();
+    let claim = hermes.session(&w.ctx()).expect("the home is still active");
+    assert_eq!(claim.scope, SessionScope::Machine, "the fallback stays machine-scoped");
+    assert!(
+        claim.evidence.iter().all(|e| !e.contains("elsewhere") && !e.contains("canary")),
+        "a foreign folder and the record's contents never reach the evidence: {claim:?}"
+    );
+}
+
+#[test]
+fn a_stale_hermes_record_is_observed_but_never_fresh() {
+    let now = SystemTime::now();
+    let mut w = World::new();
+    hermes_record(&mut w, now - Duration::from_secs(16 * 60), "/home/u/repo");
+    let hermes = w.adapters.iter().find(|a| a.id() == "hermes").unwrap();
+    let claim = hermes.session(&w.ctx()).expect("the record is observed");
+    assert_eq!(claim.latest, Some(now - Duration::from_secs(16 * 60)));
+    assert!(!claim.fresh(now), "outside the window the pick never follows it");
+    let pick = w.pick(None, true, now);
+    assert_eq!(pick.adapter.id(), "claude-code");
+    assert_eq!(pick.reason, PickReason::Evidence);
+}
+
+#[test]
+fn a_long_session_stays_picked_past_its_records_quiet_quarter_hour() {
+    let now = SystemTime::now();
+    let mut w = World::new();
+    // The record was written when the session launched; a live session keeps writing the WAL instead.
+    hermes_record(&mut w, now - Duration::from_secs(30 * 60), "/home/u/repo");
+    hermes_home_active(&mut w, now - Duration::from_secs(60));
+    let hermes = w.adapters.iter().find(|a| a.id() == "hermes").unwrap();
+    let claim = hermes.session(&w.ctx()).expect("a session still live by the home's own activity");
+    assert_eq!(claim.latest, Some(now - Duration::from_secs(60)), "freshness joins the home's activity");
+    let pick = w.pick(None, true, now);
+    assert_eq!(pick.adapter.id(), "hermes");
+    assert_eq!(pick.reason, PickReason::SessionRepo);
+}
+
+#[test]
+fn odd_records_are_skipped_entirely() {
+    let fs = MemFs::new()
+        .dir("/home/u/.claude")
+        .file("/home/u/.hermes/terminal-sessions/tty-a", "not json at all")
+        .file(
+            "/home/u/.hermes/terminal-sessions/tty-b",
+            format!(r#"{{"cwd": "/home/u/repo", "fill": "{}"}}"#, "x".repeat(4300)),
+        )
+        .file("/home/u/.hermes/terminal-sessions/tty-c", r#"{"cwd": "/home/u/repo"}"#)
+        .unreadable("/home/u/.hermes/terminal-sessions/tty-c");
+    let adapters = rigswig_core::adapters::all();
+    let hermes = adapters.iter().find(|a| a.id() == "hermes").unwrap();
+    let ctx = Ctx { fs: &fs, env: BTreeMap::new(), home: "/home/u".into(), repo: "/home/u/repo".into(), os: Os::Linux };
+    assert!(hermes.session(&ctx).is_none(), "not-json, oversized and unreadable records report nothing");
+}
+
+#[test]
+fn a_profile_homes_record_counts_too() {
+    let now = SystemTime::now();
+    let mut w = World::new();
+    let body = r#"{"session_id": "x", "cwd": "/home/u/repo", "ts": 2.0}"#.to_string();
+    w.fs.add_file("/home/u/.hermes/profiles/p/terminal-sessions/tty-dev-pts-9", body);
+    w.fs.stamp("/home/u/.hermes/profiles/p/terminal-sessions/tty-dev-pts-9", now - Duration::from_secs(45));
+    let mut env = BTreeMap::new();
+    env.insert("HERMES_PROFILE".to_string(), "p".to_string());
+    let ctx = Ctx { fs: &w.fs, env, home: "/home/u".into(), repo: "/home/u/repo".into(), os: Os::Linux };
+    let hermes = w.adapters.iter().find(|a| a.id() == "hermes").unwrap();
+    let claim = hermes.session(&ctx).expect("the profile home's record names this repo");
+    assert_eq!(claim.scope, SessionScope::Repo);
 }
 
 #[test]

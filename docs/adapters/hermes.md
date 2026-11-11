@@ -125,15 +125,29 @@ do not receive this inference.
   trust tiers are not modelled. Like every harness, each effective server's tool listing is named among the
   unmeasured costs.
 
-## Live sessions (`tools` evidence)
+## Live sessions (`tools` evidence, and the default pick)
 
-Hermes writes one SQLite database per home (`state.db`, plus its WAL), a gateway-state file and a CLI history file
+Hermes writes one SQLite database per home (`state.db`, plus its WAL), a gateway-state file, a CLI history file and
+per-terminal session records (`terminal-sessions/tty-*`)
 ([sessions](https://hermes-agent.nousresearch.com/docs/user-guide/sessions.md); the file set seen on an installed
-home 2026-11-09). Where a session's repo lives is inside the database, which rigswig never opens for this probe — so
-the claim is machine-scoped: the home is active, but nothing on disk says which repo a session sits in. The probe looks
-at `state.db-wal`, `state.db`, `gateway_state.json` and `.hermes_history` in the Hermes home (and in the profile home,
-when one is named) for file presence and modification times within 15 minutes, and opens none of them. This activity
-appears in `rigswig tools`; it never moves the default harness pick. A home with none of the files makes no claim.
+home 2026-11-09, read again on 2026-11-10 against release 0.23.1, which writes the terminal records outside the
+database). A record is tiny gateway state (a session id, the folder the session runs in, a timestamp — a few
+hundred bytes), read by the probe for a whitelist of one field: `cwd`, the folder the session runs in. Nothing else
+is read or kept — `session_id` and `ts` included — and a file bigger than a record could be is refused before
+parsing. A record whose `cwd` names the repo being read is a **repo-scoped** claim: records are sought in the
+Hermes home and the profile home, a foreign `cwd` is never reported anywhere, and this is the one whitelisted field
+the is-a-session-live look reads (the README names it, and the tests carry a canary field no output may contain).
+The records are written once, at spawn, and never refreshed (**inferred**), so the claim's freshness joins the
+record with the home's own live activity — the WAL a live session keeps writing, already watched by this probe.
+The join's accepted edge: on a machine running hermes sessions in several repos, a dead session's lingering record
+names its repo while a live session runs elsewhere. Where the
+session itself lives — the database — is still never opened by the probe: with no matching record, the
+look stays metadata-only over `state.db-wal`, `state.db`, `gateway_state.json` and `.hermes_history` in the Hermes
+home (and in the profile home, when one is named) — presence and modification times within 15 minutes — and the
+claim stays machine-scoped: the home is active, but nothing on disk says which repo a session sits in. This
+activity appears in `rigswig tools` ("· live session (this machine)"); only a repo-scoped claim can move
+interactive `status`/`ui` ("· live session (this repo)"; `--no-session` keeps the pick evidence-only, and `check`,
+`audit`, `compare` and MCP always use the repo's own evidence). A home with none of the files makes no claim.
 
 ## Env vars read
 

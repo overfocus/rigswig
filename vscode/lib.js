@@ -30,9 +30,9 @@ const readSetting = (settings, id) => {
  * The harness JSON is a parse contract: tool, context.chars.value and context.tokens live in every version; items,
  * layers, warnings and settings are read when present and skipped entry by entry when malformed.
  *
- * @returns `{ tool, provider, chars, tokens, notMeasured, items, layerFiles, warnings }`, where `tokens` is
- * `{ method, value, low, high }`, `provider` is `{ value, source }` when the harness names one (null otherwise) and
- * each item is `{ id, kind, name, layer, package, file, line, effective, when, chars }`.
+ * @returns `{ tool, model, provider, chars, tokens, notMeasured, items, layerFiles, warnings }`, where `tokens` is
+ * `{ method, value, low, high }`, `model` and `provider` are `{ value, source }` when the harness names them (null
+ * otherwise) and each item is `{ id, kind, name, layer, package, file, line, effective, when, chars }`.
  */
 function parseStatus(text) {
     let h;
@@ -89,7 +89,18 @@ function parseStatus(text) {
     const warnings = (Array.isArray(h.warnings) ? h.warnings : [])
         .filter((w) => w && typeof w.message === 'string')
         .map((w) => ({ code: str(w.code) ?? '', message: w.message }));
-    return { tool: h.tool.id, provider: readSetting(h.settings, 'provider'), session, chars, tokens, notMeasured, items, layerFiles, warnings };
+    return {
+        tool: h.tool.id,
+        model: readSetting(h.settings, 'model'),
+        provider: readSetting(h.settings, 'provider'),
+        session,
+        chars,
+        tokens,
+        notMeasured,
+        items,
+        layerFiles,
+        warnings,
+    };
 }
 
 const SEVERITIES = ['high', 'medium', 'low'];

@@ -79,10 +79,11 @@ assert.equal(parseStatus(harnessWith({ id: 'hermes', session: { scope: 'machine'
 assert.equal(parseStatus(harnessWith({ id: 'hermes', session: 'yes' })).session, null);
 assert.equal(parseStatus(harnessWith({ id: 'hermes' })).session, null);
 
-// The provider, when the harness's `settings` name one (`ollama-launch` on an ollama-launch-ed hermes): read when
-// its value is a non-empty string, `source` kept when present; malformed in any other way is skipped, and absent
-// `settings` (an older CLI) leave it null — a 0.2.0-era read still parses.
-const withProvider = (settings) =>
+// The provider and the model, when the harness's `settings` name them (`ollama-launch` and
+// `glm-5.3-flash:cloud` on an ollama-launch-ed hermes): read when the value is a non-empty string, `source`
+// kept when present; malformed in any other way is skipped, and absent `settings` (an older CLI) leave both
+// null — a 0.2.0-era read still parses.
+const withSettings = (settings) =>
     parseStatus(
         JSON.stringify({
             schema_version: '1.2.3',
@@ -91,23 +92,25 @@ const withProvider = (settings) =>
             settings,
             context: { chars: { value: 40, confidence: 'exact' }, tokens: { method: 'chars/4', value: 10, low: 8, high: 12 } },
         }),
-    ).provider;
-assert.deepEqual(withProvider({ provider: { value: 'ollama-launch', source: 'user', trail: [{ layer: 'user', value: 'ollama-launch' }] } }), {
-    value: 'ollama-launch',
-    source: 'user',
-});
-assert.deepEqual(withProvider({ provider: { value: 'custom' } }), { value: 'custom', source: null });
-assert.deepEqual(withProvider({ provider: { value: 'custom', source: '' } }), { value: 'custom', source: null });
-assert.equal(withProvider({ provider: { trail: [] } }), null, 'a setting without a value has no line');
-assert.equal(withProvider({ provider: { value: '' } }), null);
-assert.equal(withProvider({ provider: { value: 42 } }), null, 'a non-string value is skipped');
-assert.deepEqual(withProvider({ provider: { value: 'x', source: 7 } }), { value: 'x', source: null }, 'a non-string source degrades, like an item field read when shaped');
-assert.equal(withProvider({ provider: 'yes' }), null);
-assert.equal(withProvider({}), null);
-assert.equal(withProvider(undefined), null, 'a status JSON without settings still parses');
+    );
+const both = withSettings({ provider: { value: 'ollama-launch', source: 'user', trail: [{ layer: 'user', value: 'ollama-launch' }] }, model: { value: 'glm-5.3-flash:cloud', source: 'user' } });
+assert.deepEqual(both.provider, { value: 'ollama-launch', source: 'user' });
+assert.deepEqual(both.model, { value: 'glm-5.3-flash:cloud', source: 'user' });
+assert.deepEqual(withSettings({ provider: { value: 'custom' } }).provider, { value: 'custom', source: null });
+assert.deepEqual(withSettings({ provider: { value: 'custom', source: '' } }).provider, { value: 'custom', source: null });
+assert.equal(withSettings({ provider: { trail: [] } }).provider, null, 'a setting without a value has no line');
+assert.equal(withSettings({ provider: { value: '' } }).provider, null);
+assert.equal(withSettings({ provider: { value: 42 } }).provider, null, 'a non-string value is skipped');
+assert.equal(withSettings({}).model, null);
+assert.equal(withSettings({ model: 'yes' }).model, null);
+assert.equal(withSettings({ model: { value: null } }).model, null);
+assert.equal(withSettings(undefined).model, null, 'a status JSON without settings still parses');
 assert.equal(parseStatus(harnessWith({ id: 'hermes', settings: 'yes' })).provider, null, 'non-object settings are skipped');
 
-// The provider, when the read names one: a value string and, when present, a source string.
+// The model and the provider, when the read names them.
+if (parsed.model) {
+    assert.ok(typeof parsed.model.value === 'string' && parsed.model.value.length > 0, JSON.stringify(parsed.model));
+}
 if (parsed.provider) {
     assert.ok(typeof parsed.provider.value === 'string' && parsed.provider.value.length > 0, JSON.stringify(parsed.provider));
     assert.ok(parsed.provider.source === null || (typeof parsed.provider.source === 'string' && parsed.provider.source.length > 0), JSON.stringify(parsed.provider));
